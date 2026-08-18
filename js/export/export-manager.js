@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // EXPORT MANAGER
-// V0.1
+// V0.2
 // ==========================================
 //
 // Camada independente responsável por entregar
@@ -9,16 +9,16 @@
 //
 // O motor de áudio NÃO conhece esta camada.
 //
-// Ordem de tentativa:
+// V0.2:
 //
-// 1. File System Access API
-// 2. Download tradicional
-// 3. Navegação para Blob
+// - validação reforçada do Blob;
+// - diagnóstico detalhado;
+// - registro das tentativas;
+// - tratamento explícito de cancelamento;
+// - limpeza segura de Object URLs;
+// - fallback controlado;
+// - nenhum processamento DSP.
 //
-// O objetivo é manter a exportação isolada
-// do DSP e permitir futuramente adicionar
-// um adaptador nativo Android/Spck sem
-// modificar o restante do projeto.
 // ==========================================
 
 
@@ -26,7 +26,7 @@ class ExportManager {
 
 
     // ======================================
-    // DIAGNÓSTICO
+    // DIAGNÓSTICO DO AMBIENTE
     // ======================================
 
     static getEnvironment() {
@@ -45,8 +45,22 @@ class ExportManager {
                 "function",
 
             objectURL:
+                typeof URL !==
+                "undefined" &&
+
                 typeof URL.createObjectURL ===
                 "function",
+
+            revokeObjectURL:
+                typeof URL !==
+                "undefined" &&
+
+                typeof URL.revokeObjectURL ===
+                "function",
+
+            anchorDownload:
+                typeof document !==
+                "undefined",
 
             androidBridge:
                 typeof window.android !==
@@ -54,25 +68,98 @@ class ExportManager {
 
             navigatorShare:
                 typeof navigator.share ===
+                "function",
+
+            navigatorCanShare:
+                typeof navigator.canShare ===
                 "function"
-
         };
-
     }
 
 
     // ======================================
-    // VALIDAR ARQUIVO
+    // CRIAR DIAGNÓSTICO BASE
     // ======================================
 
-    static validateBlob(blob) {
+    static createDiagnostic(
+        fileName,
+        blob,
+        environment
+    ) {
 
-        if (!blob) {
+        return {
+
+            version:
+                "0.2",
+
+            fileName:
+                fileName || null,
+
+            mimeType:
+                blob && blob.type
+                    ? blob.type
+                    : null,
+
+            size:
+                blob && Number.isFinite(blob.size)
+                    ? blob.size
+                    : 0,
+
+            sizeMB:
+                blob && Number.isFinite(blob.size)
+                    ? Number(
+                        (
+                            blob.size /
+                            1024 /
+                            1024
+                        ).toFixed(2)
+                    )
+                    : 0,
+
+            environment:
+                environment,
+
+            attempts:
+                [],
+
+            finalMethod:
+                null,
+
+            success:
+                false,
+
+            error:
+                null
+        };
+    }
+
+
+    // ======================================
+    // VALIDAR BLOB
+    // ======================================
+
+    static validateBlob(
+        blob
+    ) {
+
+        if (
+            !blob
+        ) {
 
             throw new Error(
                 "Nenhum arquivo foi fornecido para exportação."
             );
+        }
 
+
+        if (
+            typeof Blob ===
+            "undefined"
+        ) {
+
+            throw new Error(
+                "A API Blob não está disponível neste ambiente."
+            );
         }
 
 
@@ -83,28 +170,41 @@ class ExportManager {
             throw new Error(
                 "O objeto fornecido não é um Blob válido."
             );
-
         }
 
 
         if (
+            !Number.isFinite(
+                blob.size
+            ) ||
             blob.size <= 0
         ) {
 
             throw new Error(
-                "O arquivo possui tamanho zero."
+                "O arquivo possui tamanho zero ou tamanho inválido."
             );
+        }
 
+
+        if (
+            blob.type &&
+            blob.type !==
+            "audio/wav"
+        ) {
+
+            console.warn(
+                "SmoothVStudio: MIME inesperado:",
+                blob.type
+            );
         }
 
 
         return true;
-
     }
 
 
     // ======================================
-    // FILE SYSTEM ACCESS API
+    // FILE SYSTEM ACCESS
     // ======================================
 
     static async saveWithFileSystem(
@@ -120,7 +220,6 @@ class ExportManager {
             throw new Error(
                 "showSaveFilePicker não está disponível."
             );
-
         }
 
 
@@ -143,14 +242,20 @@ class ExportManager {
                                 [
                                     ".wav"
                                 ]
-
                         }
-
                     }
-
                 ]
-
             });
+
+
+        if (
+            !handle
+        ) {
+
+            throw new Error(
+                "O seletor de arquivo não retornou um destino válido."
+            );
+        }
 
 
         const writable =
@@ -163,7 +268,9 @@ class ExportManager {
                 blob
             );
 
+
             await writable.close();
+
 
         } catch (error) {
 
@@ -172,6 +279,7 @@ class ExportManager {
                 await writable.abort();
 
             } catch (_) {}
+
 
             throw error;
         }
@@ -184,9 +292,7 @@ class ExportManager {
 
             method:
                 "file-system-access"
-
         };
-
     }
 
 
@@ -200,6 +306,9 @@ class ExportManager {
     ) {
 
         if (
+            typeof URL ===
+            "undefined" ||
+
             typeof URL.createObjectURL !==
             "function"
         ) {
@@ -207,7 +316,17 @@ class ExportManager {
             throw new Error(
                 "URL.createObjectURL não está disponível."
             );
+        }
 
+
+        if (
+            typeof document ===
+            "undefined"
+        ) {
+
+            throw new Error(
+                "Documento HTML indisponível."
+            );
         }
 
 
@@ -217,12 +336,26 @@ class ExportManager {
             );
 
 
+        let anchor =
+            null;
+
+
         try {
 
-            const anchor =
+            anchor =
                 document.createElement(
                     "a"
                 );
+
+
+            if (
+                !anchor
+            ) {
+
+                throw new Error(
+                    "Não foi possível criar o elemento de download."
+                );
+            }
 
 
             anchor.href =
@@ -233,12 +366,34 @@ class ExportManager {
                 fileName;
 
 
+            anchor.setAttribute(
+                "download",
+                fileName
+            );
+
+
             anchor.rel =
                 "noopener";
 
 
-            anchor.style.display =
-                "none";
+            anchor.style.position =
+                "fixed";
+
+
+            anchor.style.left =
+                "-9999px";
+
+
+            anchor.style.top =
+                "-9999px";
+
+
+            anchor.style.width =
+                "1px";
+
+
+            anchor.style.height =
+                "1px";
 
 
             document.body.appendChild(
@@ -247,17 +402,18 @@ class ExportManager {
 
 
             /*
-             * Primeiro tentamos click()
-             * porque é o mecanismo mais
-             * compatível com WebViews.
+             * O clique precisa acontecer
+             * enquanto ainda estamos dentro
+             * da ação iniciada pelo usuário.
              */
 
             anchor.click();
 
 
             /*
-             * Pequeno atraso antes da
-             * remoção do elemento.
+             * Damos tempo para o navegador
+             * processar o evento antes de
+             * remover o elemento.
              */
 
             await new Promise(
@@ -267,12 +423,8 @@ class ExportManager {
                         resolve,
                         300
                     );
-
                 }
             );
-
-
-            anchor.remove();
 
 
             return {
@@ -281,16 +433,33 @@ class ExportManager {
                     true,
 
                 method:
-                    "anchor-download"
+                    "anchor-download",
 
+                note:
+                    "Download solicitado ao navegador."
             };
+
 
         } finally {
 
+            if (
+                anchor
+            ) {
+
+                try {
+
+                    anchor.remove();
+
+                } catch (_) {}
+            }
+
+
             /*
              * Não revogar imediatamente.
+             *
              * Alguns WebViews precisam
-             * de tempo para consumir a URL.
+             * consumir a Blob URL depois
+             * do clique.
              */
 
             setTimeout(
@@ -298,18 +467,25 @@ class ExportManager {
 
                     try {
 
-                        URL.revokeObjectURL(
-                            url
-                        );
+                        if (
+                            typeof URL !==
+                            "undefined" &&
+
+                            typeof URL.revokeObjectURL ===
+                            "function"
+                        ) {
+
+                            URL.revokeObjectURL(
+                                url
+                            );
+                        }
 
                     } catch (_) {}
 
                 },
-                10000
+                15000
             );
-
         }
-
     }
 
 
@@ -321,6 +497,20 @@ class ExportManager {
         blob
     ) {
 
+        if (
+            typeof URL ===
+            "undefined" ||
+
+            typeof URL.createObjectURL !==
+            "function"
+        ) {
+
+            throw new Error(
+                "URL.createObjectURL não está disponível."
+            );
+        }
+
+
         const url =
             URL.createObjectURL(
                 blob
@@ -328,12 +518,11 @@ class ExportManager {
 
 
         /*
-         * Navegação direta é usada como
-         * último recurso.
+         * Este método pode substituir a
+         * página atual.
          *
-         * Não abrimos uma nova janela porque
-         * WebViews móveis frequentemente
-         * bloqueiam window.open().
+         * Por isso ele permanece como
+         * último recurso.
          */
 
         window.location.href =
@@ -341,10 +530,10 @@ class ExportManager {
 
 
         /*
-         * Não revogar aqui.
+         * Não revogar imediatamente.
          *
-         * A página pode estar navegando
-         * para o recurso.
+         * A navegação precisa continuar
+         * tendo acesso à URL.
          */
 
         return {
@@ -353,10 +542,11 @@ class ExportManager {
                 true,
 
             method:
-                "blob-navigation"
+                "blob-navigation",
 
+            note:
+                "O navegador recebeu uma navegação para o Blob."
         };
-
     }
 
 
@@ -369,27 +559,91 @@ class ExportManager {
         fileName
     ) {
 
-        this.validateBlob(
-            blob
-        );
-
-
         const environment =
             this.getEnvironment();
 
 
-        console.log(
-            "SmoothVStudio Export Environment:",
-            environment
-        );
+        const diagnostic =
+            this.createDiagnostic(
+                fileName,
+                blob,
+                environment
+            );
 
 
-        /*
-         * ----------------------------------
-         * MÉTODO 1
-         * File System Access API
-         * ----------------------------------
-         */
+        try {
+
+            // ==============================
+            // VALIDAÇÃO
+            // ==============================
+
+            this.validateBlob(
+                blob
+            );
+
+
+            // ==============================
+            // LOG INICIAL
+            // ==============================
+
+            console.log(
+                "SmoothVStudio Export Environment:",
+                environment
+            );
+
+
+            console.log(
+                "SmoothVStudio Export File:",
+                {
+
+                    name:
+                        fileName,
+
+                    type:
+                        blob.type,
+
+                    size:
+                        blob.size,
+
+                    sizeMB:
+                        diagnostic.sizeMB
+                }
+            );
+
+
+        } catch (error) {
+
+            diagnostic.error =
+                error.message;
+
+
+            console.error(
+                "SmoothVStudio: validação da exportação falhou:",
+                error
+            );
+
+
+            return {
+
+                success:
+                    false,
+
+                method:
+                    "validation-failed",
+
+                error:
+                    error,
+
+                diagnostic:
+                    diagnostic
+            };
+        }
+
+
+        // ==================================
+        // MÉTODO 1
+        // FILE SYSTEM ACCESS
+        // ==================================
 
         if (
             environment.fileSystemAccess &&
@@ -398,91 +652,221 @@ class ExportManager {
 
             try {
 
-                return await this.saveWithFileSystem(
-                    blob,
-                    fileName
+                diagnostic.attempts.push(
+                    "file-system-access"
                 );
 
+
+                const result =
+                    await this.saveWithFileSystem(
+                        blob,
+                        fileName
+                    );
+
+
+                diagnostic.finalMethod =
+                    result.method;
+
+
+                diagnostic.success =
+                    true;
+
+
+                return {
+
+                    ...result,
+
+                    diagnostic:
+                        diagnostic
+                };
+
+
             } catch (error) {
+
+                /*
+                 * AbortError significa
+                 * normalmente cancelamento
+                 * do seletor pelo usuário.
+                 */
+
+                diagnostic.attempts.push(
+                    "file-system-access-failed"
+                );
+
+
+                diagnostic.lastError =
+                    error.message;
+
 
                 console.warn(
                     "File System Access falhou:",
                     error
                 );
-
-                /*
-                 * AbortError significa que o
-                 * usuário fechou/cancelou o
-                 * seletor.
-                 *
-                 * Nesse caso continuamos
-                 * tentando outro método.
-                 */
-
             }
-
         }
 
 
-        /*
-         * ----------------------------------
-         * MÉTODO 2
-         * Download tradicional
-         * ----------------------------------
-         */
+        // ==================================
+        // MÉTODO 2
+        // DOWNLOAD TRADICIONAL
+        // ==================================
 
-        try {
+        if (
+            environment.anchorDownload &&
+            environment.objectURL
+        ) {
 
-            return await this.saveWithAnchor(
-                blob,
-                fileName
-            );
+            try {
 
-        } catch (error) {
+                diagnostic.attempts.push(
+                    "anchor-download"
+                );
 
-            console.warn(
-                "Download tradicional falhou:",
-                error
-            );
 
+                const result =
+                    await this.saveWithAnchor(
+                        blob,
+                        fileName
+                    );
+
+
+                diagnostic.finalMethod =
+                    result.method;
+
+
+                diagnostic.success =
+                    true;
+
+
+                return {
+
+                    ...result,
+
+                    diagnostic:
+                        diagnostic
+                };
+
+
+            } catch (error) {
+
+                diagnostic.attempts.push(
+                    "anchor-download-failed"
+                );
+
+
+                diagnostic.lastError =
+                    error.message;
+
+
+                console.warn(
+                    "Download tradicional falhou:",
+                    error
+                );
+            }
         }
 
 
-        /*
-         * ----------------------------------
-         * MÉTODO 3
-         * Blob navigation
-         * ----------------------------------
-         */
+        // ==================================
+        // MÉTODO 3
+        // BLOB NAVIGATION
+        // ==================================
 
-        try {
+        if (
+            environment.objectURL
+        ) {
 
-            return await this.saveWithBlobNavigation(
-                blob
-            );
+            try {
 
-        } catch (error) {
+                diagnostic.attempts.push(
+                    "blob-navigation"
+                );
 
-            console.error(
-                "Navegação Blob falhou:",
-                error
-            );
 
+                const result =
+                    await this.saveWithBlobNavigation(
+                        blob
+                    );
+
+
+                diagnostic.finalMethod =
+                    result.method;
+
+
+                diagnostic.success =
+                    true;
+
+
+                return {
+
+                    ...result,
+
+                    diagnostic:
+                        diagnostic
+                };
+
+
+            } catch (error) {
+
+                diagnostic.attempts.push(
+                    "blob-navigation-failed"
+                );
+
+
+                diagnostic.lastError =
+                    error.message;
+
+
+                console.error(
+                    "Navegação Blob falhou:",
+                    error
+                );
+            }
         }
 
 
-        /*
-         * ----------------------------------
-         * FALHA TOTAL
-         * ----------------------------------
-         */
+        // ==================================
+        // FALHA TOTAL
+        // ==================================
 
-        throw new Error(
-            "Nenhum método de exportação disponível neste ambiente."
+        diagnostic.success =
+            false;
+
+
+        diagnostic.finalMethod =
+            "failed";
+
+
+        const finalError =
+            new Error(
+                "Nenhum método de exportação disponível neste ambiente."
+            );
+
+
+        diagnostic.error =
+            finalError.message;
+
+
+        console.error(
+            "SmoothVStudio: falha total na exportação.",
+            diagnostic
         );
 
-    }
 
+        return {
+
+            success:
+                false,
+
+            method:
+                "failed",
+
+            error:
+                finalError,
+
+            diagnostic:
+                diagnostic
+        };
+    }
 }
 
 
