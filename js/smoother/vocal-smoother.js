@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V0.5
+// V0.6
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -17,7 +17,15 @@
 // - VocalDynamics
 // - VocalSibilance
 //
-// Cada módulo pode evoluir separadamente.
+// Cada módulo continua independente.
+//
+// V0.6:
+//
+// - integração correta do De-Esser
+//   paralelo;
+// - preservação do sinal completo;
+// - redução sibilante sem substituir
+//   o vocal inteiro pela banda filtrada.
 //
 // ==========================================
 
@@ -28,7 +36,7 @@ class VocalSmoother {
     constructor(options = {}) {
 
         this.version =
-            "0.5";
+            "0.6";
 
 
         // ==================================
@@ -131,28 +139,6 @@ class VocalSmoother {
 
     // ======================================
     // OBTER AUDIO NODE
-    // ======================================
-    //
-    // Alguns módulos podem retornar:
-    //
-    // AudioNode
-    //
-    // ou:
-    //
-    // {
-    //     processor: AudioNode
-    // }
-    //
-    // ou:
-    //
-    // {
-    //     input: AudioNode,
-    //     output: AudioNode
-    // }
-    //
-    // Este método mantém o orquestrador
-    // compatível com diferentes versões
-    // dos módulos.
     // ======================================
 
     resolveNode(
@@ -259,16 +245,6 @@ class VocalSmoother {
         // ==================================
         // 4. VOCAL BODY
         // ==================================
-        //
-        // Primeira etapa da nova cadeia.
-        //
-        // O módulo observa a análise e decide
-        // automaticamente se existe excesso
-        // de grave / low-mid.
-        //
-        // Se o vocal estiver equilibrado,
-        // a intervenção tende a zero.
-        // ==================================
 
         const bodyResult =
             this.body.createProcessor(
@@ -337,12 +313,6 @@ class VocalSmoother {
                 null;
 
 
-            const resolvedTone =
-                this.resolveNode(
-                    toneResult
-                );
-
-
             if (
                 toneResult.input &&
                 toneResult.output
@@ -355,16 +325,25 @@ class VocalSmoother {
                 toneOutput =
                     toneResult.output;
 
-            } else if (
-                resolvedTone
-            ) {
+            } else {
 
-                toneInput =
-                    resolvedTone;
+                const resolvedTone =
+                    this.resolveNode(
+                        toneResult
+                    );
 
 
-                toneOutput =
-                    resolvedTone;
+                if (
+                    resolvedTone
+                ) {
+
+                    toneInput =
+                        resolvedTone;
+
+
+                    toneOutput =
+                        resolvedTone;
+                }
             }
         }
 
@@ -405,8 +384,12 @@ class VocalSmoother {
         // 7. SIBILÂNCIA
         // ==================================
 
-        let sibilanceNode =
+        let finalOutput =
             compressor;
+
+
+        let sibilanceInput =
+            null;
 
 
         if (
@@ -427,72 +410,85 @@ class VocalSmoother {
                 null;
 
 
-            const resolvedSibilance =
+            /*
+             * A V0.3 do VocalSibilance
+             * possui entrada e saída próprias.
+             *
+             * Isso permite manter o vocal
+             * completo como caminho principal
+             * e usar a banda sibilante apenas
+             * como redução paralela.
+             */
+
+            sibilanceInput =
+                sibilanceResult.input ||
+                null;
+
+
+            const resolvedSibilanceOutput =
+                sibilanceResult.output ||
                 this.resolveNode(
                     sibilanceResult
                 );
 
 
             if (
-                resolvedSibilance
+                sibilanceInput &&
+                resolvedSibilanceOutput
             ) {
 
-                sibilanceNode =
-                    resolvedSibilance;
+                compressor.connect(
+                    sibilanceInput
+                );
+
+
+                finalOutput =
+                    resolvedSibilanceOutput;
             }
         }
 
 
         // ==================================
-        // 8. CAMINHO PROCESSADO
+        // 8. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
-            toneOutput === bodyOutput
-                ? compressor
-                : toneInput
+            toneInput
         );
 
 
         // ==================================
-        // CONEXÃO TONE → DYNAMICS
+        // 9. CONEXÃO TONE → DYNAMICS
+        // ==================================
+
+        toneOutput.connect(
+            compressor
+        );
+
+
+        // ==================================
+        // 10. CONEXÃO DIRETA QUANDO
+        //     NÃO EXISTIR SIBILANCE
         // ==================================
 
         if (
-            toneOutput !== bodyOutput
-        ) {
-
-            toneOutput.connect(
-                compressor
-            );
-        }
-
-
-        // ==================================
-        // DINÂMICA → SIBILÂNCIA
-        // ==================================
-
-        if (
-            sibilanceNode !== compressor
+            !sibilanceInput
         ) {
 
             compressor.connect(
-                sibilanceNode
+                context.destination
+            );
+
+        } else {
+
+            finalOutput.connect(
+                context.destination
             );
         }
 
 
         // ==================================
-        // 9. SAÍDA
-        // ==================================
-
-        sibilanceNode.connect(
-            context.destination
-        );
-
-
-        // ==================================
-        // 10. INICIAR
+        // 11. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -500,11 +496,15 @@ class VocalSmoother {
         );
 
 
+        // ==================================
+        // 12. INICIAR
+        // ==================================
+
         source.start(0);
 
 
         // ==================================
-        // 11. RENDER
+        // 13. RENDER
         // ==================================
 
         const result =

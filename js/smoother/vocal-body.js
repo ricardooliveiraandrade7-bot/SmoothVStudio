@@ -1,35 +1,21 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL BODY
-// V0.1
+// V0.2
 // ==========================================
 //
-// Módulo responsável pelo controle adaptativo
-// de excesso de grave e médio-grave.
+// Controle adaptativo de grave e médio-grave.
 //
-// NÃO deve aplicar uma quantidade fixa de EQ.
-//
-// Ele recebe a análise do VocalAnalyzer e
-// calcula automaticamente:
+// Responsável por:
 //
 // - excesso de grave
 // - excesso de low-mid
 // - congestão de médio-grave
 //
-// Objetivo:
+// Não aplica uma curva fixa.
 //
-// - limpar excesso de peso
-// - preservar o corpo natural da voz
-// - evitar vocal fino
-// - evitar cortes agressivos
-//
-// Arquitetura:
-//
-// VocalAnalyzer
-//       ↓
-// VocalBody
-//       ↓
-// parâmetros adaptativos
+// Recebe a análise do VocalAnalyzer
+// e calcula a intensidade necessária.
 //
 // ==========================================
 
@@ -40,7 +26,7 @@ class VocalBody {
     constructor(options = {}) {
 
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
@@ -49,17 +35,17 @@ class VocalBody {
 
         this.maxLowCut =
             options.maxLowCut ??
-            -2.5;
+            -3.0;
 
 
         this.maxLowMidCut =
             options.maxLowMidCut ??
-            -2.0;
+            -2.5;
 
 
         this.maxMudCut =
             options.maxMudCut ??
-            -1.5;
+            -2.0;
     }
 
 
@@ -165,23 +151,48 @@ class VocalBody {
         // EXCESSO DE GRAVE
         // ==================================
         //
-        // A região 120–500 Hz representa
-        // grande parte do fundamento do vocal.
+        // Utilizamos tanto a relação global
+        // quanto a relação local.
         //
-        // Não queremos remover corpo.
-        //
-        // Portanto a intervenção só começa
-        // quando a proporção fica realmente
-        // dominante.
+        // Isso evita que um vocal com muito
+        // agudo pareça automaticamente ter
+        // pouco corpo.
         // ==================================
+
+        const globalLowExcess =
+            this.clamp(
+                (
+                    globalBodyRatio -
+                    0.18
+                ) /
+                0.18,
+                0,
+                1
+            );
+
+
+        const localBodyExcess =
+            this.clamp(
+                (
+                    bodyRatio -
+                    0.38
+                ) /
+                0.22,
+                0,
+                1
+            );
+
 
         const lowExcess =
             this.clamp(
                 (
-                    globalBodyRatio -
-                    0.20
-                ) /
-                0.16,
+                    globalLowExcess *
+                    0.55
+                ) +
+                (
+                    localBodyExcess *
+                    0.45
+                ),
                 0,
                 1
             );
@@ -195,9 +206,9 @@ class VocalBody {
             this.clamp(
                 (
                     lowMidRatio -
-                    0.28
+                    0.30
                 ) /
-                0.25,
+                0.22,
                 0,
                 1
             );
@@ -207,29 +218,81 @@ class VocalBody {
         // CONGESTÃO
         // ==================================
         //
-        // Quando low-mid e médio começam a
-        // dominar simultaneamente, podemos
-        // ter sensação de vocal "fechado",
-        // "gordo" ou congestionado.
+        // Aqui observamos a relação entre
+        // low-mid e médio.
+        //
+        // Se os dois dominarem juntos,
+        // existe maior possibilidade de
+        // congestionamento.
         // ==================================
+
+        const lowMidMidBalance =
+            (
+                lowMidRatio *
+                0.62
+            ) +
+            (
+                midRatio *
+                0.38
+            );
+
 
         const congestion =
             this.clamp(
                 (
+                    lowMidMidBalance -
+                    0.37
+                ) /
+                0.28,
+                0,
+                1
+            );
+
+
+        // ==================================
+        // PROTEÇÃO CONTRA CORTE DESNECESSÁRIO
+        // ==================================
+        //
+        // Se a energia de grave e low-mid
+        // não estiver claramente acima da
+        // região média, reduzimos a confiança
+        // da intervenção.
+        // ==================================
+
+        const lowMidDominance =
+            this.clamp(
+                (
                     (
-                        lowMidRatio *
-                        0.65
-                    ) +
+                        body +
+                        lowMid
+                    ) /
                     (
-                        midRatio *
-                        0.35
+                        mid +
+                        body +
+                        lowMid +
+                        0.000001
                     )
                 ) -
-                0.38,
+                0.48,
                 0,
-                0.30
+                0.40
             ) /
-            0.30;
+            0.40;
+
+
+        const correctionConfidence =
+            this.clamp(
+                (
+                    lowMidDominance *
+                    0.60
+                ) +
+                (
+                    congestion *
+                    0.40
+                ),
+                0,
+                1
+            );
 
 
         // ==================================
@@ -238,7 +301,10 @@ class VocalBody {
 
         const lowGain =
             this.clamp(
-                lowExcess *
+                (
+                    lowExcess *
+                    correctionConfidence
+                ) *
                 this.maxLowCut,
                 this.maxLowCut,
                 0
@@ -247,7 +313,10 @@ class VocalBody {
 
         const lowMidGain =
             this.clamp(
-                lowMidExcess *
+                (
+                    lowMidExcess *
+                    correctionConfidence
+                ) *
                 this.maxLowMidCut,
                 this.maxLowMidCut,
                 0
@@ -256,7 +325,10 @@ class VocalBody {
 
         const mudGain =
             this.clamp(
-                congestion *
+                (
+                    congestion *
+                    correctionConfidence
+                ) *
                 this.maxMudCut,
                 this.maxMudCut,
                 0
@@ -269,49 +341,49 @@ class VocalBody {
 
         const lowFrequency =
             this.clamp(
-                180 +
+                175 +
                 (
                     lowExcess *
-                    70
+                    75
                 ),
-                180,
+                175,
                 250
             );
 
 
         const lowMidFrequency =
             this.clamp(
-                360 +
+                350 +
                 (
                     lowMidExcess *
-                    100
+                    120
                 ),
-                360,
-                460
+                350,
+                470
             );
 
 
         const mudFrequency =
             this.clamp(
-                650 +
+                630 +
                 (
                     congestion *
-                    180
+                    210
                 ),
-                650,
-                830
+                630,
+                840
             );
 
 
         // ==================================
-        // INTENSIDADE TOTAL
+        // INTENSIDADE
         // ==================================
 
         const intensity =
             this.clamp(
                 (
                     lowExcess *
-                    0.40
+                    0.35
                 ) +
                 (
                     lowMidExcess *
@@ -319,7 +391,7 @@ class VocalBody {
                 ) +
                 (
                     congestion *
-                    0.20
+                    0.25
                 ),
                 0,
                 1
@@ -346,7 +418,9 @@ class VocalBody {
 
             lowMidExcess,
 
-            congestion
+            congestion,
+
+            correctionConfidence
         };
     }
 
@@ -425,7 +499,7 @@ class VocalBody {
 
 
         // ==================================
-        // MUD / CONGESTÃO
+        // MUD
         // ==================================
 
         const mudFilter =

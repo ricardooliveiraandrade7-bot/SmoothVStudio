@@ -1,27 +1,27 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SIBILANCE
-// V0.2
+// V0.3
 // ==========================================
 //
-// De-esser adaptativo.
+// De-esser adaptativo paralelo.
 //
-// Responsável por reduzir a região sibilante
-// somente quando necessário.
+// Responsável por reduzir S / CH / X
+// sem remover o restante do espectro.
 //
 // Arquitetura:
 //
-// VocalAnalyzer
-//       ↓
-// VocalSibilance
-//       ↓
-// VocalSmoother
+//                 ┌── sinal original ──────┐
+// Entrada ────────┤                         ├── Saída
+//                 └── banda sibilante ──────┘
+//                          ↓
+//                     compressor
+//                          ↓
+//                    redução negativa
 //
-// Esta versão evita manter a região de
-// sibilância permanentemente reduzida.
-//
-// O objetivo é diminuir S / CH / X somente
-// quando a região apresentar energia elevada.
+// A banda sibilante NÃO substitui o vocal.
+// Ela é utilizada para reduzir suavemente
+// somente a energia sibilante.
 //
 // ==========================================
 
@@ -32,7 +32,7 @@ class VocalSibilance {
     constructor(options = {}) {
 
         this.version =
-            "0.2";
+            "0.3";
 
 
         // ==================================
@@ -55,7 +55,7 @@ class VocalSibilance {
 
         this.maxReductionDb =
             options.maxReductionDb ??
-            5.5;
+            6.0;
 
 
         // ==================================
@@ -64,12 +64,12 @@ class VocalSibilance {
 
         this.attack =
             options.attack ??
-            0.002;
+            0.0025;
 
 
         this.release =
             options.release ??
-            0.070;
+            0.075;
 
 
         // ==================================
@@ -125,6 +125,21 @@ class VocalSibilance {
 
 
     // ======================================
+    // DB → GANHO LINEAR
+    // ======================================
+
+    dbToLinear(
+        db
+    ) {
+
+        return Math.pow(
+            10,
+            db / 20
+        );
+    }
+
+
+    // ======================================
     // CALCULAR INTENSIDADE
     // ======================================
 
@@ -156,17 +171,18 @@ class VocalSibilance {
 
 
         /*
-         * A intensidade é deliberadamente
-         * conservadora nesta primeira versão.
+         * A sibilância global continua sendo
+         * apenas o ponto de partida.
          *
-         * O objetivo não é destruir os
-         * agudos do vocal.
+         * Mantemos a intensidade conservadora
+         * para evitar que o de-esser fique
+         * audível o tempo inteiro.
          */
 
         const intensity =
             this.clamp(
                 sibilance *
-                1.15,
+                1.20,
                 0,
                 1
             );
@@ -191,39 +207,42 @@ class VocalSibilance {
 
 
         /*
-         * Quanto maior a sibilância,
-         * maior a redução máxima.
+         * Redução máxima adaptativa.
+         *
+         * Vocais com pouca sibilância recebem
+         * apenas uma intervenção muito leve.
          */
 
         const reductionDb =
             this.lerp(
-                1.0,
+                0.75,
                 this.maxReductionDb,
                 intensity
             );
 
 
         /*
-         * Ataque rápido para pegar
-         * consoantes sibilantes.
+         * Ataque rápido o suficiente para
+         * alcançar consoantes agressivas,
+         * mas não excessivamente rápido.
          */
 
         const attack =
             this.lerp(
-                0.004,
+                0.005,
                 this.attack,
                 intensity
             );
 
 
         /*
-         * Release moderado para evitar
-         * modulação audível.
+         * Release ligeiramente mais longo
+         * para reduzir modulação perceptível.
          */
 
         const release =
             this.lerp(
-                0.110,
+                0.120,
                 this.release,
                 intensity
             );
@@ -259,7 +278,7 @@ class VocalSibilance {
 
 
     // ======================================
-    // CRIAR FILTRO DE FAIXA
+    // CRIAR FILTRO DE BANDA
     // ======================================
 
     createBandFilter(
@@ -282,6 +301,14 @@ class VocalSibilance {
             2;
 
 
+        /*
+         * Q moderadamente baixo para não
+         * criar uma faixa estreita demais.
+         *
+         * Isso ajuda a evitar aquele caráter
+         * artificial de "filtro".
+         */
+
         filter.Q.value =
             0.72;
 
@@ -294,12 +321,26 @@ class VocalSibilance {
     // CRIAR PROCESSADOR
     // ======================================
     //
-    // Nesta versão o compressor atua apenas
-    // sobre a banda sibilante.
+    // A V0.3 passa a possuir duas rotas:
     //
-    // O resultado será utilizado como
-    // sinal de controle/redução pelo
-    // VocalSmoother.
+    // DRY:
+    //
+    // input → dryGain → output
+    //
+    // SIBILÂNCIA:
+    //
+    // input
+    //   ↓
+    // bandpass
+    //   ↓
+    // compressor
+    //   ↓
+    // ganho negativo
+    //   ↓
+    // output
+    //
+    // O resultado é uma redução paralela
+    // da região sibilante.
     //
     // ======================================
 
@@ -324,25 +365,79 @@ class VocalSibilance {
             );
 
 
+        // ==================================
+        // ENTRADA
+        // ==================================
+
+        const input =
+            context.createGain();
+
+
+        input.gain.value =
+            1.0;
+
+
+        // ==================================
+        // SAÍDA
+        // ==================================
+
+        const output =
+            context.createGain();
+
+
+        output.gain.value =
+            1.0;
+
+
+        // ==================================
+        // CAMINHO ORIGINAL
+        // ==================================
+
+        const dryGain =
+            context.createGain();
+
+
+        dryGain.gain.value =
+            1.0;
+
+
+        input.connect(
+            dryGain
+        );
+
+
+        dryGain.connect(
+            output
+        );
+
+
+        // ==================================
+        // FILTRO SIBILANTE
+        // ==================================
+
         const bandFilter =
             this.createBandFilter(
                 context
             );
 
 
+        input.connect(
+            bandFilter
+        );
+
+
+        // ==================================
+        // COMPRESSOR SIBILANTE
+        // ==================================
+
         const compressor =
             context.createDynamicsCompressor();
 
 
-        /*
-         * O threshold é calculado a partir
-         * da intensidade detectada.
-         */
-
         const threshold =
             this.lerp(
-                -12,
-                -30,
+                -8,
+                -28,
                 settings.intensity
             );
 
@@ -350,16 +445,16 @@ class VocalSibilance {
         const ratio =
             this.lerp(
                 2.0,
-                5.0,
+                5.5,
                 settings.intensity
             );
 
 
         const knee =
-            10 +
-            (
-                settings.intensity *
-                12
+            this.lerp(
+                12,
+                22,
+                settings.intensity
             );
 
 
@@ -388,16 +483,58 @@ class VocalSibilance {
         );
 
 
+        // ==================================
+        // REDUÇÃO DA BANDA
+        // ==================================
+        //
+        // O sinal comprimido é subtraído
+        // suavemente do sinal original.
+        //
+        // Isso transforma a cadeia em um
+        // de-esser paralelo simples.
+        //
+        // ==================================
+
+        const reductionGain =
+            context.createGain();
+
+
+        const reductionAmount =
+            this.dbToLinear(
+                -settings.reductionDb
+            );
+
+
+        /*
+         * Usamos uma fração da redução calculada
+         * para manter a atuação natural.
+         */
+
+        reductionGain.gain.value =
+            -(
+                reductionAmount *
+                0.70
+            );
+
+
+        compressor.connect(
+            reductionGain
+        );
+
+
+        reductionGain.connect(
+            output
+        );
+
+
         return {
 
-            input:
-                bandFilter,
+            input,
 
             processor:
                 compressor,
 
-            output:
-                compressor,
+            output,
 
             settings
         };
