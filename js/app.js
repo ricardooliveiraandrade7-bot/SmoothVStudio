@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // APP CONTROLLER
-// V0.1
+// V0.2
 // ==========================================
 //
 // Controlador principal da interface.
@@ -12,8 +12,16 @@
 // A criação do WAV permanece no
 // WavExporter.
 //
-// A entrega do arquivo agora passa pelo
+// A entrega do arquivo passa pelo
 // ExportManager.
+//
+// V0.2:
+//
+// - ciclo de vida de memória mais controlado;
+// - File de compartilhamento criado sob demanda;
+// - limpeza centralizada de Object URLs;
+// - limpeza de resultados anteriores;
+// - preservação do processamento original.
 //
 // ==========================================
 
@@ -150,6 +158,10 @@ let currentWavBlob =
     null;
 
 
+let currentOutputName =
+    null;
+
+
 let bypassActive =
     false;
 
@@ -211,6 +223,203 @@ function formatTime(
 
 
 // ==========================================
+// LIBERAR URL ORIGINAL
+// ==========================================
+
+function releaseOriginalURL() {
+
+    if (
+        originalURL
+    ) {
+
+        try {
+
+            URL.revokeObjectURL(
+                originalURL
+            );
+
+        } catch (_) {}
+
+
+        originalURL =
+            null;
+    }
+}
+
+
+// ==========================================
+// LIBERAR URL PROCESSADA
+// ==========================================
+
+function releaseProcessedURL() {
+
+    if (
+        processedURL
+    ) {
+
+        try {
+
+            URL.revokeObjectURL(
+                processedURL
+            );
+
+        } catch (_) {}
+
+
+        processedURL =
+            null;
+    }
+}
+
+
+// ==========================================
+// LIMPAR RESULTADO PROCESSADO
+// ==========================================
+//
+// Esta função centraliza a liberação dos
+// objetos relacionados ao resultado.
+//
+// O Blob é mantido somente enquanto o
+// resultado ainda for necessário.
+// ==========================================
+
+function clearProcessedOutput() {
+
+    releaseProcessedURL();
+
+
+    currentWavFile =
+        null;
+
+
+    currentWavBlob =
+        null;
+
+
+    currentOutputName =
+        null;
+
+
+    bypassActive =
+        false;
+
+
+    processedPlayer.pause();
+
+
+    processedPlayer.removeAttribute(
+        "src"
+    );
+
+
+    processedPlayer.load();
+
+
+    processedSection.classList.add(
+        "hidden"
+    );
+
+
+    downloadButton.disabled =
+        true;
+
+
+    shareButton.classList.add(
+        "hidden"
+    );
+
+
+    bypassButton.textContent =
+        "Bypass: Original";
+}
+
+
+// ==========================================
+// GERAR NOME DO WAV
+// ==========================================
+
+function createOutputName() {
+
+    if (
+        !currentFile
+    ) {
+
+        return "smoothvstudio-vocal.wav";
+    }
+
+
+    const originalName =
+        currentFile.name;
+
+
+    const withoutExtension =
+        originalName.replace(
+            /\.[^/.]+$/,
+            ""
+        );
+
+
+    return (
+        `${withoutExtension}-smoothvstudio.wav`
+    );
+}
+
+
+// ==========================================
+// CRIAR FILE PARA COMPARTILHAMENTO
+// ==========================================
+//
+// O File não é mantido permanentemente.
+//
+// Ele só é criado quando o usuário realmente
+// solicita o compartilhamento.
+// ==========================================
+
+function getCurrentWavFile() {
+
+    if (
+        !currentWavBlob
+    ) {
+
+        return null;
+    }
+
+
+    if (
+        currentWavFile
+    ) {
+
+        return currentWavFile;
+    }
+
+
+    if (
+        !currentOutputName
+    ) {
+
+        currentOutputName =
+            createOutputName();
+    }
+
+
+    currentWavFile =
+        new File(
+            [
+                currentWavBlob
+            ],
+            currentOutputName,
+            {
+                type:
+                    "audio/wav"
+            }
+        );
+
+
+    return currentWavFile;
+}
+
+
+// ==========================================
 // SELEÇÃO DO ARQUIVO
 // ==========================================
 
@@ -232,16 +441,19 @@ audioFile.addEventListener(
 
         try {
 
+            // ==============================
+            // LIMPAR RESULTADO ANTERIOR
+            // ==============================
+
+            clearProcessedOutput();
+
+
+            // ==============================
+            // ATUALIZAR ARQUIVO ATUAL
+            // ==============================
+
             currentFile =
                 file;
-
-
-            currentWavFile =
-                null;
-
-
-            currentWavBlob =
-                null;
 
 
             fileName.textContent =
@@ -260,56 +472,16 @@ audioFile.addEventListener(
                 true;
 
 
-            downloadButton.disabled =
-                true;
+            // ==============================
+            // LIMPAR URL ORIGINAL ANTERIOR
+            // ==============================
+
+            releaseOriginalURL();
 
 
-            shareButton.classList.add(
-                "hidden"
-            );
-
-
-            processedSection.classList.add(
-                "hidden"
-            );
-
-
-            processedPlayer.pause();
-
-
-            processedPlayer.removeAttribute(
-                "src"
-            );
-
-
-            processedPlayer.load();
-
-
-            if (
-                processedURL
-            ) {
-
-                URL.revokeObjectURL(
-                    processedURL
-                );
-
-
-                processedURL =
-                    null;
-
-            }
-
-
-            if (
-                originalURL
-            ) {
-
-                URL.revokeObjectURL(
-                    originalURL
-                );
-
-            }
-
+            // ==============================
+            // CRIAR URL ORIGINAL
+            // ==============================
 
             originalURL =
                 URL.createObjectURL(
@@ -324,6 +496,10 @@ audioFile.addEventListener(
             originalPlayer.load();
 
 
+            // ==============================
+            // DECODIFICAR
+            // ==============================
+
             await audioEngine.decodeFile(
                 file
             );
@@ -335,6 +511,7 @@ audioFile.addEventListener(
 
             processingStatus.textContent =
                 "Áudio carregado. Pronto para processar.";
+
 
         } catch (error) {
 
@@ -381,6 +558,10 @@ async function processAudio() {
 
     try {
 
+        // ==============================
+        // BLOQUEAR CONTROLES
+        // ==============================
+
         processButton.disabled =
             true;
 
@@ -406,6 +587,18 @@ async function processAudio() {
             "Processando offline...";
 
 
+        // ==============================
+        // LIBERAR RESULTADO ANTERIOR
+        // ==============================
+
+        clearProcessedOutput();
+
+
+        // ==============================
+        // DAR AO NAVEGADOR UM PEQUENO
+        // INTERVALO ANTES DO PROCESSAMENTO
+        // ==============================
+
         await new Promise(
             resolve => {
 
@@ -418,14 +611,19 @@ async function processAudio() {
         );
 
 
+        // ==============================
+        // PROCESSAR SEMPRE A PARTIR
+        // DO ORIGINAL
+        // ==============================
+
         const processedBuffer =
             await audioEngine.process();
 
 
-        /*
-         * Criamos o WAV somente depois
-         * do processamento.
-         */
+        // ==============================
+        // CRIAR WAV SOMENTE DEPOIS
+        // DO PROCESSAMENTO
+        // ==============================
 
         currentWavBlob =
             WavExporter.createBlob(
@@ -445,54 +643,17 @@ async function processAudio() {
         }
 
 
-        let outputName =
-            "smoothvstudio-vocal.wav";
+        // ==============================
+        // DEFINIR NOME SEM CRIAR FILE
+        // ==============================
+
+        currentOutputName =
+            createOutputName();
 
 
-        if (
-            currentFile
-        ) {
-
-            const originalName =
-                currentFile.name;
-
-
-            const withoutExtension =
-                originalName.replace(
-                    /\.[^/.]+$/,
-                    ""
-                );
-
-
-            outputName =
-                `${withoutExtension}-smoothvstudio.wav`;
-
-        }
-
-
-        currentWavFile =
-            new File(
-                [
-                    currentWavBlob
-                ],
-                outputName,
-                {
-                    type:
-                        "audio/wav"
-                }
-            );
-
-
-        if (
-            processedURL
-        ) {
-
-            URL.revokeObjectURL(
-                processedURL
-            );
-
-        }
-
+        // ==============================
+        // CRIAR URL PARA O PLAYER
+        // ==============================
 
         processedURL =
             URL.createObjectURL(
@@ -511,6 +672,10 @@ async function processAudio() {
             "hidden"
         );
 
+
+        // ==============================
+        // HABILITAR CONTROLES
+        // ==============================
 
         downloadButton.disabled =
             false;
@@ -532,32 +697,52 @@ async function processAudio() {
             "Bypass: Original";
 
 
-        /*
-         * O compartilhamento nativo continua
-         * disponível somente se o ambiente
-         * realmente fornecer a API.
-         */
+        // ==============================
+        // COMPARTILHAMENTO
+        // ==============================
+        //
+        // O File só será criado se a
+        // função de compartilhamento
+        // precisar dele.
+        //
+        // Para testar disponibilidade,
+        // criamos temporariamente o File.
+        // Se não for compartilhável,
+        // liberamos a referência.
+        // ==============================
 
         if (
             typeof FileDownloader !==
             "undefined" &&
 
-            FileDownloader.canShareFile &&
-
-            FileDownloader.canShareFile(
-                currentWavFile
-            )
+            FileDownloader.canShareFile
         ) {
 
-            shareButton.classList.remove(
-                "hidden"
-            );
+            const shareFile =
+                getCurrentWavFile();
 
+
+            if (
+                FileDownloader.canShareFile(
+                    shareFile
+                )
+            ) {
+
+                shareButton.classList.remove(
+                    "hidden"
+                );
+
+            } else {
+
+                currentWavFile =
+                    null;
+            }
         }
 
 
         processingStatus.textContent =
             "Processamento concluído.";
+
 
     } catch (error) {
 
@@ -583,11 +768,19 @@ async function processAudio() {
 }
 
 
+// ==========================================
+// BOTÃO PROCESSAR
+// ==========================================
+
 processButton.addEventListener(
     "click",
     processAudio
 );
 
+
+// ==========================================
+// BOTÃO REPROCESSAR
+// ==========================================
 
 reprocessButton.addEventListener(
     "click",
@@ -641,7 +834,8 @@ downloadButton.addEventListener(
             const result =
                 await ExportManager.exportWav(
                     currentWavBlob,
-                    currentWavFile.name
+                    currentOutputName ||
+                    "smoothvstudio-vocal.wav"
                 );
 
 
@@ -694,6 +888,7 @@ downloadButton.addEventListener(
 
             }
 
+
         } catch (error) {
 
             console.error(
@@ -737,9 +932,33 @@ shareButton.addEventListener(
     "click",
     async () => {
 
+        /*
+         * Criar o File somente agora.
+         */
+
+        const wavFile =
+            getCurrentWavFile();
+
+
         if (
-            !currentWavFile
+            !wavFile
         ) {
+
+            downloadStatus.textContent =
+                "Nenhum WAV processado disponível.";
+
+            return;
+
+        }
+
+
+        if (
+            typeof FileDownloader ===
+            "undefined"
+        ) {
+
+            downloadStatus.textContent =
+                "Módulo de compartilhamento não carregado.";
 
             return;
 
@@ -753,12 +972,13 @@ shareButton.addEventListener(
 
 
             await FileDownloader.shareFile(
-                currentWavFile
+                wavFile
             );
 
 
             downloadStatus.textContent =
                 "Arquivo enviado ao compartilhamento do Android.";
+
 
         } catch (error) {
 
@@ -841,6 +1061,7 @@ bypassButton.addEventListener(
 
             bypassButton.textContent =
                 "Bypass: Processado";
+
 
         } else {
 
@@ -942,33 +1163,28 @@ processedPlayer.addEventListener(
 
 
 // ==========================================
-// LIMPEZA
+// LIMPEZA AO SAIR
 // ==========================================
 
 window.addEventListener(
     "beforeunload",
     () => {
 
-        if (
-            originalURL
-        ) {
+        releaseOriginalURL();
 
-            URL.revokeObjectURL(
-                originalURL
-            );
+        releaseProcessedURL();
 
-        }
+        currentFile =
+            null;
 
+        currentWavFile =
+            null;
 
-        if (
-            processedURL
-        ) {
+        currentWavBlob =
+            null;
 
-            URL.revokeObjectURL(
-                processedURL
-            );
-
-        }
+        currentOutputName =
+            null;
 
     }
 );
