@@ -1,0 +1,522 @@
+/* =========================================
+   SMOOTHVSTUDIO
+   STYLE
+   V0.1
+   ========================================= */
+
+
+* {
+
+    box-sizing: border-box;
+
+    margin: 0;
+
+    padding: 0;
+}
+
+
+body {
+
+    min-height: 100vh;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #20242b 0%,
+            #101216 45%,
+            #090a0d 100%
+        );
+
+    color: #f1f1f1;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    padding: 20px;
+}
+
+
+.app {
+
+    width: 100%;
+
+    max-width: 720px;
+
+    margin: 0 auto;
+}
+
+
+/* =========================================
+   CABEÇALHO
+   ========================================= */
+
+.header {
+
+    margin-bottom: 22px;
+}
+
+
+.header h1 {
+
+    font-size: 30px;
+
+    font-weight: 700;
+
+    letter-spacing: -0.5px;
+}
+
+
+.header p {
+
+    margin-top: 6px;
+
+    color: #9da3ad;
+
+    font-size: 14px;
+}
+
+
+/* =========================================
+   PAINÉIS
+   ========================================= */
+
+.panel {
+
+    background:
+        rgba(24, 27, 33, 0.95);
+
+    border:
+        1px solid #30343c;
+
+    border-radius: 14px;
+
+    padding: 18px;
+
+    margin-bottom: 16px;
+
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+
+.panel h2 {
+
+    font-size: 17px;
+
+    margin-bottom: 14px;
+}
+
+
+/* =========================================
+   SELETOR DE ARQUIVO
+   ========================================= */
+
+.input-label {
+
+    display: block;
+
+    margin-bottom: 8px;
+
+    color: #c7ccd3;
+
+    font-size: 13px;
+
+    font-weight: 600;
+}
+
+
+.audio-input {
+
+    display: block;
+
+    width: 100%;
+
+    min-height: 52px;
+
+    padding: 8px;
+
+    background: #292e36;
+
+    border:
+        1px solid #454b55;
+
+    border-radius: 10px;
+
+    color: #f1f1f1;
+
+    font-size: 14px;
+}
+
+
+.audio-input::file-selector-button {
+
+    min-height: 38px;
+
+    margin-right: 10px;
+
+    padding:
+        0 14px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background: #d9d9d9;
+
+    color: #111;
+
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+
+.file-name {
+
+    margin-top: 12px;
+
+    color: #969da7;
+
+    font-size: 13px;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+}
+
+
+/* =========================================
+   PLAYER
+   ========================================= */
+
+audio {
+
+    display: block;
+
+    width: 100%;
+}
+
+
+.time-display {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    margin-top: 7px;
+
+    color: #8d949f;
+
+    font-size: 12px;
+}
+
+
+/* =========================================
+   VOCAL SMOOTHER
+   ========================================= */
+
+.smoother-panel {
+
+    border-color: #454c58;
+}
+
+
+.plugin-header {
+
+    display: flex;
+
+    align-items: flex-start;
+
+    justify-content: space-between;
+
+    margin-bottom: 20px;
+}
+
+
+.plugin-header h2 {
+
+    margin-bottom: 5px;
+}
+
+
+.plugin-header p {
+
+    color: #8f96a0;
+
+    font-size: 13px;
+}
+
+
+.version {
+
+    padding:
+        5px 9px;
+
+    border-radius: 6px;
+
+    background: #292e36;
+
+    color: #aeb5bf;
+
+    font-size: 11px;
+
+    font-weight: 700;
+}
+
+
+/* =========================================
+   BOTÕES
+   ========================================= */
+
+button {
+
+    border: none;
+
+    border-radius: 9px;
+
+    min-height: 45px;
+
+    padding:
+        0 16px;
+
+    background: #2c3139;
+
+    color: #f2f2f2;
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s,
+        opacity 0.2s,
+        transform 0.1s;
+}
+
+
+button:hover {
+
+    background: #383e48;
+}
+
+
+button:active {
+
+    transform: scale(0.98);
+}
+
+
+button:disabled {
+
+    opacity: 0.4;
+
+    cursor: not-allowed;
+}
+
+
+.process-button {
+
+    width: 100%;
+
+    background: #d9d9d9;
+
+    color: #111;
+}
+
+
+.process-button:hover {
+
+    background: #ffffff;
+}
+
+
+.download-button {
+
+    width: 100%;
+
+    margin-top: 14px;
+
+    background: #d9d9d9;
+
+    color: #111;
+}
+
+
+.download-button:hover {
+
+    background: #ffffff;
+}
+
+
+.share-button {
+
+    width: 100%;
+
+    margin-top: 10px;
+
+    background: #2c3139;
+
+    color: #f2f2f2;
+}
+
+
+/* =========================================
+   STATUS DO PROCESSAMENTO
+   ========================================= */
+
+.status {
+
+    margin-top: 13px;
+
+    text-align: center;
+
+    color: #9299a3;
+
+    font-size: 13px;
+
+    min-height: 18px;
+}
+
+
+/* =========================================
+   STATUS DO DOWNLOAD
+   ========================================= */
+
+.download-status {
+
+    margin-top: 10px;
+
+    text-align: center;
+
+    color: #9299a3;
+
+    font-size: 12px;
+
+    line-height: 1.4;
+
+    min-height: 18px;
+}
+
+
+/* =========================================
+   COMPARAÇÃO
+   ========================================= */
+
+.comparison {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 10px;
+
+    margin-top: 15px;
+}
+
+
+/* =========================================
+   INFORMAÇÕES DO MOTOR
+   ========================================= */
+
+.engine-info {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 10px;
+}
+
+
+.engine-info div {
+
+    padding: 12px;
+
+    background: #1c2026;
+
+    border-radius: 8px;
+
+    text-align: center;
+}
+
+
+.engine-info span {
+
+    display: block;
+
+    color: #777f8a;
+
+    font-size: 11px;
+
+    margin-bottom: 5px;
+}
+
+
+.engine-info strong {
+
+    font-size: 12px;
+
+    color: #cfd3d8;
+}
+
+
+/* =========================================
+   UTILITÁRIO
+   ========================================= */
+
+.hidden {
+
+    display: none;
+}
+
+
+/* =========================================
+   MOBILE
+   ========================================= */
+
+@media (max-width: 520px) {
+
+    body {
+
+        padding: 12px;
+    }
+
+
+    .header h1 {
+
+        font-size: 25px;
+    }
+
+
+    .panel {
+
+        padding: 15px;
+    }
+
+
+    .comparison {
+
+        grid-template-columns: 1fr;
+    }
+
+
+    .engine-info {
+
+        grid-template-columns: 1fr;
+    }
+
+
+    .audio-input {
+
+        min-height: 56px;
+    }
+
+}
