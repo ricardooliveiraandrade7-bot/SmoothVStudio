@@ -1,27 +1,34 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL ANALYZER
-// V0.4
+// V0.5
 // ==========================================
 //
 // Analisa o vocal antes do processamento.
 //
 // O Analyzer NÃO modifica o áudio.
 //
-// Evolução V0.4:
+// Evolução V0.5:
 //
 // - análise geral do vocal
 // - análise por bandas
 // - análise temporal da sibilância
 // - detecção de picos de energia sibilante
 // - estimativa de atividade sibilante
+// - detecção preliminar de baixa atividade
+// - estimativa adaptativa do noise floor
+// - perfil espectral simplificado do ruído
+// - confiança da estimativa de ruído
 //
-// A análise temporal prepara o motor para,
-// futuramente, aplicar de-essing somente nos
-// momentos em que a sibilância realmente
-// aparece.
+// IMPORTANTE:
+//
+// Esta versão NÃO remove ruído.
+//
+// Ela apenas fornece informações para
+// futuras etapas adaptativas.
 //
 // Arquitetura modular:
+//
 // este módulo pode evoluir
 // independentemente de:
 //
@@ -381,14 +388,6 @@ class VocalAnalyzer {
     // ======================================
     // CRIAR BANDA FILTRADA
     // ======================================
-    //
-    // Diferentemente de calculateBandEnergy,
-    // este método mantém o sinal filtrado.
-    //
-    // Isso permite analisar a evolução da
-    // energia sibilante ao longo do tempo.
-    //
-    // ======================================
 
     createBandSignal(
         data,
@@ -497,21 +496,6 @@ class VocalAnalyzer {
     // ======================================
     // ANALISAR SIBILÂNCIA NO TEMPO
     // ======================================
-    //
-    // A V0.3 observava apenas a energia
-    // média de 5–9.5 kHz.
-    //
-    // A V0.4 também observa pequenas janelas.
-    //
-    // Isso permite distinguir:
-    //
-    // vocal com brilho constante
-    //
-    // de:
-    //
-    // vocal com picos curtos de S / SH / CH.
-    //
-    // ======================================
 
     analyzeSibilanceTimeline(
         mono,
@@ -569,15 +553,6 @@ class VocalAnalyzer {
         let activeFrames =
             0;
 
-
-        /*
-         * O limiar de atividade é relativo
-         * ao RMS geral do vocal.
-         *
-         * Assim, o mesmo valor absoluto
-         * não precisa funcionar para todos
-         * os arquivos.
-         */
 
         const activityThreshold =
             Math.max(
@@ -680,32 +655,12 @@ class VocalAnalyzer {
                 : 0;
 
 
-        /*
-         * Relação entre o pico sibilante
-         * e a energia média.
-         *
-         * Picos muito superiores à média
-         * indicam maior possibilidade de
-         * eventos sibilantes concentrados.
-         */
-
         const peakToAverage =
             averageEnergy > 0
                 ? peakEnergy /
                   averageEnergy
                 : 0;
 
-
-        /*
-         * Normalização adaptativa.
-         *
-         * Não usamos um único número absoluto.
-         * O resultado considera:
-         *
-         * - intensidade média
-         * - pico
-         * - concentração temporal
-         */
 
         const averageRelative =
             totalRms > 0
@@ -760,13 +715,6 @@ class VocalAnalyzer {
             );
 
 
-        /*
-         * O score temporal não substitui
-         * o score espectral.
-         *
-         * Ele acrescenta informação.
-         */
-
         const temporalScore =
             this.clamp(
                 (
@@ -820,6 +768,541 @@ class VocalAnalyzer {
             temporalScore,
 
             frames
+        };
+    }
+
+
+    // ======================================
+    // ANALISAR PERFIL DE RUÍDO
+    // ======================================
+    //
+    // Esta função NÃO remove ruído.
+    //
+    // Ela procura janelas onde o sinal
+    // possui baixa atividade relativa.
+    //
+    // Nessas janelas estimamos:
+    //
+    // - noise floor
+    // - persistência
+    // - distribuição grave
+    // - distribuição média
+    // - distribuição aguda
+    //
+    // A análise é deliberadamente
+    // conservadora.
+    //
+    // ======================================
+
+    analyzeNoiseProfile(
+        mono,
+        sampleRate,
+        totalRms
+    ) {
+
+        const windowSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.windowMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const hopSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.hopMs /
+                        1000
+                    )
+                )
+            );
+
+
+        if (
+            mono.length === 0 ||
+            totalRms <= 0
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                confidence:
+                    0,
+
+                floor:
+                    0,
+
+                floorDb:
+                    -120,
+
+                low:
+                    0,
+
+                mid:
+                    0,
+
+                high:
+                    0,
+
+                persistence:
+                    0,
+
+                profile:
+                    "unknown",
+
+                analyzedFrames:
+                    0,
+
+                lowActivityFrames:
+                    0
+            };
+        }
+
+
+        /*
+         * Abaixo deste nível relativo
+         * consideramos a janela como
+         * potencialmente pouco ativa.
+         *
+         * Não chamamos isso de silêncio.
+         */
+
+        const lowActivityThreshold =
+            Math.max(
+                totalRms *
+                0.22,
+                0.00001
+            );
+
+
+        let analyzedFrames =
+            0;
+
+
+        let lowActivityFrames =
+            0;
+
+
+        let sumNoiseRms =
+            0;
+
+
+        let sumLow =
+            0;
+
+
+        let sumMid =
+            0;
+
+
+        let sumHigh =
+            0;
+
+
+        /*
+         * Número de janelas que apresentam
+         * baixa atividade consecutivamente.
+         *
+         * Isso ajuda a diferenciar um
+         * pequeno espaço entre palavras
+         * de um componente ambiental
+         * persistente.
+         */
+
+        let consecutiveLow =
+            0;
+
+
+        let persistentLowFrames =
+            0;
+
+
+        /*
+         * Para reduzir custo de memória,
+         * analisamos as bandas somente
+         * dentro das janelas selecionadas.
+         *
+         * Não criamos seis buffers adicionais
+         * para o arquivo inteiro.
+         */
+
+        for (
+            let start = 0;
+            start < mono.length;
+            start += hopSize
+        ) {
+
+            const end =
+                Math.min(
+                    mono.length,
+                    start +
+                    windowSize
+                );
+
+
+            if (
+                end <= start
+            ) {
+
+                break;
+            }
+
+
+            analyzedFrames++;
+
+
+            const rms =
+                this.calculateRMSRange(
+                    mono,
+                    start,
+                    end
+                );
+
+
+            if (
+                rms <=
+                lowActivityThreshold
+            ) {
+
+                lowActivityFrames++;
+
+                consecutiveLow++;
+
+
+                if (
+                    consecutiveLow >= 2
+                ) {
+
+                    persistentLowFrames++;
+                }
+
+
+                /*
+                 * Dentro da janela selecionada
+                 * calculamos três regiões amplas.
+                 *
+                 * Isso é suficiente nesta etapa.
+                 *
+                 * A análise fina virá somente
+                 * quando tivermos confiança
+                 * de que existe um perfil de ruído.
+                 */
+
+                const windowData =
+                    mono.subarray(
+                        start,
+                        end
+                    );
+
+
+                const low =
+                    this.calculateBandEnergy(
+                        windowData,
+                        sampleRate,
+                        20,
+                        250
+                    );
+
+
+                const mid =
+                    this.calculateBandEnergy(
+                        windowData,
+                        sampleRate,
+                        250,
+                        2500
+                    );
+
+
+                const high =
+                    this.calculateBandEnergy(
+                        windowData,
+                        sampleRate,
+                        2500,
+                        Math.min(
+                            12000,
+                            sampleRate / 2 -
+                            100
+                        )
+                    );
+
+
+                sumNoiseRms +=
+                    rms;
+
+
+                sumLow +=
+                    low;
+
+
+                sumMid +=
+                    mid;
+
+
+                sumHigh +=
+                    high;
+
+            } else {
+
+                consecutiveLow =
+                    0;
+            }
+        }
+
+
+        if (
+            lowActivityFrames === 0
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                confidence:
+                    0,
+
+                floor:
+                    0,
+
+                floorDb:
+                    -120,
+
+                low:
+                    0,
+
+                mid:
+                    0,
+
+                high:
+                    0,
+
+                persistence:
+                    0,
+
+                profile:
+                    "unknown",
+
+                analyzedFrames,
+
+                lowActivityFrames
+            };
+        }
+
+
+        const floor =
+            sumNoiseRms /
+            lowActivityFrames;
+
+
+        const floorDb =
+            this.amplitudeToDb(
+                floor
+            );
+
+
+        const lowEnergy =
+            sumLow /
+            lowActivityFrames;
+
+
+        const midEnergy =
+            sumMid /
+            lowActivityFrames;
+
+
+        const highEnergy =
+            sumHigh /
+            lowActivityFrames;
+
+
+        const lowRelative =
+            totalRms > 0
+                ? lowEnergy /
+                  totalRms
+                : 0;
+
+
+        const midRelative =
+            totalRms > 0
+                ? midEnergy /
+                  totalRms
+                : 0;
+
+
+        const highRelative =
+            totalRms > 0
+                ? highEnergy /
+                  totalRms
+                : 0;
+
+
+        const lowActivityRatio =
+            analyzedFrames > 0
+                ? lowActivityFrames /
+                  analyzedFrames
+                : 0;
+
+
+        const persistence =
+            lowActivityFrames > 0
+                ? persistentLowFrames /
+                  lowActivityFrames
+                : 0;
+
+
+        /*
+         * Confiança da estimativa.
+         *
+         * Queremos evitar afirmar que
+         * "aprendemos o ruído" quando
+         * praticamente não existem
+         * janelas adequadas.
+         */
+
+        const sampleConfidence =
+            this.clamp(
+                lowActivityRatio *
+                2.5,
+                0,
+                1
+            );
+
+
+        const persistenceConfidence =
+            this.clamp(
+                persistence *
+                1.5,
+                0,
+                1
+            );
+
+
+        const stabilityConfidence =
+            this.clamp(
+                (
+                    1 -
+                    Math.abs(
+                        highRelative -
+                        midRelative
+                    )
+                ),
+                0,
+                1
+            );
+
+
+        const confidence =
+            this.clamp(
+                (
+                    sampleConfidence *
+                    0.45
+                ) +
+                (
+                    persistenceConfidence *
+                    0.35
+                ) +
+                (
+                    stabilityConfidence *
+                    0.20
+                ),
+                0,
+                1
+            );
+
+
+        /*
+         * Intensidade relativa do piso.
+         *
+         * Não representa uma redução.
+         */
+
+        const floorRelative =
+            totalRms > 0
+                ? floor /
+                  totalRms
+                : 0;
+
+
+        let profile =
+            "low";
+
+
+        if (
+            floorRelative >=
+            0.18
+        ) {
+
+            profile =
+                "high";
+
+        } else if (
+            floorRelative >=
+            0.08
+        ) {
+
+            profile =
+                "moderate";
+        }
+
+
+        /*
+         * A classificação só é considerada
+         * útil quando existe alguma confiança.
+         */
+
+        const available =
+            confidence >=
+            0.35;
+
+
+        return {
+
+            available,
+
+            confidence,
+
+            floor,
+
+            floorDb,
+
+            floorRelative,
+
+            low:
+                lowEnergy,
+
+            mid:
+                midEnergy,
+
+            high:
+                highEnergy,
+
+            lowRelative,
+
+            midRelative,
+
+            highRelative,
+
+            persistence,
+
+            profile:
+
+                available
+                    ? profile
+                    : "unknown",
+
+            analyzedFrames,
+
+            lowActivityFrames
         };
     }
 
@@ -985,14 +1468,20 @@ class VocalAnalyzer {
 
 
         // ==================================
-        // CARACTERÍSTICAS
+        // ANÁLISE DE RUÍDO
         // ==================================
 
-        /*
-         * A dureza continua sendo baseada
-         * principalmente na relação entre
-         * presença e corpo.
-         */
+        const noiseProfile =
+            this.analyzeNoiseProfile(
+                mono,
+                sampleRate,
+                rms
+            );
+
+
+        // ==================================
+        // CARACTERÍSTICAS
+        // ==================================
 
         const hardness =
             this.clamp(
@@ -1008,11 +1497,6 @@ class VocalAnalyzer {
                 1
             );
 
-
-        /*
-         * A aspereza considera presença,
-         * sibilância e ar.
-         */
 
         const roughness =
             this.clamp(
@@ -1032,19 +1516,6 @@ class VocalAnalyzer {
                 1
             );
 
-
-        /*
-         * Sibilância V0.4.
-         *
-         * O valor geral continua disponível,
-         * mas agora recebe uma pequena
-         * contribuição da análise temporal.
-         *
-         * Isso permite ao motor saber não
-         * apenas QUANTA energia existe,
-         * mas também se ela aparece em
-         * eventos concentrados.
-         */
 
         const spectralSibilance =
             this.clamp(
@@ -1075,12 +1546,6 @@ class VocalAnalyzer {
             );
 
 
-        /*
-         * Corpo indica quanto existe de
-         * energia útil na região grave/média
-         * do vocal.
-         */
-
         const bodyAmount =
             this.clamp(
                 (
@@ -1095,14 +1560,6 @@ class VocalAnalyzer {
                 1
             );
 
-
-        /*
-         * Presença útil.
-         *
-         * Não queremos simplesmente cortar
-         * presença porque ela é importante
-         * para inteligibilidade no rap.
-         */
 
         const presenceAmount =
             this.clamp(
@@ -1120,7 +1577,7 @@ class VocalAnalyzer {
         this.analysis = {
 
             version:
-                "0.4",
+                "0.5",
 
             sampleRate,
 
@@ -1234,6 +1691,65 @@ class VocalAnalyzer {
                 peakRelative:
                     sibilanceTimeline
                         .peakRelative
+            },
+
+
+            // ==================================
+            // PERFIL DE RUÍDO
+            // ==================================
+            //
+            // Somente diagnóstico.
+            //
+            // Nenhum valor daqui é usado ainda
+            // para reduzir o áudio.
+            //
+
+            noiseAnalysis: {
+
+                available:
+                    noiseProfile.available,
+
+                confidence:
+                    noiseProfile.confidence,
+
+                floor:
+                    noiseProfile.floor,
+
+                floorDb:
+                    noiseProfile.floorDb,
+
+                floorRelative:
+                    noiseProfile.floorRelative,
+
+                low:
+                    noiseProfile.low,
+
+                mid:
+                    noiseProfile.mid,
+
+                high:
+                    noiseProfile.high,
+
+                lowRelative:
+                    noiseProfile.lowRelative,
+
+                midRelative:
+                    noiseProfile.midRelative,
+
+                highRelative:
+                    noiseProfile.highRelative,
+
+                persistence:
+                    noiseProfile.persistence,
+
+                profile:
+                    noiseProfile.profile,
+
+                analyzedFrames:
+                    noiseProfile.analyzedFrames,
+
+                lowActivityFrames:
+                    noiseProfile.lowActivityFrames
             }
         };
 
