@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL TREATMENT BRIDGE
-// V0.1
+// V0.2
 // ==========================================
 //
 // Ponte entre:
@@ -26,11 +26,13 @@
 // - altera volume
 // - altera timbre
 // - executa processamento DSP
+// - determina ganho de processamento
 //
 // Ele apenas responde:
 //
-// "O que a análise espectral está dizendo
-// e com que confiança?"
+// "O que a análise espectral está dizendo,
+// com que confiança e quanto essa informação
+// pode participar da decisão?"
 //
 // ==========================================
 
@@ -63,7 +65,7 @@ class SpectralTreatmentBridge {
 
 
         this.version =
-            "0.1";
+            "0.2";
     }
 
 
@@ -129,6 +131,9 @@ class SpectralTreatmentBridge {
                     false,
 
                 confidence:
+                    0,
+
+                tonalConfidence:
                     0,
 
                 tonalTendency:
@@ -251,6 +256,51 @@ class SpectralTreatmentBridge {
 
 
     // ======================================
+    // CLASSIFICAR NÍVEL DE EVIDÊNCIA
+    // ======================================
+    //
+    // Isto não é intensidade de processamento.
+    //
+    // É apenas qualidade da informação
+    // disponível para tomada de decisão.
+    //
+    // ======================================
+
+    classifyEvidence(
+        confidence
+    ) {
+
+        const value =
+            this.clamp(
+                this.safeNumber(
+                    confidence
+                ),
+                0,
+                1
+            );
+
+
+        if (
+            value < 0.40
+        ) {
+
+            return "low";
+        }
+
+
+        if (
+            value < 0.70
+        ) {
+
+            return "medium";
+        }
+
+
+        return "high";
+    }
+
+
+    // ======================================
     // DETERMINAR REFERÊNCIA
     // ======================================
 
@@ -345,6 +395,73 @@ class SpectralTreatmentBridge {
 
 
     // ======================================
+    // DETERMINAR TENDÊNCIA TONAL
+    // ======================================
+    //
+    // A tendência é apenas contextual.
+    //
+    // NÃO representa uma ordem de EQ.
+    //
+    // ======================================
+
+    determineTonalDirection(
+        profile
+    ) {
+
+        const normalized =
+            this.normalizeProfile(
+                profile
+            );
+
+
+        if (
+            !normalized.valid
+        ) {
+
+            return "unknown";
+        }
+
+
+        if (
+            normalized.ambiguous
+        ) {
+
+            return "neutral";
+        }
+
+
+        if (
+            normalized.closestReference ===
+            "warm"
+        ) {
+
+            return "warm";
+        }
+
+
+        if (
+            normalized.closestReference ===
+            "bright"
+        ) {
+
+            return "bright";
+        }
+
+
+        if (
+            normalized.closestReference ===
+            "neutral"
+        ) {
+
+            return "neutral";
+        }
+
+
+        return "unknown";
+    }
+
+
+    // ======================================
     // INFLUÊNCIA SEGURA
     // ======================================
     //
@@ -405,6 +522,54 @@ class SpectralTreatmentBridge {
 
 
     // ======================================
+    // NÍVEL DE SEGURANÇA
+    // ======================================
+    //
+    // Define quão seguro é permitir que
+    // a informação entre no planejamento.
+    //
+    // Não determina processamento.
+    //
+    // ======================================
+
+    determineSafetyLevel(
+        confidence,
+        usable,
+        ambiguous
+    ) {
+
+        if (
+            ambiguous ||
+            !usable
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            confidence <
+            this.minimumConfidence
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            confidence >=
+            0.75
+        ) {
+
+            return "supported";
+        }
+
+
+        return "cautious";
+    }
+
+
+    // ======================================
     // SINAL ESPECTRAL
     // ======================================
 
@@ -430,16 +595,46 @@ class SpectralTreatmentBridge {
             );
 
 
+        const tonalDirection =
+            this.determineTonalDirection(
+                normalized
+            );
+
+
+        const evidence =
+            this.classifyEvidence(
+                reference.confidence
+            );
+
+
+        const safety =
+            this.determineSafetyLevel(
+                reference.confidence,
+                reference.usable,
+                normalized.ambiguous
+            );
+
+
         return {
 
             reference:
                 reference.reference,
+
+            tonalDirection:
+
+                tonalDirection,
 
             confidence:
                 reference.confidence,
 
             influence:
                 influence,
+
+            evidence:
+                evidence,
+
+            safety:
+                safety,
 
             valid:
                 normalized.valid,
@@ -457,12 +652,13 @@ class SpectralTreatmentBridge {
     // COMPARAR COM UMA REGIÃO
     // ======================================
     //
-    // Esta função não altera a decisão
-    // da região.
+    // IMPORTANTE:
     //
-    // Apenas informa se o comportamento
-    // espectral pode ser usado como evidência
-    // adicional.
+    // O perfil espectral atual ainda é uma
+    // evidência global.
+    //
+    // Portanto não fingimos possuir uma
+    // medição específica de cada região.
     //
     // ======================================
 
@@ -492,8 +688,20 @@ class SpectralTreatmentBridge {
                 confidence:
                     signal.confidence,
 
+                evidence:
+                    signal.evidence,
+
+                safety:
+                    signal.safety,
+
                 usable:
                     false,
+
+                regionSpecificEvidence:
+                    false,
+
+                evidenceSource:
+                    "global-spectral-profile",
 
                 reason:
                     "spectral-analysis-insufficient"
@@ -502,13 +710,15 @@ class SpectralTreatmentBridge {
 
 
         /*
-         * Neste estágio não estamos dizendo
-         * "corte" ou "aumente".
+         * Nesta fase o sistema ainda não
+         * possui evidência espectral exclusiva
+         * desta região.
          *
-         * Estamos apenas permitindo que a
-         * informação espectral tenha peso
-         * futuro na decisão.
+         * Portanto a informação pode apoiar
+         * uma decisão futura, mas não pode
+         * gerar tratamento por si só.
          */
+
 
         return {
 
@@ -521,14 +731,29 @@ class SpectralTreatmentBridge {
             confidence:
                 signal.confidence,
 
+            evidence:
+                signal.evidence,
+
+            safety:
+                signal.safety,
+
             usable:
                 true,
+
+            regionSpecificEvidence:
+                false,
+
+            evidenceSource:
+                "global-spectral-profile",
 
             reference:
                 signal.reference,
 
+            tonalDirection:
+                signal.tonalDirection,
+
             reason:
-                "spectral-reference-available"
+                "global-spectral-reference-available"
         };
     }
 
@@ -602,11 +827,20 @@ class SpectralTreatmentBridge {
                 reference:
                     signal.reference,
 
+                tonalDirection:
+                    signal.tonalDirection,
+
                 confidence:
                     signal.confidence,
 
+                evidence:
+                    signal.evidence,
+
                 influence:
                     signal.influence,
+
+                safety:
+                    signal.safety,
 
                 ambiguous:
                     signal.ambiguous,
@@ -617,6 +851,21 @@ class SpectralTreatmentBridge {
 
             regions:
                 regionContext,
+
+            decisionPolicy: {
+
+                analysisOnly:
+                    true,
+
+                regionSpecificEvidenceRequired:
+                    true,
+
+                processingRequiresIndependentEvidence:
+                    true,
+
+                tonalReferenceIsNotEqPreset:
+                    true
+            },
 
             safety: {
 
