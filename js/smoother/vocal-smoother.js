@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V0.6
+// V0.7
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -16,16 +16,25 @@
 // - VocalTone
 // - VocalDynamics
 // - VocalSibilance
+// - VocalTreatmentPlan
 //
-// Cada módulo continua independente.
+// V0.7:
 //
-// V0.6:
+// - integração segura do plano adaptativo;
+// - plano gerado após a análise;
+// - plano não altera o caminho DSP;
+// - preservação total do processamento V0.6;
+// - exposição da última decisão para futuras
+//   etapas de DSP.
 //
-// - integração correta do De-Esser
-//   paralelo;
-// - preservação do sinal completo;
-// - redução sibilante sem substituir
-//   o vocal inteiro pela banda filtrada.
+// IMPORTANTE:
+//
+// O VocalTreatmentPlan nesta etapa atua
+// somente como camada de decisão.
+//
+// Nenhum ganho, corte, compressão,
+// de-essing ou reconstrução adicional
+// é aplicado por ele.
 //
 // ==========================================
 
@@ -36,7 +45,7 @@ class VocalSmoother {
     constructor(options = {}) {
 
         this.version =
-            "0.6";
+            "0.7";
 
 
         // ==================================
@@ -93,10 +102,39 @@ class VocalSmoother {
 
 
         // ==================================
+        // PLANO DE TRATAMENTO
+        // ==================================
+        //
+        // O módulo é opcional nesta etapa.
+        //
+        // Se o arquivo ainda não estiver
+        // carregado pelo ambiente, o SmoothVStudio
+        // continua funcionando exatamente como
+        // antes.
+        //
+        // Isso reduz risco de quebra durante
+        // a evolução incremental.
+        //
+        // ==================================
+
+        this.treatmentPlan =
+            options.treatmentPlan ||
+            (
+                window.VocalTreatmentPlan
+                    ? new VocalTreatmentPlan()
+                    : null
+            );
+
+
+        // ==================================
         // ESTADO
         // ==================================
 
         this.lastAnalysis =
+            null;
+
+
+        this.lastTreatmentPlan =
             null;
 
 
@@ -187,6 +225,59 @@ class VocalSmoother {
 
 
     // ======================================
+    // GERAR PLANO DE TRATAMENTO
+    // ======================================
+    //
+    // Esta função é deliberadamente isolada
+    // do caminho de áudio.
+    //
+    // Qualquer falha na camada de decisão
+    // não deve interromper o processamento
+    // DSP existente.
+    //
+    // ======================================
+
+    createTreatmentPlan(
+        analysis
+    ) {
+
+        if (
+            !this.treatmentPlan
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof this.treatmentPlan.createPlan !==
+            "function"
+        ) {
+
+            return null;
+        }
+
+
+        try {
+
+            return this.treatmentPlan.createPlan(
+                analysis
+            );
+
+        } catch (error) {
+
+            console.warn(
+                "VocalTreatmentPlan indisponível nesta etapa:",
+                error
+            );
+
+
+            return null;
+        }
+    }
+
+
+    // ======================================
     // PROCESSAR
     // ======================================
 
@@ -219,7 +310,27 @@ class VocalSmoother {
 
 
         // ==================================
-        // 2. CONTEXTO OFFLINE
+        // 2. GERAR PLANO ADAPTATIVO
+        // ==================================
+        //
+        // IMPORTANTE:
+        //
+        // O plano ainda NÃO controla nenhum
+        // parâmetro do processamento.
+        //
+        // Ele somente registra o que a engine
+        // acredita que o vocal necessita.
+        //
+        // ==================================
+
+        this.lastTreatmentPlan =
+            this.createTreatmentPlan(
+                analysis
+            );
+
+
+        // ==================================
+        // 3. CONTEXTO OFFLINE
         // ==================================
 
         const context =
@@ -231,7 +342,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 3. SOURCE
+        // 4. SOURCE
         // ==================================
 
         const source =
@@ -243,7 +354,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 4. VOCAL BODY
+        // 5. VOCAL BODY
         // ==================================
 
         const bodyResult =
@@ -284,7 +395,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 5. VOCAL TONE
+        // 6. VOCAL TONE
         // ==================================
 
         let toneInput =
@@ -349,7 +460,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 6. DINÂMICA
+        // 7. DINÂMICA
         // ==================================
 
         const dynamicsResult =
@@ -381,7 +492,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 7. SIBILÂNCIA
+        // 8. SIBILÂNCIA
         // ==================================
 
         let finalOutput =
@@ -449,7 +560,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. CONEXÃO BODY → TONE
+        // 9. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -458,7 +569,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. CONEXÃO TONE → DYNAMICS
+        // 10. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -467,7 +578,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 10. CONEXÃO DIRETA QUANDO
+        // 11. CONEXÃO DIRETA QUANDO
         //     NÃO EXISTIR SIBILANCE
         // ==================================
 
@@ -488,7 +599,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. SOURCE → BODY
+        // 12. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -497,14 +608,16 @@ class VocalSmoother {
 
 
         // ==================================
-        // 12. INICIAR
+        // 13. INICIAR
         // ==================================
 
-        source.start(0);
+        source.start(
+            0
+        );
 
 
         // ==================================
-        // 13. RENDER
+        // 14. RENDER
         // ==================================
 
         const result =
@@ -522,6 +635,16 @@ class VocalSmoother {
     getLastAnalysis() {
 
         return this.lastAnalysis;
+    }
+
+
+    // ======================================
+    // ÚLTIMO PLANO DE TRATAMENTO
+    // ======================================
+
+    getLastTreatmentPlan() {
+
+        return this.lastTreatmentPlan;
     }
 
 
