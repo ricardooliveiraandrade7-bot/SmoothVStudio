@@ -1,43 +1,51 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL BALANCER
-// V0.1
+// V0.2
 // ==========================================
 //
-// Etapa 1:
-// ANALISADOR ESPECTRAL
+// ETAPA 2:
+// REFERÊNCIAS ESPECTRAIS
 //
-// IMPORTANTE:
+// Este módulo continua sendo ANALÍTICO.
 //
-// Este módulo NÃO modifica áudio.
+// NÃO aplica EQ.
+// NÃO cria filtros.
+// NÃO modifica AudioBuffer.
+// NÃO altera o caminho DSP.
+// NÃO transforma Warm/Bright/Neutral
+// em presets de equalização.
 //
-// Ele NÃO é um EQ.
-//
-// Ele NÃO cria 20 processadores.
-//
-// Ele utiliza uma FFT leve para medir
-// aproximadamente 20 regiões espectrais.
-//
-// Futuramente essas medições poderão
-// alimentar:
-//
-// - Neutral
-// - Warm
-// - Bright
-// - VocalTreatmentPlan
-//
-// Nesta versão:
-//
-// - nenhuma correção é aplicada;
-// - nenhuma curva é aplicada;
-// - nenhum AudioNode é criado;
-// - nenhum processamento sonoro é alterado.
+// As três curvas são MODELOS DE
+// REFERÊNCIA TONAL.
 //
 // Objetivo:
 //
-// construir uma descrição confiável
-// do equilíbrio espectral da gravação
-// com baixo custo computacional.
+// 1. medir aproximadamente 20 regiões;
+// 2. normalizar cada região em relação
+//    ao loudness de banda larga;
+// 3. representar três tendências tonais:
+//
+//       Neutral
+//       Warm
+//       Bright
+//
+// 4. fornecer uma zona de tolerância;
+// 5. preparar o terreno para que o
+//    VocalTreatmentPlan decida futuramente
+//    se alguma correção é realmente necessária.
+//
+// IMPORTANTE:
+//
+// As curvas NÃO significam:
+//
+// "aplique estes ganhos".
+//
+// Elas significam:
+//
+// "este é o comportamento espectral
+// de referência que estamos usando
+// para avaliar a gravação".
 //
 // ==========================================
 
@@ -49,7 +57,7 @@ class SpectralBalancer {
 
 
         // ==================================
-        // CONFIGURAÇÕES PRINCIPAIS
+        // CONFIGURAÇÃO
         // ==================================
 
         this.bandCount =
@@ -90,6 +98,23 @@ class SpectralBalancer {
 
 
         // ==================================
+        // TOLERÂNCIA DAS REFERÊNCIAS
+        // ==================================
+        //
+        // Não é um limite de EQ.
+        //
+        // É a distância espectral que
+        // consideramos aceitável antes de
+        // uma futura decisão de tratamento.
+        //
+        // ==================================
+
+        this.referenceToleranceDb =
+            options.referenceToleranceDb ??
+            1.25;
+
+
+        // ==================================
         // ESTADO
         // ==================================
 
@@ -103,11 +128,19 @@ class SpectralBalancer {
 
         this.bands =
             this.createBands();
+
+
+        // ==================================
+        // REFERÊNCIAS
+        // ==================================
+
+        this.references =
+            this.createReferences();
     }
 
 
     // ======================================
-    // LIMITADOR
+    // CLAMP
     // ======================================
 
     clamp(
@@ -171,26 +204,31 @@ class SpectralBalancer {
     // CRIAR BANDAS
     // ======================================
     //
-    // As bandas são aproximadamente
-    // logarítmicas.
+    // As bandas são logarítmicas.
     //
-    // Não representam 20 EQs.
-    //
-    // São somente regiões de medição.
+    // Elas representam regiões de
+    // observação, não filtros.
     //
     // ======================================
 
     createBands() {
 
-        const bands = [];
+        const bands =
+            [];
 
 
         const min =
-            this.minFrequency;
+            Math.max(
+                20,
+                this.minFrequency
+            );
 
 
         const max =
-            this.maxFrequency;
+            Math.max(
+                min * 2,
+                this.maxFrequency
+            );
 
 
         for (
@@ -252,6 +290,244 @@ class SpectralBalancer {
 
 
         return bands;
+    }
+
+
+    // ======================================
+    // REFERÊNCIAS TONais
+    // ======================================
+    //
+    // Os valores representam tendência
+    // espectral relativa em dB.
+    //
+    // NÃO são ganhos de EQ.
+    //
+    // A referência Neutral é a linha
+    // central.
+    //
+    // Warm e Bright representam pequenas
+    // inclinações tonais em torno dela.
+    //
+    // Os valores são interpolados entre
+    // pontos de frequência.
+    //
+    // ======================================
+
+    createReferences() {
+
+
+        const referencePoints = {
+
+            neutral: [
+
+                [45,   0.00],
+                [80,   0.00],
+                [140,  0.00],
+                [250,  0.00],
+                [400,  0.00],
+                [700,  0.00],
+                [1000, 0.00],
+                [1800, 0.00],
+                [3000, 0.00],
+                [5000, 0.00],
+                [8000, 0.00],
+                [12000, 0.00],
+                [16000, 0.00]
+
+            ],
+
+
+            warm: [
+
+                [45,   0.30],
+                [80,   0.55],
+                [140,  0.65],
+                [250,  0.60],
+                [400,  0.45],
+                [700,  0.25],
+                [1000, 0.10],
+                [1800, 0.00],
+                [3000, -0.10],
+                [5000, -0.25],
+                [8000, -0.45],
+                [12000, -0.60],
+                [16000, -0.70]
+
+            ],
+
+
+            bright: [
+
+                [45,   -0.30],
+                [80,   -0.30],
+                [140,  -0.20],
+                [250,  -0.10],
+                [400,  0.00],
+                [700,  0.05],
+                [1000, 0.10],
+                [1800, 0.20],
+                [3000, 0.35],
+                [5000, 0.50],
+                [8000, 0.65],
+                [12000, 0.75],
+                [16000, 0.80]
+
+            ]
+        };
+
+
+        return {
+
+            neutral:
+                this.buildReferenceCurve(
+                    referencePoints.neutral
+                ),
+
+            warm:
+                this.buildReferenceCurve(
+                    referencePoints.warm
+                ),
+
+            bright:
+                this.buildReferenceCurve(
+                    referencePoints.bright
+                )
+        };
+    }
+
+
+    // ======================================
+    // INTERPOLAR CURVA
+    // ======================================
+
+    interpolateReference(
+        points,
+        frequency
+    ) {
+
+        if (
+            !points ||
+            points.length === 0
+        ) {
+
+            return 0;
+        }
+
+
+        if (
+            frequency <=
+            points[0][0]
+        ) {
+
+            return points[0][1];
+        }
+
+
+        const last =
+            points.length - 1;
+
+
+        if (
+            frequency >=
+            points[last][0]
+        ) {
+
+            return points[last][1];
+        }
+
+
+        for (
+            let i = 0;
+            i < last;
+            i++
+        ) {
+
+            const low =
+                points[i];
+
+
+            const high =
+                points[i + 1];
+
+
+            if (
+                frequency >=
+                low[0] &&
+                frequency <=
+                high[0]
+            ) {
+
+                const range =
+                    high[0] -
+                    low[0];
+
+
+                const position =
+                    range > 0
+                        ? (
+                            frequency -
+                            low[0]
+                        ) /
+                        range
+                        : 0;
+
+
+                return (
+                    low[1] +
+                    (
+                        high[1] -
+                        low[1]
+                    ) *
+                    position
+                );
+            }
+        }
+
+
+        return 0;
+    }
+
+
+    // ======================================
+    // GERAR CURVA NAS 20 BANDAS
+    // ======================================
+
+    buildReferenceCurve(
+        points
+    ) {
+
+        const curve =
+            [];
+
+
+        for (
+            let i = 0;
+            i < this.bands.length;
+            i++
+        ) {
+
+            const band =
+                this.bands[i];
+
+
+            curve.push({
+
+                index:
+                    band.index,
+
+                frequency:
+                    band.centerFrequency,
+
+                valueDb:
+                    this.interpolateReference(
+                        points,
+                        band.centerFrequency
+                    )
+            });
+        }
+
+
+        return curve;
     }
 
 
@@ -369,15 +645,6 @@ class SpectralBalancer {
     // ======================================
     // FFT
     // ======================================
-    //
-    // FFT iterativa radix-2.
-    //
-    // Não usa bibliotecas externas.
-    //
-    // Isso reduz dependências e mantém
-    // compatibilidade com o Spck.
-    //
-    // ======================================
 
     fft(
         real,
@@ -388,12 +655,13 @@ class SpectralBalancer {
             real.length;
 
 
+        let j =
+            0;
+
+
         // ----------------------------------
         // BIT REVERSAL
         // ----------------------------------
-
-        let j = 0;
-
 
         for (
             let i = 1;
@@ -452,7 +720,7 @@ class SpectralBalancer {
 
 
         // ----------------------------------
-        // ESTÁGIOS FFT
+        // ESTÁGIOS
         // ----------------------------------
 
         for (
@@ -606,14 +874,16 @@ class SpectralBalancer {
 
 
         return {
+
             real,
+
             imag
         };
     }
 
 
     // ======================================
-    // VERIFICAR FFT
+    // VALIDAR FFT
     // ======================================
 
     isValidFFTSize(
@@ -641,7 +911,7 @@ class SpectralBalancer {
 
 
     // ======================================
-    // AJUSTAR FFT
+    // RESOLVER FFT
     // ======================================
 
     resolveFFTSize() {
@@ -661,7 +931,7 @@ class SpectralBalancer {
 
 
     // ======================================
-    // ENERGIA FFT
+    // ESPECTRO
     // ======================================
 
     calculateSpectrum(
@@ -706,7 +976,7 @@ class SpectralBalancer {
                 normalization;
 
 
-            const magnitude =
+            spectrum[i] =
                 Math.sqrt(
                     (
                         re *
@@ -717,10 +987,6 @@ class SpectralBalancer {
                         im
                     )
                 );
-
-
-            spectrum[i] =
-                magnitude;
         }
 
 
@@ -837,7 +1103,7 @@ class SpectralBalancer {
 
 
     // ======================================
-    // FRAME FFT
+    // ANALISAR FRAME
     // ======================================
 
     analyzeFrame(
@@ -957,7 +1223,7 @@ class SpectralBalancer {
 
 
     // ======================================
-    // CALCULAR ESTATÍSTICA
+    // ESTATÍSTICAS
     // ======================================
 
     calculateStatistics(
@@ -1015,24 +1281,18 @@ class SpectralBalancer {
                 value;
 
 
-            if (
-                value >
-                peak
-            ) {
-
-                peak =
-                    value;
-            }
+            peak =
+                Math.max(
+                    peak,
+                    value
+                );
 
 
-            if (
-                value <
-                min
-            ) {
-
-                min =
-                    value;
-            }
+            min =
+                Math.min(
+                    min,
+                    value
+                );
         }
 
 
@@ -1086,7 +1346,139 @@ class SpectralBalancer {
 
 
     // ======================================
-    // ANALISAR
+    // OBTER REFERÊNCIA
+    // ======================================
+
+    getReference(
+        name
+    ) {
+
+        const normalized =
+            String(
+                name ||
+                "neutral"
+            )
+            .toLowerCase();
+
+
+        if (
+            normalized ===
+            "warm"
+        ) {
+
+            return this.references.warm;
+        }
+
+
+        if (
+            normalized ===
+            "bright"
+        ) {
+
+            return this.references.bright;
+        }
+
+
+        return this.references.neutral;
+    }
+
+
+    // ======================================
+    // COMPARAR COM REFERÊNCIA
+    // ======================================
+    //
+    // Esta função SOMENTE calcula distância.
+    //
+    // Ela NÃO gera ganho.
+    //
+    // ======================================
+
+    compareToReference(
+        bands,
+        referenceName
+    ) {
+
+        const reference =
+            this.getReference(
+                referenceName
+            );
+
+
+        const comparisons =
+            [];
+
+
+        for (
+            let i = 0;
+            i < bands.length;
+            i++
+        ) {
+
+            const measured =
+                bands[i];
+
+
+            const target =
+                reference[i];
+
+
+            const distance =
+                measured.relativeDb -
+                target.valueDb;
+
+
+            const insideTolerance =
+                Math.abs(
+                    distance
+                ) <=
+                this.referenceToleranceDb;
+
+
+            comparisons.push({
+
+                index:
+                    measured.index,
+
+                frequency:
+                    measured.centerFrequency,
+
+                measuredRelativeDb:
+                    measured.relativeDb,
+
+                referenceRelativeDb:
+                    target.valueDb,
+
+                distanceDb:
+                    distance,
+
+                toleranceDb:
+                    this.referenceToleranceDb,
+
+                insideTolerance:
+                    insideTolerance,
+
+                confidence:
+                    measured.stability
+            });
+        }
+
+
+        return {
+
+            reference:
+                referenceName,
+
+            toleranceDb:
+                this.referenceToleranceDb,
+
+            comparisons:
+                comparisons
+        };
+    }
+
+
+    // ======================================
+    // ANALISAR AUDIO
     // ======================================
 
     analyze(
@@ -1142,10 +1534,6 @@ class SpectralBalancer {
             );
 
 
-        // ----------------------------------
-        // POSIÇÕES DAS JANELAS
-        // ----------------------------------
-
         const possibleFrames =
             Math.max(
                 1,
@@ -1184,16 +1572,12 @@ class SpectralBalancer {
             [];
 
 
-        const frameTimes =
-            [];
-
-
         let analyzedFrames =
             0;
 
 
         // ----------------------------------
-        // ANÁLISE TEMPORAL
+        // FFT TEMPORAL
         // ----------------------------------
 
         for (
@@ -1227,21 +1611,15 @@ class SpectralBalancer {
             );
 
 
-            frameTimes.push(
-                start /
-                sampleRate
-            );
-
-
             analyzedFrames++;
         }
 
 
         // ----------------------------------
-        // LOUDNESS MÉDIO
+        // LOUDNESS GLOBAL
         // ----------------------------------
 
-        let totalEnergy =
+        let loudnessSum =
             0;
 
 
@@ -1251,34 +1629,30 @@ class SpectralBalancer {
             i++
         ) {
 
-            totalEnergy +=
+            loudnessSum +=
                 frameLoudness[i];
         }
 
 
         const globalLoudness =
             frameLoudness.length > 0
-                ? totalEnergy /
+                ? loudnessSum /
                   frameLoudness.length
                 : 0;
 
 
         // ----------------------------------
-        // ESTATÍSTICAS POR BANDA
+        // MÉDIAS POR BANDA
         // ----------------------------------
 
-        const bands =
-            [];
+        const meanBands =
+            new Float32Array(
+                this.bandCount
+            );
 
 
         let totalBandEnergy =
             0;
-
-
-        const rawMeanBands =
-            new Float32Array(
-                this.bandCount
-            );
 
 
         for (
@@ -1287,10 +1661,8 @@ class SpectralBalancer {
             bandIndex++
         ) {
 
-            const values =
-                new Float32Array(
-                    bandValues.length
-                );
+            let sum =
+                0;
 
 
             for (
@@ -1299,45 +1671,48 @@ class SpectralBalancer {
                 frame++
             ) {
 
-                values[frame] =
+                sum +=
                     bandValues[frame][
                         bandIndex
                     ];
             }
 
 
-            const statistics =
-                this.calculateStatistics(
-                    values
-                );
+            const mean =
+                bandValues.length > 0
+                    ? sum /
+                      bandValues.length
+                    : 0;
 
 
-            rawMeanBands[
+            meanBands[
                 bandIndex
             ] =
-                statistics.mean;
+                mean;
 
 
             totalBandEnergy +=
-                statistics.mean;
+                mean;
         }
 
 
         // ----------------------------------
-        // PERFIL RELATIVO
+        // RESULTADO DAS BANDAS
         // ----------------------------------
+
+        const bands =
+            [];
+
+
+        let stabilitySum =
+            0;
+
 
         for (
             let bandIndex = 0;
             bandIndex < this.bandCount;
             bandIndex++
         ) {
-
-            const band =
-                this.bands[
-                    bandIndex
-                ];
-
 
             const values =
                 new Float32Array(
@@ -1375,7 +1750,7 @@ class SpectralBalancer {
                     : 0;
 
 
-            const spectrumRelative =
+            const spectrumShare =
                 totalBandEnergy > 0
                     ? mean /
                       totalBandEnergy
@@ -1413,69 +1788,69 @@ class SpectralBalancer {
                 );
 
 
+            stabilitySum +=
+                stability;
+
+
             bands.push({
 
                 index:
-                    band.index,
+                    bandIndex,
 
                 lowFrequency:
-                    band.lowFrequency,
+                    this.bands[
+                        bandIndex
+                    ].lowFrequency,
 
                 highFrequency:
-                    band.highFrequency,
+                    this.bands[
+                        bandIndex
+                    ].highFrequency,
 
                 centerFrequency:
-                    band.centerFrequency,
+                    this.bands[
+                        bandIndex
+                    ].centerFrequency,
 
                 mean:
-
                     mean,
 
                 peak:
-
                     statistics.peak,
 
                 minimum:
-
                     statistics.min,
 
                 standardDeviation:
-
                     statistics.standardDeviation,
 
                 relativeToBroadband:
-
                     relative,
 
                 relativeDb:
-
                     relativeDb,
 
                 spectrumShare:
-
-                    spectrumRelative,
+                    spectrumShare,
 
                 temporalVariation:
-
                     temporalVariation,
 
                 stability:
-
                     stability
             });
         }
 
 
+        const averageStability =
+            bands.length > 0
+                ? stabilitySum /
+                  bands.length
+                : 0;
+
+
         // ----------------------------------
         // CONFIANÇA
-        // ----------------------------------
-        //
-        // Quanto mais frames úteis temos,
-        // maior a confiança.
-        //
-        // Mas nunca transformamos isso
-        // automaticamente em correção.
-        //
         // ----------------------------------
 
         const frameConfidence =
@@ -1491,28 +1866,6 @@ class SpectralBalancer {
             globalLoudness >
             0.00001
                 ? 1
-                : 0;
-
-
-        let stabilitySum =
-            0;
-
-
-        for (
-            let i = 0;
-            i < bands.length;
-            i++
-        ) {
-
-            stabilitySum +=
-                bands[i].stability;
-        }
-
-
-        const averageStability =
-            bands.length > 0
-                ? stabilitySum /
-                  bands.length
                 : 0;
 
 
@@ -1536,13 +1889,44 @@ class SpectralBalancer {
 
 
         // ----------------------------------
+        // COMPARAÇÕES
+        // ----------------------------------
+        //
+        // Apenas informativas.
+        //
+        // Nenhuma correção é calculada.
+        //
+        // ----------------------------------
+
+        const neutralComparison =
+            this.compareToReference(
+                bands,
+                "neutral"
+            );
+
+
+        const warmComparison =
+            this.compareToReference(
+                bands,
+                "warm"
+            );
+
+
+        const brightComparison =
+            this.compareToReference(
+                bands,
+                "bright"
+            );
+
+
+        // ----------------------------------
         // RESULTADO
         // ----------------------------------
 
         const result = {
 
             version:
-                "0.1",
+                "0.2",
 
 
             mode:
@@ -1550,106 +1934,92 @@ class SpectralBalancer {
 
 
             sampleRate:
-
-
                 sampleRate,
 
 
             fftSize:
-
-
                 fftSize,
 
 
             hopSize:
-
-
                 hopSize,
 
 
             bandCount:
-
-
                 this.bandCount,
 
 
             minFrequency:
-
-
                 this.minFrequency,
 
 
             maxFrequency:
-
-
                 this.maxFrequency,
 
 
             analyzedFrames:
-
-
                 analyzedFrames,
 
 
             globalLoudness:
-
-
                 globalLoudness,
 
 
             globalLoudnessDb:
-
-
                 this.amplitudeToDb(
                     globalLoudness
                 ),
 
 
             averageStability:
-
-
                 averageStability,
 
 
             confidence:
-
-
                 confidence,
 
 
             bands:
-
-
                 bands,
 
 
-            references:
+            references: {
+
+                toleranceDb:
+                    this.referenceToleranceDb,
+
+                neutral:
+                    this.references.neutral,
+
+                warm:
+                    this.references.warm,
+
+                bright:
+                    this.references.bright
+            },
 
 
-                {
+            comparisons: {
 
-                    neutral:
-                        null,
+                neutral:
+                    neutralComparison,
 
-                    warm:
-                        null,
+                warm:
+                    warmComparison,
 
-                    bright:
-                        null
-                },
-
-
-            processing:
+                bright:
+                    brightComparison
+            },
 
 
-                {
+            processing: {
 
-                    applied:
-                        false,
+                applied:
+                    false,
 
-                    gainApplied:
-                        0
-                }
+                gainApplied:
+                    0
+            }
         };
 
 
@@ -1658,6 +2028,26 @@ class SpectralBalancer {
 
 
         return result;
+    }
+
+
+    // ======================================
+    // ALIAS DE COMPATIBILIDADE
+    // ======================================
+    //
+    // Mantemos analyzeBuffer() para facilitar
+    // futuras integrações sem exigir que o
+    // módulo consumidor conheça a implementação.
+    //
+    // ======================================
+
+    analyzeBuffer(
+        audioBuffer
+    ) {
+
+        return this.analyze(
+            audioBuffer
+        );
     }
 
 
@@ -1672,12 +2062,32 @@ class SpectralBalancer {
 
 
     // ======================================
-    // OBTER BANDAS
+    // BANDAS
     // ======================================
 
     getBands() {
 
         return this.bands.slice();
+    }
+
+
+    // ======================================
+    // REFERÊNCIAS
+    // ======================================
+
+    getReferences() {
+
+        return {
+
+            neutral:
+                this.references.neutral.slice(),
+
+            warm:
+                this.references.warm.slice(),
+
+            bright:
+                this.references.bright.slice()
+        };
     }
 }
 
