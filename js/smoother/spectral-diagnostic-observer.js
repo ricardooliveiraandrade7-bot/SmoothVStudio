@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.4
+// V0.5
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -46,11 +46,67 @@
 class SpectralDiagnosticObserver {
 
 
-    constructor() {
+    constructor(
+        options = {}
+    ) {
 
 
         this.version =
-            "0.4";
+            "0.5";
+
+
+        // ==================================
+        // CONFIGURAÇÃO CONSERVADORA
+        // ==================================
+
+        this.minimumConfidence =
+            options.minimumConfidence ??
+            0.55;
+
+
+        this.minimumRegionalEvidence =
+            options.minimumRegionalEvidence ??
+            0.60;
+
+
+        this.minimumStability =
+            options.minimumStability ??
+            0.45;
+
+
+        this.minimumActivity =
+            options.minimumActivity ??
+            0.08;
+
+
+        /*
+         * Os limiares abaixo não representam
+         * EQ ou intensidade de tratamento.
+         *
+         * São apenas limites diagnósticos
+         * usados para decidir se uma evidência
+         * é suficientemente forte para uma
+         * classificação.
+         */
+
+        this.highRelativeEnergy =
+            options.highRelativeEnergy ??
+            1.20;
+
+
+        this.lowRelativeEnergy =
+            options.lowRelativeEnergy ??
+            0.80;
+
+
+        this.naturalRelativeMin =
+            options.naturalRelativeMin ??
+            0.90;
+
+
+        this.naturalRelativeMax =
+            options.naturalRelativeMax ??
+            1.10;
 
 
         this.lastSnapshot =
@@ -265,7 +321,37 @@ class SpectralDiagnosticObserver {
                     false,
 
                 regionalMeasurement:
-                    false
+                    false,
+
+                energy:
+                    0,
+
+                energyShare:
+                    0,
+
+                normalizedEnergy:
+                    0,
+
+                relativeEnergy:
+                    0,
+
+                stability:
+                    0,
+
+                activity:
+                    0,
+
+                bandCount:
+                    0,
+
+                lowHz:
+                    0,
+
+                highHz:
+                    0,
+
+                evidenceLevel:
+                    "none"
             };
         }
 
@@ -293,8 +379,12 @@ class SpectralDiagnosticObserver {
                 ),
 
             confidence:
-                this.safeNumber(
-                    region.confidence
+                this.clamp(
+                    this.safeNumber(
+                        region.confidence
+                    ),
+                    0,
+                    1
                 ),
 
             evidence:
@@ -436,18 +526,6 @@ class SpectralDiagnosticObserver {
     // ======================================
     // MAPEAR MEDIÇÃO REGIONAL
     // ======================================
-    //
-    // A medição regional utiliza nomes
-    // próprios para suas regiões.
-    //
-    // O Bridge utiliza uma nomenclatura
-    // contextual diferente.
-    //
-    // Esta função cria uma ponte explícita
-    // sem alterar nenhum dos módulos
-    // anteriores.
-    //
-    // ======================================
 
     getRegionalMeasurementMap() {
 
@@ -485,17 +563,6 @@ class SpectralDiagnosticObserver {
 
     // ======================================
     // ENRIQUECER REGIÕES COM MEDIÇÃO
-    // ======================================
-    //
-    // A medição regional tem prioridade
-    // apenas sobre campos de evidência
-    // regional.
-    //
-    // A referência tonal global continua
-    // vindo do SpectralTreatmentBridge.
-    //
-    // Nenhuma decisão DSP é criada aqui.
-    //
     // ======================================
 
     mergeRegionalMeasurement(
@@ -604,15 +671,6 @@ class SpectralDiagnosticObserver {
                 ] || {};
 
 
-            /*
-             * A medição regional passa a
-             * representar a evidência específica
-             * da região.
-             *
-             * Campos globais do Bridge são
-             * preservados quando existentes.
-             */
-
             merged[
                 observerName
             ] = {
@@ -718,6 +776,603 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
+    // EVIDÊNCIA SUFICIENTE
+    // ======================================
+
+    hasSufficientEvidence(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return false;
+        }
+
+
+        const confidence =
+            this.clamp(
+                this.safeNumber(
+                    region.confidence
+                ),
+                0,
+                1
+            );
+
+
+        const support =
+            this.clamp(
+                this.safeNumber(
+                    region.support
+                ),
+                0,
+                1
+            );
+
+
+        const stability =
+            this.clamp(
+                this.safeNumber(
+                    region.stability
+                ),
+                0,
+                1
+            );
+
+
+        const regionalEvidence =
+            region.regionSpecificEvidence ===
+            true;
+
+
+        if (
+            confidence <
+            this.minimumConfidence
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            support <
+            this.minimumRegionalEvidence
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            stability <
+            this.minimumStability
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            !regionalEvidence
+        ) {
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    // ======================================
+    // CLASSIFICAR ENERGIA REGIONAL
+    // ======================================
+    //
+    // IMPORTANTE:
+    //
+    // Esta função não decide tratamento.
+    //
+    // Ela somente transforma evidência
+    // suficientemente confiável em uma
+    // classificação observacional.
+    //
+    // ======================================
+
+    classifyEnergyState(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return {
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    0,
+
+                evidence:
+                    "region-unavailable"
+            };
+        }
+
+
+        if (
+            !this.hasSufficientEvidence(
+                region
+            )
+        ) {
+
+            return {
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    this.clamp(
+                        this.safeNumber(
+                            region.confidence
+                        ) *
+                        0.5,
+                        0,
+                        1
+                    ),
+
+                evidence:
+                    "insufficient-regional-evidence"
+            };
+        }
+
+
+        const relativeEnergy =
+            this.safeNumber(
+                region.relativeEnergy,
+                NaN
+            );
+
+
+        /*
+         * Se relativeEnergy não estiver
+         * disponível, não tentamos deduzir
+         * um estado através de energia bruta.
+         */
+
+        if (
+            !Number.isFinite(
+                relativeEnergy
+            )
+        ) {
+
+            return {
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    0,
+
+                evidence:
+                    "relative-energy-unavailable"
+            };
+        }
+
+
+        const confidence =
+            this.clamp(
+                (
+                    this.safeNumber(
+                        region.confidence
+                    ) *
+                    0.55
+                ) +
+                (
+                    this.safeNumber(
+                        region.stability
+                    ) *
+                    0.25
+                ) +
+                (
+                    this.safeBoolean(
+                        region.temporalEvidence
+                    )
+                        ? 0.20
+                        : 0
+                ),
+                0,
+                1
+            );
+
+
+        if (
+            relativeEnergy >=
+            this.highRelativeEnergy
+        ) {
+
+            return {
+
+                state:
+                    "elevated",
+
+                confidence:
+                    confidence,
+
+                evidence:
+                    "relative-energy-elevated"
+            };
+        }
+
+
+        if (
+            relativeEnergy <=
+            this.lowRelativeEnergy
+        ) {
+
+            return {
+
+                state:
+                    "recessed",
+
+                confidence:
+                    confidence,
+
+                evidence:
+                    "relative-energy-recessed"
+            };
+        }
+
+
+        if (
+            relativeEnergy >=
+            this.naturalRelativeMin &&
+            relativeEnergy <=
+            this.naturalRelativeMax
+        ) {
+
+            return {
+
+                state:
+                    "natural",
+
+                confidence:
+                    confidence,
+
+                evidence:
+                    "relative-energy-balanced"
+            };
+        }
+
+
+        return {
+
+            state:
+                "uncertain",
+
+            confidence:
+                confidence * 0.5,
+
+            evidence:
+                "relative-energy-ambiguous"
+        };
+    }
+
+
+    // ======================================
+    // DETECTAR INSTABILIDADE
+    // ======================================
+
+    classifyStability(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return false;
+        }
+
+
+        const stability =
+            this.clamp(
+                this.safeNumber(
+                    region.stability
+                ),
+                0,
+                1
+            );
+
+
+        return stability <
+            this.minimumStability;
+    }
+
+
+    // ======================================
+    // DETECTAR ATIVIDADE INSUFICIENTE
+    // ======================================
+
+    hasMeaningfulActivity(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return false;
+        }
+
+
+        return this.safeNumber(
+            region.activity
+        ) >=
+        this.minimumActivity;
+    }
+
+
+    // ======================================
+    // DETECTAR MASCARAMENTO
+    // ======================================
+    //
+    // "masked" não significa simplesmente
+    // energia baixa.
+    //
+    // É usado quando a própria evidência
+    // indica que a região pode estar sendo
+    // perceptualmente encoberta por outra
+    // região.
+    //
+    // ======================================
+
+    detectMaskedState(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return false;
+        }
+
+
+        const reason =
+            this.safeString(
+                region.reason,
+                ""
+            )
+                .toLowerCase();
+
+
+        const evidence =
+            this.safeString(
+                region.evidence,
+                ""
+            )
+                .toLowerCase();
+
+
+        if (
+            reason.indexOf(
+                "mask"
+            ) !== -1
+        ) {
+
+            return true;
+        }
+
+
+        if (
+            evidence.indexOf(
+                "mask"
+            ) !== -1
+        ) {
+
+            return true;
+        }
+
+
+        return false;
+    }
+
+
+    // ======================================
+    // CLASSIFICAÇÃO FINAL DA REGIÃO
+    // ======================================
+    //
+    // Ordem deliberadamente conservadora:
+    //
+    // 1. dados ausentes
+    // 2. atividade insuficiente
+    // 3. instabilidade
+    // 4. mascaramento comprovado
+    // 5. energia regional
+    // 6. fallback uncertain
+    //
+    // ======================================
+
+    classifyRegion(
+        region
+    ) {
+
+        const safeRegion =
+            this.copyRegion(
+                region
+            );
+
+
+        if (
+            !safeRegion.usable &&
+            !safeRegion.regionalMeasurement
+        ) {
+
+            return {
+
+                ...safeRegion,
+
+                acousticState:
+                    "uncertain",
+
+                stateConfidence:
+                    0,
+
+                stateEvidence:
+                    "region-not-usable"
+            };
+        }
+
+
+        if (
+            !this.hasMeaningfulActivity(
+                safeRegion
+            )
+        ) {
+
+            return {
+
+                ...safeRegion,
+
+                acousticState:
+                    "uncertain",
+
+                stateConfidence:
+                    0,
+
+                stateEvidence:
+                    "insufficient-activity"
+            };
+        }
+
+
+        if (
+            this.classifyStability(
+                safeRegion
+            )
+        ) {
+
+            return {
+
+                ...safeRegion,
+
+                acousticState:
+                    "unstable",
+
+                stateConfidence:
+                    this.clamp(
+                        safeRegion.confidence *
+                        0.5,
+                        0,
+                        1
+                    ),
+
+                stateEvidence:
+                    "regional-instability"
+            };
+        }
+
+
+        if (
+            this.detectMaskedState(
+                safeRegion
+            )
+        ) {
+
+            return {
+
+                ...safeRegion,
+
+                acousticState:
+                    "masked",
+
+                stateConfidence:
+                    this.clamp(
+                        safeRegion.confidence *
+                        0.75,
+                        0,
+                        1
+                    ),
+
+                stateEvidence:
+                    "masking-evidence"
+            };
+        }
+
+
+        const classification =
+            this.classifyEnergyState(
+                safeRegion
+            );
+
+
+        return {
+
+            ...safeRegion,
+
+            acousticState:
+                classification.state,
+
+            stateConfidence:
+                classification.confidence,
+
+            stateEvidence:
+                classification.evidence
+        };
+    }
+
+
+    // ======================================
+    // CLASSIFICAR TODAS AS REGIÕES
+    // ======================================
+
+    classifyRegions(
+        regions
+    ) {
+
+        const source =
+            regions &&
+            typeof regions ===
+            "object"
+
+                ? regions
+                : {};
+
+
+        const result =
+            {};
+
+
+        const names =
+            Object.keys(
+                source
+            );
+
+
+        for (
+            let i = 0;
+            i < names.length;
+            i++
+        ) {
+
+            const name =
+                names[i];
+
+
+            result[name] =
+                this.classifyRegion(
+                    source[name]
+                );
+        }
+
+
+        return result;
+    }
+
+
+    // ======================================
     // CRIAR SNAPSHOT
     // ======================================
 
@@ -764,15 +1419,6 @@ class SpectralDiagnosticObserver {
             context.spectral;
 
 
-        /*
-         * O contexto global continua sendo
-         * a base.
-         *
-         * A medição regional é anexada
-         * separadamente e somente então
-         * incorporada às regiões.
-         */
-
         const baseRegions =
             context.regions ||
             {};
@@ -785,31 +1431,10 @@ class SpectralDiagnosticObserver {
             );
 
 
-        const snapshotRegions =
-            {};
-
-
-        const regionNames =
-            Object.keys(
+        const classifiedRegions =
+            this.classifyRegions(
                 mergedRegions
             );
-
-
-        for (
-            let i = 0;
-            i < regionNames.length;
-            i++
-        ) {
-
-            const name =
-                regionNames[i];
-
-
-            snapshotRegions[name] =
-                this.copyRegion(
-                    mergedRegions[name]
-                );
-        }
 
 
         const policy =
@@ -923,16 +1548,6 @@ class SpectralDiagnosticObserver {
                         spectral.valid
                     ),
 
-                reference:
-                    this.safeString(
-                        spectral.reference
-                    ),
-
-                tonalDirection:
-                    this.safeString(
-                        spectral.tonalDirection
-                    ),
-
                 confidence:
                     this.clamp(
                         this.safeNumber(
@@ -942,25 +1557,30 @@ class SpectralDiagnosticObserver {
                         1
                     ),
 
-                evidence:
-                    this.safeString(
-                        spectral.evidence,
-                        "low"
-                    ),
-
-                influence:
+                tonalConfidence:
                     this.clamp(
                         this.safeNumber(
-                            spectral.influence
+                            spectral.tonalConfidence
                         ),
                         0,
                         1
                     ),
 
-                safety:
+                tonalTendency:
                     this.safeString(
-                        spectral.safety,
-                        "observe"
+                        spectral.tonalTendency,
+                        "unknown"
+                    ),
+
+                closestReference:
+                    this.safeString(
+                        spectral.closestReference,
+                        "unknown"
+                    ),
+
+                referenceSeparationDb:
+                    this.safeNumber(
+                        spectral.referenceSeparationDb
                     ),
 
                 ambiguous:
@@ -968,749 +1588,129 @@ class SpectralDiagnosticObserver {
                         spectral.ambiguous
                     ),
 
-                usable:
+                actionable:
                     this.safeBoolean(
-                        spectral.usable
+                        spectral.actionable
                     )
             },
 
             regions:
-                snapshotRegions,
-
-            regionalMeasurement:
-                regionalMeasurement,
+                classifiedRegions,
 
             decisionPolicy: {
 
-                analysisOnly:
-                    this.safeBoolean(
-                        policy.analysisOnly
-                    ),
+                processingAuthority:
+                    "none",
 
-                regionSpecificEvidenceRequired:
-                    this.safeBoolean(
-                        policy.regionSpecificEvidenceRequired
-                    ),
+                observationOnly:
+                    true,
 
-                processingRequiresIndependentEvidence:
-                    this.safeBoolean(
-                        policy.processingRequiresIndependentEvidence
-                    ),
+                minimumConfidence:
+                    this.minimumConfidence,
 
-                tonalReferenceIsNotEqPreset:
-                    this.safeBoolean(
-                        policy.tonalReferenceIsNotEqPreset
-                    )
+                minimumRegionalEvidence:
+                    this.minimumRegionalEvidence
             },
 
             safety: {
 
-                audioProcessing:
-                    this.safeBoolean(
-                        safety.audioProcessing
+                status:
+                    this.safeString(
+                        safety.status,
+                        "observe"
                     ),
 
-                gainGeneration:
-                    this.safeBoolean(
-                        safety.gainGeneration
-                    ),
-
-                filterGeneration:
-                    this.safeBoolean(
-                        safety.filterGeneration
-                    ),
-
-                reconstruction:
-                    this.safeBoolean(
-                        safety.reconstruction
-                    )
-            }
-        };
-    }
-
-
-    // ======================================
-    // OBSERVAR
-    // ======================================
-
-    observe(
-        context,
-        regionalMeasurement = null
-    ) {
-
-        /*
-         * Compatibilidade:
-         *
-         * se a medição for passada como
-         * segundo argumento, ela é anexada
-         * ao contexto sem modificar o objeto
-         * original.
-         */
-
-        let observationContext =
-            context;
-
-
-        if (
-            regionalMeasurement &&
-            context &&
-            typeof context ===
-            "object"
-        ) {
-
-            observationContext = {
-
-                ...context,
-
-                regionalMeasurement:
-                    regionalMeasurement
-            };
-        }
-
-
-        const snapshot =
-            this.createSnapshot(
-                observationContext
-            );
-
-
-        this.lastSnapshot =
-            snapshot;
-
-
-        this.lastInterpretation =
-            this.interpretSnapshot(
-                snapshot
-            );
-
-
-        return snapshot;
-    }
-
-
-    // ======================================
-    // CLASSIFICAR CONFIANÇA
-    // ======================================
-
-    classifyConfidence(
-        confidence
-    ) {
-
-        const value =
-            this.clamp(
-                this.safeNumber(
-                    confidence
-                ),
-                0,
-                1
-            );
-
-
-        if (
-            value < 0.40
-        ) {
-
-            return "low";
-        }
-
-
-        if (
-            value < 0.70
-        ) {
-
-            return "medium";
-        }
-
-
-        if (
-            value < 0.85
-        ) {
-
-            return "high";
-        }
-
-
-        return "very-high";
-    }
-
-
-    // ======================================
-    // CLASSIFICAR EVIDÊNCIA REGIONAL
-    // ======================================
-
-    classifyRegionalEvidence(
-        region
-    ) {
-
-        if (
-            !region
-        ) {
-
-            return {
-
-                level:
+                permission:
                     "none",
 
-                usable:
+                processingAllowed:
                     false,
 
                 reason:
-                    "region-unavailable"
-            };
-        }
-
-
-        if (
-            !region.regionSpecificEvidence
-        ) {
-
-            return {
-
-                level:
-                    "global-only",
-
-                usable:
-                    false,
-
-                reason:
-                    "region-specific-evidence-required"
-            };
-        }
-
-
-        const confidence =
-            this.clamp(
-                this.safeNumber(
-                    region.stateConfidence ??
-                    region.confidence
-                ),
-                0,
-                1
-            );
-
-
-        return {
-
-            level:
-                this.classifyConfidence(
-                    confidence
-                ),
-
-            usable:
-                region.usable ===
-                true,
-
-            reason:
-                region.usable ===
-                true
-                    ? "region-specific-evidence-available"
-                    : "region-evidence-not-usable"
-        };
-    }
-
-
-    // ======================================
-    // DETERMINAR ESTADO ACÚSTICO
-    // ======================================
-    //
-    // FUNÇÃO CONSERVADORA.
-    //
-    // A medição regional atual pode
-    // sustentar "supported", mas ainda
-    // não determina automaticamente
-    // elevated/recessed/natural.
-    //
-    // O Observer jamais transforma
-    // evidência global em evidência
-    // específica.
-    //
-    // ======================================
-
-    determineAcousticState(
-        region
-    ) {
-
-        if (
-            !region ||
-            typeof region !==
-            "object"
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    0,
-
-                evidence:
-                    "none",
-
-                actionable:
-                    false,
-
-                reason:
-                    "region-unavailable"
-            };
-        }
-
-
-        const hasRegionalMeasurement =
-            region.regionalMeasurement ===
-            true;
-
-
-        const hasRegionalEvidence =
-            region.regionSpecificEvidence ===
-            true;
-
-
-        const regionalConfidence =
-            this.clamp(
-                this.safeNumber(
-                    region.stateConfidence ??
-                    region.confidence
-                ),
-                0,
-                1
-            );
-
-
-        const stateEvidence =
-            this.safeString(
-                region.stateEvidence,
-                "none"
-            );
-
-
-        // ----------------------------------
-        // SEM MEDIÇÃO REGIONAL
-        // ----------------------------------
-
-        if (
-            !hasRegionalMeasurement
-        ) {
-
-            return {
-
-                state:
-                    "contextual",
-
-                confidence:
-                    this.clamp(
-                        this.safeNumber(
-                            region.confidence
-                        ),
-                        0,
-                        1
-                    ),
-
-                evidence:
-                    "global-only",
-
-                actionable:
-                    false,
-
-                reason:
-                    "no-regional-measurement"
-            };
-        }
-
-
-        // ----------------------------------
-        // MEDIÇÃO SEM EVIDÊNCIA REGIONAL
-        // ----------------------------------
-
-        if (
-            !hasRegionalEvidence
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    regionalConfidence,
-
-                evidence:
-                    stateEvidence,
-
-                actionable:
-                    false,
-
-                reason:
-                    "regional-measurement-without-independent-evidence"
-            };
-        }
-
-
-        // ----------------------------------
-        // CONFIANÇA BAIXA
-        // ----------------------------------
-
-        if (
-            regionalConfidence <
-            0.40
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    regionalConfidence,
-
-                evidence:
-                    stateEvidence,
-
-                actionable:
-                    false,
-
-                reason:
-                    "regional-state-confidence-too-low"
-            };
-        }
-
-
-        // ----------------------------------
-        // ESTADO INVÁLIDO
-        // ----------------------------------
-
-        if (
-            !this.isValidAcousticState(
-                region.acousticState
-            )
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    regionalConfidence,
-
-                evidence:
-                    stateEvidence,
-
-                actionable:
-                    false,
-
-                reason:
-                    "invalid-acoustic-state"
-            };
-        }
-
-
-        // ----------------------------------
-        // ESTADO AINDA NÃO SUFICIENTEMENTE
-        // SUSTENTADO
-        // ----------------------------------
-
-        if (
-            regionalConfidence <
-            0.70
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    regionalConfidence,
-
-                evidence:
-                    stateEvidence,
-
-                actionable:
-                    false,
-
-                reason:
-                    "regional-state-needs-stronger-evidence"
-            };
-        }
-
-
-        // ----------------------------------
-        // ESTADO SUSTENTADO
-        // ----------------------------------
-
-        return {
-
-            state:
-                region.acousticState,
-
-            confidence:
-                regionalConfidence,
-
-            evidence:
-                stateEvidence,
-
-            actionable:
-                true,
-
-            reason:
-                "regional-state-supported"
-        };
-    }
-
-
-    // ======================================
-    // INTERPRETAR REGIÃO
-    // ======================================
-
-    interpretRegion(
-        name,
-        region,
-        spectral
-    ) {
-
-        const evidence =
-            this.classifyRegionalEvidence(
-                region
-            );
-
-
-        const globalConfidence =
-            this.clamp(
-                this.safeNumber(
-                    spectral &&
-                    spectral.confidence
-                ),
-                0,
-                1
-            );
-
-
-        const state =
-            this.determineAcousticState(
-                region
-            );
-
-
-        const result = {
-
-            region:
-                name,
-
-            status:
-                "observe",
-
-            interpretation:
-                "insufficient-evidence",
-
-            evidenceLevel:
-                evidence.level,
-
-            confidence:
-                region &&
-                region.regionalMeasurement
-                    ? state.confidence
-                    : globalConfidence,
-
-            confidenceClass:
-                this.classifyConfidence(
-                    region &&
-                    region.regionalMeasurement
-                        ? state.confidence
-                        : globalConfidence
-                ),
-
-            regionSpecificEvidence:
-                region
-                    ? region.regionSpecificEvidence === true
-                    : false,
+                    "diagnostic-observer-only"
+            },
 
             regionalMeasurement:
-                region
-                    ? region.regionalMeasurement === true
-                    : false,
+                regionalMeasurement
+        };
+    }
 
-            acousticState:
-                state.state,
 
-            stateConfidence:
-                state.confidence,
+    // ======================================
+    // RESUMO DOS ESTADOS
+    // ======================================
 
-            stateEvidence:
-                state.evidence,
+    summarizeStates(
+        regions
+    ) {
 
-            stateActionable:
-                state.actionable,
+        const counts = {
 
-            usableForProcessing:
-                false,
+            natural:
+                0,
 
-            processingRecommendation:
-                "none",
+            elevated:
+                0,
 
-            reason:
-                evidence.reason
+            recessed:
+                0,
+
+            unstable:
+                0,
+
+            masked:
+                0,
+
+            uncertain:
+                0,
+
+            contextual:
+                0,
+
+            supported:
+                0
         };
 
 
-        // ----------------------------------
-        // SEM REGIÃO
-        // ----------------------------------
+        const source =
+            regions &&
+            typeof regions ===
+            "object"
 
-        if (
-            !region
+                ? regions
+                : {};
+
+
+        const names =
+            Object.keys(
+                source
+            );
+
+
+        for (
+            let i = 0;
+            i < names.length;
+            i++
         ) {
 
-            return result;
+            const state =
+                source[
+                    names[i]
+                ].acousticState;
+
+
+            if (
+                this.isValidAcousticState(
+                    state
+                )
+            ) {
+
+                counts[state]++;
+            }
         }
 
 
-        // ----------------------------------
-        // SEM MEDIÇÃO REGIONAL
-        // ----------------------------------
-
-        if (
-            !region.regionalMeasurement
-        ) {
-
-            result.status =
-                "observe";
-
-
-            result.interpretation =
-                "global-context-only";
-
-
-            result.acousticState =
-                "contextual";
-
-
-            result.processingRecommendation =
-                "none";
-
-
-            result.reason =
-                "global-spectral-information-cannot-prove-region-specific-acoustic-state";
-
-
-            return result;
-        }
-
-
-        // ----------------------------------
-        // MEDIÇÃO REGIONAL MAS SEM
-        // EVIDÊNCIA INDEPENDENTE
-        // ----------------------------------
-
-        if (
-            !region.regionSpecificEvidence
-        ) {
-
-            result.status =
-                "observe";
-
-
-            result.interpretation =
-                "regional-measurement-without-independent-evidence";
-
-
-            result.acousticState =
-                "uncertain";
-
-
-            result.processingRecommendation =
-                "none";
-
-
-            result.reason =
-                "regional-measurement-cannot-yet-support-an-independent-acoustic-conclusion";
-
-
-            return result;
-        }
-
-
-        // ----------------------------------
-        // EVIDÊNCIA REGIONAL NÃO UTILIZÁVEL
-        // ----------------------------------
-
-        if (
-            !region.usable
-        ) {
-
-            result.status =
-                "observe";
-
-
-            result.interpretation =
-                "regional-evidence-not-usable";
-
-
-            result.acousticState =
-                "uncertain";
-
-
-            result.reason =
-                "regional-evidence-below-actionability-threshold";
-
-
-            return result;
-        }
-
-
-        // ----------------------------------
-        // ESTADO SUSTENTADO
-        // ----------------------------------
-
-        if (
-            state.actionable
-        ) {
-
-            result.status =
-                "supported";
-
-
-            result.interpretation =
-                "regionally-supported";
-
-
-            result.usableForProcessing =
-                false;
-
-
-            result.processingRecommendation =
-                "none";
-
-
-            result.reason =
-                "acoustic-state-supported-but-observer-remains-analysis-only";
-
-
-            return result;
-        }
-
-
-        // ----------------------------------
-        // ESTADO NÃO SUSTENTADO
-        // ----------------------------------
-
-        result.status =
-            "observe";
-
-
-        result.interpretation =
-            "state-not-yet-supported";
-
-
-        result.processingRecommendation =
-            "none";
-
-
-        result.reason =
-            state.reason;
-
-
-        return result;
+        return counts;
     }
 
 
@@ -1718,7 +1718,7 @@ class SpectralDiagnosticObserver {
     // INTERPRETAR SNAPSHOT
     // ======================================
 
-    interpretSnapshot(
+    interpret(
         snapshot
     ) {
 
@@ -1732,70 +1732,156 @@ class SpectralDiagnosticObserver {
                 valid:
                     false,
 
-                status:
-                    "observe",
+                confidence:
+                    0,
 
-                reason:
-                    "invalid-diagnostic-snapshot",
+                observationOnly:
+                    true,
 
-                regions:
-                    {}
+                processingPermission:
+                    "none",
+
+                stateSummary:
+                    this.summarizeStates(
+                        {}
+                    ),
+
+                conclusion:
+                    "diagnostic-context-invalid"
             };
         }
 
 
-        const spectral =
-            snapshot.spectral;
-
-
-        const regions =
-            snapshot.regions ||
-            {};
-
-
-        const interpretations =
-            {};
-
-
-        const names =
-            Object.keys(
-                regions
+        const stateSummary =
+            this.summarizeStates(
+                snapshot.regions
             );
+
+
+        const regionNames =
+            Object.keys(
+                snapshot.regions
+            );
+
+
+        let usableCount =
+            0;
+
+
+        let confidentCount =
+            0;
+
+
+        let uncertainCount =
+            0;
 
 
         for (
             let i = 0;
-            i < names.length;
+            i < regionNames.length;
             i++
         ) {
 
-            const name =
-                names[i];
+            const region =
+                snapshot.regions[
+                    regionNames[i]
+                ];
 
 
-            interpretations[name] =
-                this.interpretRegion(
-                    name,
-                    regions[name],
-                    spectral
-                );
+            if (
+                region.usable
+            ) {
+
+                usableCount++;
+            }
+
+
+            if (
+                region.stateConfidence >=
+                this.minimumConfidence
+            ) {
+
+                confidentCount++;
+            }
+
+
+            if (
+                region.acousticState ===
+                "uncertain"
+            ) {
+
+                uncertainCount++;
+            }
         }
 
 
-        const analysisOnly =
-            snapshot.safety &&
-            snapshot.safety
-                .audioProcessing ===
-            false &&
-            snapshot.safety
-                .gainGeneration ===
-            false &&
-            snapshot.safety
-                .filterGeneration ===
-            false &&
-            snapshot.safety
-                .reconstruction ===
-            false;
+        const regionalConfidence =
+            snapshot.regionalMeasurement
+                ? snapshot.regionalMeasurement
+                    .confidence
+                : 0;
+
+
+        const confidence =
+            this.clamp(
+                (
+                    snapshot.spectral.confidence *
+                    0.40
+                ) +
+                (
+                    regionalConfidence *
+                    0.40
+                ) +
+                (
+                    regionNames.length > 0
+                        ? (
+                            confidentCount /
+                            regionNames.length
+                        ) *
+                        0.20
+                        : 0
+                ),
+                0,
+                1
+            );
+
+
+        let conclusion =
+            "insufficient-evidence";
+
+
+        if (
+            confidence >=
+            this.minimumConfidence
+        ) {
+
+            if (
+                stateSummary.unstable >
+                0
+            ) {
+
+                conclusion =
+                    "regional-behavior-requires-caution";
+
+            } else if (
+                stateSummary.uncertain >
+                0 &&
+                uncertainCount >=
+                Math.ceil(
+                    regionNames.length *
+                    0.5
+                )
+            ) {
+
+                conclusion =
+                    "evidence-remains-uncertain";
+
+            } else {
+
+                conclusion =
+                    "regional-evidence-coherent";
+            }
+        }
 
 
         return {
@@ -1803,273 +1889,116 @@ class SpectralDiagnosticObserver {
             valid:
                 true,
 
-            status:
-                analysisOnly
-                    ? "observe"
-                    : "review",
+            confidence:
+                confidence,
 
-            globalReference:
-                this.safeString(
-                    spectral.reference
-                ),
-
-            globalTonalDirection:
-                this.safeString(
-                    spectral.tonalDirection
-                ),
-
-            globalConfidence:
-                this.clamp(
-                    this.safeNumber(
-                        spectral.confidence
-                    ),
-                    0,
-                    1
-                ),
-
-            globalEvidence:
-                this.safeString(
-                    spectral.evidence,
-                    "low"
-                ),
-
-            globalInfluence:
-                this.clamp(
-                    this.safeNumber(
-                        spectral.influence
-                    ),
-                    0,
-                    1
-                ),
-
-            ambiguous:
-                this.safeBoolean(
-                    spectral.ambiguous
-                ),
-
-            regionalMeasurementAvailable:
-                !!snapshot.regionalMeasurement,
-
-            regionalMeasurementConfidence:
-                snapshot.regionalMeasurement
-                    ? this.clamp(
-                        this.safeNumber(
-                            snapshot
-                                .regionalMeasurement
-                                .confidence
-                        ),
-                        0,
-                        1
-                    )
-                    : 0,
-
-            analysisOnly:
-                analysisOnly,
-
-            regions:
-                interpretations,
+            observationOnly:
+                true,
 
             processingPermission:
                 "none",
 
-            reason:
-                "diagnostic-interpretation-only"
+            stateSummary:
+                stateSummary,
+
+            usableRegions:
+                usableCount,
+
+            confidentRegions:
+                confidentCount,
+
+            uncertainRegions:
+                uncertainCount,
+
+            conclusion:
+                conclusion
         };
     }
 
 
     // ======================================
-    // RESUMO
+    // OBSERVAR
+    // ======================================
+    //
+    // API principal utilizada pelo
+    // VocalSmoother.
+    //
     // ======================================
 
-    getSummary() {
+    observe(
+        context,
+        regionalMeasurement = null
+    ) {
+
+        /*
+         * Compatibilidade:
+         *
+         * A medição pode chegar como segundo
+         * argumento pelo VocalSmoother.
+         *
+         * Ela é anexada ao contexto somente
+         * para observação.
+         */
+
+        let safeContext =
+            context;
+
 
         if (
-            !this.lastSnapshot
+            regionalMeasurement
         ) {
 
-            return {
+            safeContext = {
 
-                available:
-                    false,
+                ...(
+                    context || {}
+                ),
 
-                reason:
-                    "no-diagnostic-available"
+                regionalMeasurement:
+                    regionalMeasurement
             };
         }
 
 
         const snapshot =
-            this.lastSnapshot;
-
-
-        const spectral =
-            snapshot.spectral;
-
-
-        const interpretation =
-            this.lastInterpretation;
-
-
-        return {
-
-            available:
-                true,
-
-            valid:
-                snapshot.valid ===
-                true,
-
-            reference:
-                this.safeString(
-                    spectral &&
-                    spectral.reference
-                ),
-
-            tonalDirection:
-                this.safeString(
-                    spectral &&
-                    spectral.tonalDirection
-                ),
-
-            confidence:
-                this.clamp(
-                    this.safeNumber(
-                        spectral &&
-                        spectral.confidence
-                    ),
-                    0,
-                    1
-                ),
-
-            evidence:
-                this.safeString(
-                    spectral &&
-                    spectral.evidence,
-                    "low"
-                ),
-
-            ambiguous:
-                spectral &&
-                spectral.ambiguous ===
-                true,
-
-            regionalMeasurementAvailable:
-                !!snapshot.regionalMeasurement,
-
-            regionalMeasurementConfidence:
-                snapshot.regionalMeasurement
-                    ? this.clamp(
-                        this.safeNumber(
-                            snapshot
-                                .regionalMeasurement
-                                .confidence
-                        ),
-                        0,
-                        1
-                    )
-                    : 0,
-
-            analysisOnly:
-                interpretation
-                    ? interpretation.analysisOnly
-                    : true,
-
-            regionCount:
-                snapshot.regions
-                    ? Object.keys(
-                        snapshot.regions
-                    ).length
-                    : 0,
-
-            processingPermission:
-                "none"
-        };
-    }
-
-
-    // ======================================
-    // RESUMO DOS ESTADOS REGIONAIS
-    // ======================================
-
-    getAcousticStateSummary() {
-
-        if (
-            !this.lastInterpretation ||
-            !this.lastInterpretation.regions
-        ) {
-
-            return {
-
-                available:
-                    false,
-
-                regions:
-                    {}
-            };
-        }
-
-
-        const regions =
-            this.lastInterpretation
-                .regions;
-
-
-        const names =
-            Object.keys(
-                regions
+            this.createSnapshot(
+                safeContext
             );
 
 
-        const summary =
-            {};
+        const interpretation =
+            this.interpret(
+                snapshot
+            );
 
 
-        for (
-            let i = 0;
-            i < names.length;
-            i++
-        ) {
-
-            const name =
-                names[i];
+        this.lastSnapshot =
+            snapshot;
 
 
-            const region =
-                regions[name];
-
-
-            summary[name] = {
-
-                state:
-                    region.acousticState,
-
-                confidence:
-                    region.stateConfidence,
-
-                evidence:
-                    region.stateEvidence,
-
-                supported:
-                    region.stateActionable ===
-                    true
-            };
-        }
+        this.lastInterpretation =
+            interpretation;
 
 
         return {
 
-            available:
-                true,
+            snapshot:
+                snapshot,
 
-            regions:
-                summary
+            interpretation:
+                interpretation,
+
+            processingPermission:
+                "none",
+
+            processingAllowed:
+                false
         };
     }
 
 
     // ======================================
-    // ÚLTIMO SNAPSHOT
+    // GETTERS
     // ======================================
 
     getLastSnapshot() {
@@ -2078,241 +2007,42 @@ class SpectralDiagnosticObserver {
     }
 
 
-    // ======================================
-    // ÚLTIMA INTERPRETAÇÃO
-    // ======================================
-
     getLastInterpretation() {
 
         return this.lastInterpretation;
     }
 
 
-    // ======================================
-    // OBTER INTERPRETAÇÃO REGIONAL
-    // ======================================
-
-    getRegionInterpretation(
-        name
-    ) {
-
-        if (
-            !this.lastInterpretation ||
-            !this.lastInterpretation.regions
-        ) {
-
-            return null;
-        }
-
-
-        if (
-            typeof name !==
-            "string"
-        ) {
-
-            return null;
-        }
-
-
-        return (
-            this.lastInterpretation
-                .regions[name] ||
-            null
-        );
-    }
-
-
-    // ======================================
-    // OBTER ESTADO ACÚSTICO REGIONAL
-    // ======================================
-
-    getRegionAcousticState(
-        name
-    ) {
-
-        const interpretation =
-            this.getRegionInterpretation(
-                name
-            );
-
-
-        if (
-            !interpretation
-        ) {
-
-            return {
-
-                state:
-                    "uncertain",
-
-                confidence:
-                    0,
-
-                supported:
-                    false
-            };
-        }
-
-
-        return {
-
-            state:
-                this.safeString(
-                    interpretation.acousticState,
-                    "uncertain"
-                ),
-
-            confidence:
-                this.clamp(
-                    this.safeNumber(
-                        interpretation.stateConfidence
-                    ),
-                    0,
-                    1
-                ),
-
-            supported:
-                interpretation.stateActionable ===
-                true
-        };
-    }
-
-
-    // ======================================
-    // VERIFICAR SE É OBSERVAÇÃO PURA
-    // ======================================
-
-    isObservationOnly() {
+    getLastRegions() {
 
         if (
             !this.lastSnapshot
         ) {
 
-            return true;
+            return {};
         }
 
 
-        const safety =
-            this.lastSnapshot.safety;
-
-
-        if (
-            !safety
-        ) {
-
-            return true;
-        }
-
-
-        return (
-
-            safety.audioProcessing !==
-            true &&
-
-            safety.gainGeneration !==
-            true &&
-
-            safety.filterGeneration !==
-            true &&
-
-            safety.reconstruction !==
-            true
-        );
+        return this.lastSnapshot.regions ||
+            {};
     }
 
 
-    // ======================================
-    // VERIFICAR SE UM ESTADO PODE
-    // PARTICIPAR DE UMA DECISÃO FUTURA
-    // ======================================
-
-    isStateSupported(
-        name
-    ) {
-
-        const state =
-            this.getRegionAcousticState(
-                name
-            );
-
-
-        return (
-            state.supported ===
-            true
-        );
-    }
-
-
-    // ======================================
-    // EXPORTAR SNAPSHOT
-    // ======================================
-
-    exportSnapshot() {
+    getLastStateSummary() {
 
         if (
             !this.lastSnapshot
         ) {
 
-            return null;
-        }
-
-
-        try {
-
-            return JSON.parse(
-                JSON.stringify(
-                    this.lastSnapshot
-                )
+            return this.summarizeStates(
+                {}
             );
-
-        } catch (_) {
-
-            return null;
-        }
-    }
-
-
-    // ======================================
-    // EXPORTAR INTERPRETAÇÃO
-    // ======================================
-
-    exportInterpretation() {
-
-        if (
-            !this.lastInterpretation
-        ) {
-
-            return null;
         }
 
 
-        try {
-
-            return JSON.parse(
-                JSON.stringify(
-                    this.lastInterpretation
-                )
-            );
-
-        } catch (_) {
-
-            return null;
-        }
-    }
-
-
-    // ======================================
-    // RESET
-    // ======================================
-
-    reset() {
-
-        this.lastSnapshot =
-            null;
-
-
-        this.lastInterpretation =
-            null;
+        return this.summarizeStates(
+            this.lastSnapshot.regions
+        );
     }
 }
 
