@@ -1,20 +1,22 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.1
+// V0.2
 // ==========================================
 //
-// Camada de observação da inteligência
-// espectral.
+// Camada de observação e interpretação
+// contextual da inteligência espectral.
 //
 // RESPONSABILIDADE:
 //
 // - receber o contexto do
 //   SpectralTreatmentBridge;
 // - validar a estrutura;
-// - criar um snapshot seguro;
-// - disponibilizar informações para
-//   diagnóstico.
+// - criar snapshots seguros;
+// - disponibilizar diagnóstico;
+// - interpretar a qualidade da evidência;
+// - distinguir evidência global de
+//   evidência específica de região.
 //
 // ESTE MÓDULO NÃO:
 //
@@ -23,7 +25,10 @@
 // - altera ganho;
 // - altera timbre;
 // - altera o TreatmentPlan;
-// - executa DSP.
+// - executa DSP;
+// - gera parâmetros de EQ;
+// - gera parâmetros de compressão;
+// - reconstrói espectro.
 //
 // ==========================================
 
@@ -33,11 +38,16 @@ class SpectralDiagnosticObserver {
 
     constructor() {
 
+
         this.version =
-            "0.1";
+            "0.2";
 
 
         this.lastSnapshot =
+            null;
+
+
+        this.lastInterpretation =
             null;
     }
 
@@ -84,6 +94,39 @@ class SpectralDiagnosticObserver {
 
 
         return value;
+    }
+
+
+    // ======================================
+    // BOOLEANO SEGURO
+    // ======================================
+
+    safeBoolean(
+        value
+    ) {
+
+        return value ===
+            true;
+    }
+
+
+    // ======================================
+    // CLAMP
+    // ======================================
+
+    clamp(
+        value,
+        min,
+        max
+    ) {
+
+        return Math.min(
+            max,
+            Math.max(
+                min,
+                value
+            )
+        );
     }
 
 
@@ -156,7 +199,13 @@ class SpectralDiagnosticObserver {
                     "unknown",
 
                 reason:
-                    "region-unavailable"
+                    "region-unavailable",
+
+                reference:
+                    "unknown",
+
+                tonalDirection:
+                    "unknown"
             };
         }
 
@@ -186,12 +235,14 @@ class SpectralDiagnosticObserver {
                 ),
 
             usable:
-                region.usable ===
-                true,
+                this.safeBoolean(
+                    region.usable
+                ),
 
             regionSpecificEvidence:
-                region.regionSpecificEvidence ===
-                true,
+                this.safeBoolean(
+                    region.regionSpecificEvidence
+                ),
 
             evidenceSource:
                 this.safeString(
@@ -323,8 +374,9 @@ class SpectralDiagnosticObserver {
             spectral: {
 
                 valid:
-                    spectral.valid ===
-                    true,
+                    this.safeBoolean(
+                        spectral.valid
+                    ),
 
                 reference:
                     this.safeString(
@@ -337,8 +389,12 @@ class SpectralDiagnosticObserver {
                     ),
 
                 confidence:
-                    this.safeNumber(
-                        spectral.confidence
+                    this.clamp(
+                        this.safeNumber(
+                            spectral.confidence
+                        ),
+                        0,
+                        1
                     ),
 
                 evidence:
@@ -348,8 +404,12 @@ class SpectralDiagnosticObserver {
                     ),
 
                 influence:
-                    this.safeNumber(
-                        spectral.influence
+                    this.clamp(
+                        this.safeNumber(
+                            spectral.influence
+                        ),
+                        0,
+                        1
                     ),
 
                 safety:
@@ -359,12 +419,14 @@ class SpectralDiagnosticObserver {
                     ),
 
                 ambiguous:
-                    spectral.ambiguous ===
-                    true,
+                    this.safeBoolean(
+                        spectral.ambiguous
+                    ),
 
                 usable:
-                    spectral.usable ===
-                    true
+                    this.safeBoolean(
+                        spectral.usable
+                    )
             },
 
             regions:
@@ -373,39 +435,47 @@ class SpectralDiagnosticObserver {
             decisionPolicy: {
 
                 analysisOnly:
-                    policy.analysisOnly ===
-                    true,
+                    this.safeBoolean(
+                        policy.analysisOnly
+                    ),
 
                 regionSpecificEvidenceRequired:
-                    policy.regionSpecificEvidenceRequired ===
-                    true,
+                    this.safeBoolean(
+                        policy.regionSpecificEvidenceRequired
+                    ),
 
                 processingRequiresIndependentEvidence:
-                    policy.processingRequiresIndependentEvidence ===
-                    true,
+                    this.safeBoolean(
+                        policy.processingRequiresIndependentEvidence
+                    ),
 
                 tonalReferenceIsNotEqPreset:
-                    policy.tonalReferenceIsNotEqPreset ===
-                    true
+                    this.safeBoolean(
+                        policy.tonalReferenceIsNotEqPreset
+                    )
             },
 
             safety: {
 
                 audioProcessing:
-                    safety.audioProcessing ===
-                    true,
+                    this.safeBoolean(
+                        safety.audioProcessing
+                    ),
 
                 gainGeneration:
-                    safety.gainGeneration ===
-                    true,
+                    this.safeBoolean(
+                        safety.gainGeneration
+                    ),
 
                 filterGeneration:
-                    safety.filterGeneration ===
-                    true,
+                    this.safeBoolean(
+                        safety.filterGeneration
+                    ),
 
                 reconstruction:
-                    safety.reconstruction ===
-                    true
+                    this.safeBoolean(
+                        safety.reconstruction
+                    )
             }
         };
     }
@@ -429,7 +499,606 @@ class SpectralDiagnosticObserver {
             snapshot;
 
 
+        this.lastInterpretation =
+            this.interpretSnapshot(
+                snapshot
+            );
+
+
         return snapshot;
+    }
+
+
+    // ======================================
+    // CLASSIFICAR CONFIANÇA
+    // ======================================
+
+    classifyConfidence(
+        confidence
+    ) {
+
+        const value =
+            this.clamp(
+                this.safeNumber(
+                    confidence
+                ),
+                0,
+                1
+            );
+
+
+        if (
+            value < 0.40
+        ) {
+
+            return "low";
+        }
+
+
+        if (
+            value < 0.70
+        ) {
+
+            return "medium";
+        }
+
+
+        if (
+            value < 0.85
+        ) {
+
+            return "high";
+        }
+
+
+        return "very-high";
+    }
+
+
+    // ======================================
+    // CLASSIFICAR EVIDÊNCIA REGIONAL
+    // ======================================
+
+    classifyRegionalEvidence(
+        region
+    ) {
+
+        if (
+            !region
+        ) {
+
+            return {
+
+                level:
+                    "none",
+
+                usable:
+                    false,
+
+                reason:
+                    "region-unavailable"
+            };
+        }
+
+
+        if (
+            !region.regionSpecificEvidence
+        ) {
+
+            return {
+
+                level:
+                    "global-only",
+
+                usable:
+                    false,
+
+                reason:
+                    "region-specific-evidence-required"
+            };
+        }
+
+
+        const confidence =
+            this.clamp(
+                this.safeNumber(
+                    region.confidence
+                ),
+                0,
+                1
+            );
+
+
+        return {
+
+            level:
+                this.classifyConfidence(
+                    confidence
+                ),
+
+            usable:
+                region.usable ===
+                true,
+
+            reason:
+                region.usable ===
+                true
+                    ? "region-specific-evidence-available"
+                    : "region-evidence-not-usable"
+        };
+    }
+
+
+    // ======================================
+    // INTERPRETAR REGIÃO
+    // ======================================
+    //
+    // Esta função NÃO determina EQ.
+    //
+    // Ela somente determina o estado
+    // epistemológico da informação:
+    //
+    // O que sabemos?
+    // O que não sabemos?
+    // Podemos considerar essa informação
+    // para uma futura decisão?
+    //
+    // ======================================
+
+    interpretRegion(
+        name,
+        region,
+        spectral
+    ) {
+
+        const evidence =
+            this.classifyRegionalEvidence(
+                region
+            );
+
+
+        const globalConfidence =
+            this.clamp(
+                this.safeNumber(
+                    spectral &&
+                    spectral.confidence
+                ),
+                0,
+                1
+            );
+
+
+        const result = {
+
+            region:
+                name,
+
+            status:
+                "observe",
+
+            interpretation:
+                "insufficient-evidence",
+
+            evidenceLevel:
+                evidence.level,
+
+            confidence:
+                globalConfidence,
+
+            confidenceClass:
+                this.classifyConfidence(
+                    globalConfidence
+                ),
+
+            regionSpecificEvidence:
+                region
+                    ? region.regionSpecificEvidence === true
+                    : false,
+
+            usableForProcessing:
+                false,
+
+            processingRecommendation:
+                "none",
+
+            reason:
+                evidence.reason
+        };
+
+
+        // ----------------------------------
+        // SEM REGIÃO
+        // ----------------------------------
+
+        if (
+            !region
+        ) {
+
+            return result;
+        }
+
+
+        // ----------------------------------
+        // EVIDÊNCIA APENAS GLOBAL
+        // ----------------------------------
+
+        if (
+            !region.regionSpecificEvidence
+        ) {
+
+            result.status =
+                "observe";
+
+
+            result.interpretation =
+                "global-context-only";
+
+
+            result.processingRecommendation =
+                "none";
+
+
+            result.reason =
+                "global-spectral-information-cannot-prove-region-specific-problem";
+
+
+            return result;
+        }
+
+
+        // ----------------------------------
+        // REGIÃO ESPECÍFICA DISPONÍVEL
+        // ----------------------------------
+
+        if (
+            !region.usable
+        ) {
+
+            result.status =
+                "observe";
+
+
+            result.interpretation =
+                "regional-evidence-not-usable";
+
+
+            result.reason =
+                "regional-evidence-below-actionability-threshold";
+
+
+            return result;
+        }
+
+
+        const regionalConfidence =
+            this.clamp(
+                this.safeNumber(
+                    region.confidence
+                ),
+                0,
+                1
+            );
+
+
+        result.confidence =
+            regionalConfidence;
+
+
+        result.confidenceClass =
+            this.classifyConfidence(
+                regionalConfidence
+            );
+
+
+        // ----------------------------------
+        // EVIDÊNCIA FRACA
+        // ----------------------------------
+
+        if (
+            regionalConfidence <
+            0.40
+        ) {
+
+            result.status =
+                "observe";
+
+
+            result.interpretation =
+                "weak-regional-evidence";
+
+
+            result.reason =
+                "regional-confidence-too-low";
+
+
+            return result;
+        }
+
+
+        // ----------------------------------
+        // EVIDÊNCIA MODERADA
+        // ----------------------------------
+
+        if (
+            regionalConfidence <
+            0.70
+        ) {
+
+            result.status =
+                "cautious";
+
+
+            result.interpretation =
+                "supported-but-cautious";
+
+
+            result.reason =
+                "regional-evidence-present-but-not-strong-enough-for-automatic-processing";
+
+
+            return result;
+        }
+
+
+        // ----------------------------------
+        // EVIDÊNCIA FORTE
+        // ----------------------------------
+
+        result.status =
+            "supported";
+
+
+        result.interpretation =
+            "regionally-supported";
+
+
+        result.reason =
+            "region-specific-evidence-is-available";
+
+
+        return result;
+    }
+
+
+    // ======================================
+    // INTERPRETAR SNAPSHOT
+    // ======================================
+
+    interpretSnapshot(
+        snapshot
+    ) {
+
+        if (
+            !snapshot ||
+            snapshot.valid !== true
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                status:
+                    "observe",
+
+                reason:
+                    "invalid-diagnostic-snapshot",
+
+                regions:
+                    {}
+            };
+        }
+
+
+        const spectral =
+            snapshot.spectral;
+
+
+        const regions =
+            snapshot.regions ||
+            {};
+
+
+        const interpretations =
+            {};
+
+
+        const names =
+            Object.keys(
+                regions
+            );
+
+
+        for (
+            let i = 0;
+            i < names.length;
+            i++
+        ) {
+
+            const name =
+                names[i];
+
+
+            interpretations[name] =
+                this.interpretRegion(
+                    name,
+                    regions[name],
+                    spectral
+                );
+        }
+
+
+        const analysisOnly =
+            snapshot.safety &&
+            snapshot.safety
+                .audioProcessing ===
+                false &&
+            snapshot.safety
+                .gainGeneration ===
+                false &&
+            snapshot.safety
+                .filterGeneration ===
+                false &&
+            snapshot.safety
+                .reconstruction ===
+                false;
+
+
+        return {
+
+            valid:
+                true,
+
+            status:
+                analysisOnly
+                    ? "observe"
+                    : "review",
+
+            globalReference:
+                this.safeString(
+                    spectral.reference
+                ),
+
+            globalTonalDirection:
+                this.safeString(
+                    spectral.tonalDirection
+                ),
+
+            globalConfidence:
+                this.clamp(
+                    this.safeNumber(
+                        spectral.confidence
+                    ),
+                    0,
+                    1
+                ),
+
+            globalEvidence:
+                this.safeString(
+                    spectral.evidence,
+                    "low"
+                ),
+
+            globalInfluence:
+                this.clamp(
+                    this.safeNumber(
+                        spectral.influence
+                    ),
+                    0,
+                    1
+                ),
+
+            ambiguous:
+                this.safeBoolean(
+                    spectral.ambiguous
+                ),
+
+            analysisOnly:
+                analysisOnly,
+
+            regions:
+                interpretations,
+
+            processingPermission:
+                "none",
+
+            reason:
+                "diagnostic-interpretation-only"
+        };
+    }
+
+
+    // ======================================
+    // RESUMO
+    // ======================================
+
+    getSummary() {
+
+        if (
+            !this.lastSnapshot
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                reason:
+                    "no-diagnostic-available"
+            };
+        }
+
+
+        const snapshot =
+            this.lastSnapshot;
+
+
+        const spectral =
+            snapshot.spectral;
+
+
+        const interpretation =
+            this.lastInterpretation;
+
+
+        return {
+
+            available:
+                true,
+
+            valid:
+                snapshot.valid ===
+                true,
+
+            reference:
+                this.safeString(
+                    spectral &&
+                    spectral.reference
+                ),
+
+            tonalDirection:
+                this.safeString(
+                    spectral &&
+                    spectral.tonalDirection
+                ),
+
+            confidence:
+                this.clamp(
+                    this.safeNumber(
+                        spectral &&
+                        spectral.confidence
+                    ),
+                    0,
+                    1
+                ),
+
+            evidence:
+                this.safeString(
+                    spectral &&
+                    spectral.evidence,
+                    "low"
+                ),
+
+            ambiguous:
+                spectral &&
+                spectral.ambiguous ===
+                true,
+
+            analysisOnly:
+                interpretation
+                    ? interpretation.analysisOnly
+                    : true,
+
+            regionCount:
+                snapshot.regions
+                    ? Object.keys(
+                        snapshot.regions
+                    ).length
+                    : 0,
+
+            processingPermission:
+                "none"
+        };
     }
 
 
@@ -444,12 +1113,161 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // LIMPAR
+    // ÚLTIMA INTERPRETAÇÃO
+    // ======================================
+
+    getLastInterpretation() {
+
+        return this.lastInterpretation;
+    }
+
+
+    // ======================================
+    // OBTER INTERPRETAÇÃO REGIONAL
+    // ======================================
+
+    getRegionInterpretation(
+        name
+    ) {
+
+        if (
+            !this.lastInterpretation ||
+            !this.lastInterpretation.regions
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof name !==
+            "string"
+        ) {
+
+            return null;
+        }
+
+
+        return (
+            this.lastInterpretation
+                .regions[name] ||
+            null
+        );
+    }
+
+
+    // ======================================
+    // VERIFICAR SE É OBSERVAÇÃO PURA
+    // ======================================
+
+    isObservationOnly() {
+
+        if (
+            !this.lastSnapshot
+        ) {
+
+            return true;
+        }
+
+
+        const safety =
+            this.lastSnapshot.safety;
+
+
+        if (
+            !safety
+        ) {
+
+            return true;
+        }
+
+
+        return (
+
+            safety.audioProcessing !==
+            true &&
+
+            safety.gainGeneration !==
+            true &&
+
+            safety.filterGeneration !==
+            true &&
+
+            safety.reconstruction !==
+            true
+        );
+    }
+
+
+    // ======================================
+    // EXPORTAR SNAPSHOT
+    // ======================================
+
+    exportSnapshot() {
+
+        if (
+            !this.lastSnapshot
+        ) {
+
+            return null;
+        }
+
+
+        try {
+
+            return JSON.parse(
+                JSON.stringify(
+                    this.lastSnapshot
+                )
+            );
+
+        } catch (_) {
+
+            return null;
+        }
+    }
+
+
+    // ======================================
+    // EXPORTAR INTERPRETAÇÃO
+    // ======================================
+
+    exportInterpretation() {
+
+        if (
+            !this.lastInterpretation
+        ) {
+
+            return null;
+        }
+
+
+        try {
+
+            return JSON.parse(
+                JSON.stringify(
+                    this.lastInterpretation
+                )
+            );
+
+        } catch (_) {
+
+            return null;
+        }
+    }
+
+
+    // ======================================
+    // RESET
     // ======================================
 
     reset() {
 
         this.lastSnapshot =
+            null;
+
+
+        this.lastInterpretation =
             null;
     }
 }
