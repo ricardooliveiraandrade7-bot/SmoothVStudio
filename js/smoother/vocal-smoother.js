@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V0.8
+// V0.9
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -14,31 +14,33 @@
 // - VocalAnalyzer
 // - SpectralProfile
 // - SpectralTreatmentBridge
+// - SpectralDiagnosticObserver
 // - VocalBody
 // - VocalTone
 // - VocalDynamics
 // - VocalSibilance
 // - VocalTreatmentPlan
 //
-// V0.8:
+// V0.9:
 //
 // - integração segura do perfil espectral;
 // - integração do SpectralTreatmentBridge;
-// - contexto espectral em modo observação;
+// - diagnóstico espectral em modo observação;
 // - plano adaptativo continua isolado do DSP;
-// - preservação total do caminho DSP V0.7;
-// - exposição da última decisão espectral;
+// - preservação do caminho DSP anterior;
+// - exposição do último diagnóstico;
 // - falhas na camada espectral não interrompem
 //   o processamento principal.
 //
 // IMPORTANTE:
 //
-// O SpectralTreatmentBridge nesta etapa
-// atua somente como camada de observação.
+// O SpectralTreatmentBridge e o
+// SpectralDiagnosticObserver nesta etapa
+// atuam somente como camadas de observação.
 //
 // Nenhum ganho, corte, compressão,
 // de-essing ou reconstrução adicional
-// é aplicado por ele.
+// é aplicado por eles.
 //
 // ==========================================
 
@@ -46,11 +48,13 @@
 class VocalSmoother {
 
 
-    constructor(options = {}) {
+    constructor(
+        options = {}
+    ) {
 
 
         this.version =
-            "0.8";
+            "0.9";
 
 
         // ==================================
@@ -65,14 +69,6 @@ class VocalSmoother {
         // ==================================
         // SPECTRAL PROFILE
         // ==================================
-        //
-        // Opcional nesta etapa.
-        //
-        // Se o módulo ainda não estiver
-        // disponível, o processamento
-        // continua normalmente.
-        //
-        // ==================================
 
         this.spectralProfile =
             options.spectralProfile ||
@@ -86,19 +82,25 @@ class VocalSmoother {
         // ==================================
         // SPECTRAL TREATMENT BRIDGE
         // ==================================
-        //
-        // Também é opcional.
-        //
-        // O Bridge apenas interpreta o
-        // perfil espectral nesta etapa.
-        //
-        // ==================================
 
         this.spectralTreatmentBridge =
             options.spectralTreatmentBridge ||
             (
                 window.SpectralTreatmentBridge
                     ? new SpectralTreatmentBridge()
+                    : null
+            );
+
+
+        // ==================================
+        // SPECTRAL DIAGNOSTIC OBSERVER
+        // ==================================
+
+        this.spectralDiagnosticObserver =
+            options.spectralDiagnosticObserver ||
+            (
+                window.SpectralDiagnosticObserver
+                    ? new SpectralDiagnosticObserver()
                     : null
             );
 
@@ -150,10 +152,6 @@ class VocalSmoother {
         // ==================================
         // PLANO DE TRATAMENTO
         // ==================================
-        //
-        // O módulo é opcional nesta etapa.
-        //
-        // ==================================
 
         this.treatmentPlan =
             options.treatmentPlan ||
@@ -177,6 +175,10 @@ class VocalSmoother {
 
 
         this.lastSpectralContext =
+            null;
+
+
+        this.lastSpectralDiagnostic =
             null;
 
 
@@ -273,14 +275,6 @@ class VocalSmoother {
     // ======================================
     // GERAR PERFIL ESPECTRAL
     // ======================================
-    //
-    // Esta função permanece completamente
-    // fora do caminho DSP.
-    //
-    // O perfil utiliza a análise já realizada
-    // pelo VocalAnalyzer.
-    //
-    // ======================================
 
     createSpectralProfile(
         analysis
@@ -324,15 +318,6 @@ class VocalSmoother {
 
     // ======================================
     // GERAR CONTEXTO ESPECTRAL
-    // ======================================
-    //
-    // IMPORTANTE:
-    //
-    // O contexto produzido aqui é apenas
-    // observacional.
-    //
-    // Ele NÃO controla o DSP.
-    //
     // ======================================
 
     createSpectralContext(
@@ -386,16 +371,60 @@ class VocalSmoother {
 
 
     // ======================================
-    // GERAR PLANO DE TRATAMENTO
+    // GERAR DIAGNÓSTICO ESPECTRAL
     // ======================================
     //
-    // Esta função é deliberadamente isolada
-    // do caminho de áudio.
+    // SOMENTE OBSERVAÇÃO.
     //
-    // O plano recebe a análise principal
-    // e, quando disponível, o contexto
-    // espectral em modo observação.
+    // Este método não modifica o contexto,
+    // o plano ou qualquer parâmetro DSP.
     //
+    // ======================================
+
+    createSpectralDiagnostic(
+        spectralContext
+    ) {
+
+        if (
+            !this.spectralDiagnosticObserver
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof this.spectralDiagnosticObserver
+                .observe !==
+            "function"
+        ) {
+
+            return null;
+        }
+
+
+        try {
+
+            return this.spectralDiagnosticObserver
+                .observe(
+                    spectralContext
+                );
+
+        } catch (error) {
+
+            console.warn(
+                "SpectralDiagnosticObserver indisponível nesta etapa:",
+                error
+            );
+
+
+            return null;
+        }
+    }
+
+
+    // ======================================
+    // GERAR PLANO DE TRATAMENTO
     // ======================================
 
     createTreatmentPlan(
@@ -499,13 +528,6 @@ class VocalSmoother {
         // ==================================
         // 2. PERFIL ESPECTRAL
         // ==================================
-        //
-        // Apenas análise.
-        //
-        // Nenhum processamento de áudio
-        // acontece aqui.
-        //
-        // ==================================
 
         this.lastSpectralProfile =
             this.createSpectralProfile(
@@ -516,10 +538,6 @@ class VocalSmoother {
         // ==================================
         // 3. CONTEXTO ESPECTRAL
         // ==================================
-        //
-        // Apenas observação.
-        //
-        // ==================================
 
         this.lastSpectralContext =
             this.createSpectralContext(
@@ -528,10 +546,22 @@ class VocalSmoother {
 
 
         // ==================================
-        // 4. GERAR PLANO ADAPTATIVO
+        // 4. DIAGNÓSTICO ESPECTRAL
         // ==================================
         //
-        // IMPORTANTE:
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // ==================================
+
+        this.lastSpectralDiagnostic =
+            this.createSpectralDiagnostic(
+                this.lastSpectralContext
+            );
+
+
+        // ==================================
+        // 5. GERAR PLANO ADAPTATIVO
+        // ==================================
         //
         // O contexto espectral é apenas
         // anexado ao plano.
@@ -549,7 +579,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 5. CONTEXTO OFFLINE
+        // 6. CONTEXTO OFFLINE
         // ==================================
 
         const context =
@@ -561,7 +591,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 6. SOURCE
+        // 7. SOURCE
         // ==================================
 
         const source =
@@ -573,7 +603,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 7. VOCAL BODY
+        // 8. VOCAL BODY
         // ==================================
 
         const bodyResult =
@@ -614,7 +644,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. VOCAL TONE
+        // 9. VOCAL TONE
         // ==================================
 
         let toneInput =
@@ -679,7 +709,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. DINÂMICA
+        // 10. DINÂMICA
         // ==================================
 
         const dynamicsResult =
@@ -711,7 +741,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 10. SIBILÂNCIA
+        // 11. SIBILÂNCIA
         // ==================================
 
         let finalOutput =
@@ -779,7 +809,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. CONEXÃO BODY → TONE
+        // 12. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -788,7 +818,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 12. CONEXÃO TONE → DYNAMICS
+        // 13. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -797,8 +827,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 13. CONEXÃO DIRETA QUANDO
-        //     NÃO EXISTIR SIBILANCE
+        // 14. CONEXÃO FINAL
         // ==================================
 
         if (
@@ -818,7 +847,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 14. SOURCE → BODY
+        // 15. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -827,7 +856,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. INICIAR
+        // 16. INICIAR
         // ==================================
 
         source.start(
@@ -836,7 +865,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. RENDER
+        // 17. RENDER
         // ==================================
 
         const result =
@@ -874,6 +903,16 @@ class VocalSmoother {
     getLastSpectralContext() {
 
         return this.lastSpectralContext;
+    }
+
+
+    // ======================================
+    // ÚLTIMO DIAGNÓSTICO ESPECTRAL
+    // ======================================
+
+    getLastSpectralDiagnostic() {
+
+        return this.lastSpectralDiagnostic;
     }
 
 
