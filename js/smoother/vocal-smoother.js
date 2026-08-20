@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V0.9
+// V1.0
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -12,6 +12,8 @@
 // Ele coordena:
 //
 // - VocalAnalyzer
+// - SpectralRegionalMeasurement
+// - SpectralRegionalRuntime
 // - SpectralProfile
 // - SpectralTreatmentBridge
 // - SpectralDiagnosticObserver
@@ -21,26 +23,27 @@
 // - VocalSibilance
 // - VocalTreatmentPlan
 //
-// V0.9:
+// V1.0:
 //
-// - integração segura do perfil espectral;
-// - integração do SpectralTreatmentBridge;
-// - diagnóstico espectral em modo observação;
+// - integração segura da medição espectral
+//   regional;
+// - runtime regional em modo observação;
+// - perfil espectral preservado;
+// - SpectralTreatmentBridge preservado;
+// - diagnóstico espectral preservado;
 // - plano adaptativo continua isolado do DSP;
-// - preservação do caminho DSP anterior;
-// - exposição do último diagnóstico;
+// - caminho DSP anterior preservado;
 // - falhas na camada espectral não interrompem
 //   o processamento principal.
 //
 // IMPORTANTE:
 //
-// O SpectralTreatmentBridge e o
-// SpectralDiagnosticObserver nesta etapa
-// atuam somente como camadas de observação.
+// O SpectralRegionalRuntime nesta etapa atua
+// somente como camada de observação.
 //
 // Nenhum ganho, corte, compressão,
 // de-essing ou reconstrução adicional
-// é aplicado por eles.
+// é aplicado por ele.
 //
 // ==========================================
 
@@ -54,7 +57,7 @@ class VocalSmoother {
 
 
         this.version =
-            "0.9";
+            "1.0";
 
 
         // ==================================
@@ -64,6 +67,35 @@ class VocalSmoother {
         this.analyzer =
             options.analyzer ||
             new VocalAnalyzer();
+
+
+        // ==================================
+        // MEDIÇÃO ESPECTRAL REGIONAL
+        // ==================================
+
+        this.spectralRegionalMeasurement =
+            options.spectralRegionalMeasurement ||
+            (
+                window.SpectralRegionalMeasurement
+                    ? new SpectralRegionalMeasurement()
+                    : null
+            );
+
+
+        // ==================================
+        // RUNTIME ESPECTRAL REGIONAL
+        // ==================================
+
+        this.spectralRegionalRuntime =
+            options.spectralRegionalRuntime ||
+            (
+                window.SpectralRegionalRuntime
+                    ? new SpectralRegionalRuntime({
+                        measurement:
+                            this.spectralRegionalMeasurement
+                    })
+                    : null
+            );
 
 
         // ==================================
@@ -170,6 +202,14 @@ class VocalSmoother {
             null;
 
 
+        this.lastSpectralRegionalMeasurement =
+            null;
+
+
+        this.lastSpectralRegionalSummary =
+            null;
+
+
         this.lastSpectralProfile =
             null;
 
@@ -269,6 +309,75 @@ class VocalSmoother {
 
 
         return null;
+    }
+
+
+    // ======================================
+    // MEDIÇÃO ESPECTRAL REGIONAL
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // Nenhum parâmetro DSP é alterado.
+    //
+    // ======================================
+
+    createSpectralRegionalMeasurement(
+        analysis
+    ) {
+
+        if (
+            !this.spectralRegionalRuntime
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof this.spectralRegionalRuntime.analyze !==
+            "function"
+        ) {
+
+            return null;
+        }
+
+
+        try {
+
+            const result =
+                this.spectralRegionalRuntime.analyze(
+                    analysis
+                );
+
+
+            this.lastSpectralRegionalSummary =
+                typeof this.spectralRegionalRuntime
+                    .getLastSummary ===
+                "function"
+
+                    ? this.spectralRegionalRuntime
+                        .getLastSummary()
+
+                    : null;
+
+
+            return result;
+
+        } catch (error) {
+
+            console.warn(
+                "SpectralRegionalRuntime indisponível nesta etapa:",
+                error
+            );
+
+
+            this.lastSpectralRegionalSummary =
+                null;
+
+
+            return null;
+        }
     }
 
 
@@ -376,9 +485,6 @@ class VocalSmoother {
     //
     // SOMENTE OBSERVAÇÃO.
     //
-    // Este método não modifica o contexto,
-    // o plano ou qualquer parâmetro DSP.
-    //
     // ======================================
 
     createSpectralDiagnostic(
@@ -461,9 +567,8 @@ class VocalSmoother {
              * O plano original continua sendo
              * preservado.
              *
-             * Nesta etapa o contexto espectral
-             * é apenas anexado como informação
-             * de observação.
+             * O contexto espectral continua
+             * sendo informação de observação.
              *
              * Nenhum parâmetro DSP é alterado.
              */
@@ -475,6 +580,24 @@ class VocalSmoother {
 
                 plan.spectralContext =
                     spectralContext;
+            }
+
+
+            /*
+             * A medição regional também é
+             * anexada apenas como diagnóstico.
+             *
+             * Ela não recebe autorização
+             * para controlar o processamento.
+             */
+
+            if (
+                plan &&
+                this.lastSpectralRegionalMeasurement
+            ) {
+
+                plan.spectralRegionalMeasurement =
+                    this.lastSpectralRegionalMeasurement;
             }
 
 
@@ -526,7 +649,21 @@ class VocalSmoother {
 
 
         // ==================================
-        // 2. PERFIL ESPECTRAL
+        // 2. MEDIÇÃO ESPECTRAL REGIONAL
+        // ==================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // ==================================
+
+        this.lastSpectralRegionalMeasurement =
+            this.createSpectralRegionalMeasurement(
+                analysis
+            );
+
+
+        // ==================================
+        // 3. PERFIL ESPECTRAL
         // ==================================
 
         this.lastSpectralProfile =
@@ -536,7 +673,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 3. CONTEXTO ESPECTRAL
+        // 4. CONTEXTO ESPECTRAL
         // ==================================
 
         this.lastSpectralContext =
@@ -546,7 +683,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 4. DIAGNÓSTICO ESPECTRAL
+        // 5. DIAGNÓSTICO ESPECTRAL
         // ==================================
         //
         // SOMENTE OBSERVAÇÃO.
@@ -560,13 +697,13 @@ class VocalSmoother {
 
 
         // ==================================
-        // 5. GERAR PLANO ADAPTATIVO
+        // 6. GERAR PLANO ADAPTATIVO
         // ==================================
         //
-        // O contexto espectral é apenas
-        // anexado ao plano.
+        // O contexto espectral e a medição
+        // regional são apenas anexados.
         //
-        // Ele ainda NÃO controla nenhum
+        // Eles ainda NÃO controlam nenhum
         // parâmetro do processamento.
         //
         // ==================================
@@ -579,7 +716,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 6. CONTEXTO OFFLINE
+        // 7. CONTEXTO OFFLINE
         // ==================================
 
         const context =
@@ -591,7 +728,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 7. SOURCE
+        // 8. SOURCE
         // ==================================
 
         const source =
@@ -603,7 +740,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. VOCAL BODY
+        // 9. VOCAL BODY
         // ==================================
 
         const bodyResult =
@@ -644,7 +781,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. VOCAL TONE
+        // 10. VOCAL TONE
         // ==================================
 
         let toneInput =
@@ -709,7 +846,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 10. DINÂMICA
+        // 11. DINÂMICA
         // ==================================
 
         const dynamicsResult =
@@ -741,7 +878,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. SIBILÂNCIA
+        // 12. SIBILÂNCIA
         // ==================================
 
         let finalOutput =
@@ -809,7 +946,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 12. CONEXÃO BODY → TONE
+        // 13. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -818,7 +955,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 13. CONEXÃO TONE → DYNAMICS
+        // 14. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -827,7 +964,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 14. CONEXÃO FINAL
+        // 15. CONEXÃO FINAL
         // ==================================
 
         if (
@@ -847,7 +984,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. SOURCE → BODY
+        // 16. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -856,7 +993,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. INICIAR
+        // 17. INICIAR
         // ==================================
 
         source.start(
@@ -865,7 +1002,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 17. RENDER
+        // 18. RENDER
         // ==================================
 
         const result =
@@ -883,6 +1020,26 @@ class VocalSmoother {
     getLastAnalysis() {
 
         return this.lastAnalysis;
+    }
+
+
+    // ======================================
+    // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
+    // ======================================
+
+    getLastSpectralRegionalMeasurement() {
+
+        return this.lastSpectralRegionalMeasurement;
+    }
+
+
+    // ======================================
+    // RESUMO DA MEDIÇÃO REGIONAL
+    // ======================================
+
+    getLastSpectralRegionalSummary() {
+
+        return this.lastSpectralRegionalSummary;
     }
 
 
