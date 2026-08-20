@@ -1,12 +1,14 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL TREATMENT BRIDGE
-// V0.2
+// V0.3
 // ==========================================
 //
 // Ponte entre:
 //
 // SpectralProfile
+//        ↓
+// SpectralDiagnosticObserver
 //        ↓
 // VocalTreatmentPlan
 //
@@ -64,8 +66,18 @@ class SpectralTreatmentBridge {
             0.35;
 
 
+        this.minimumDiagnosticConfidence =
+            options.minimumDiagnosticConfidence ??
+            0.55;
+
+
+        this.minimumRegionalCoverage =
+            options.minimumRegionalCoverage ??
+            0.50;
+
+
         this.version =
-            "0.2";
+            "0.3";
     }
 
 
@@ -109,6 +121,18 @@ class SpectralTreatmentBridge {
         )
             ? number
             : fallback;
+    }
+
+
+    // ======================================
+    // BOOLEANO SEGURO
+    // ======================================
+
+    safeBoolean(
+        value
+    ) {
+
+        return value === true;
     }
 
 
@@ -621,7 +645,6 @@ class SpectralTreatmentBridge {
                 reference.reference,
 
             tonalDirection:
-
                 tonalDirection,
 
             confidence:
@@ -649,27 +672,429 @@ class SpectralTreatmentBridge {
 
 
     // ======================================
+    // NORMALIZAR DIAGNÓSTICO
+    // ======================================
+    //
+    // O Bridge NÃO executa o Observer.
+    //
+    // Apenas recebe o resultado dele.
+    //
+    // ======================================
+
+    normalizeDiagnostic(
+        diagnostic
+    ) {
+
+        if (
+            !diagnostic ||
+            typeof diagnostic !==
+                "object"
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                valid:
+                    false,
+
+                confidence:
+                    0,
+
+                diagnosticState:
+                    "uncertain",
+
+                processingAllowed:
+                    false,
+
+                processingPermission:
+                    "none",
+
+                regionalCoverage:
+                    0,
+
+                uncertainRatio:
+                    1,
+
+                conflicts:
+                    true,
+
+                conflictRatio:
+                    1,
+
+                conclusion:
+                    "diagnostic-unavailable"
+            };
+        }
+
+
+        const interpretation =
+            diagnostic.interpretation ||
+            diagnostic;
+
+
+        const confidence =
+            this.clamp(
+                this.safeNumber(
+                    interpretation.confidence
+                ),
+                0,
+                1
+            );
+
+
+        const diagnosticState =
+            interpretation
+                .diagnosticState ||
+            "uncertain";
+
+
+        const processingAllowed =
+            interpretation
+                .processingAllowed ===
+                true;
+
+
+        const processingPermission =
+            interpretation
+                .processingPermission ||
+            "none";
+
+
+        const confidentRegions =
+            Math.max(
+                0,
+                this.safeNumber(
+                    interpretation
+                        .confidentRegions
+                )
+            );
+
+
+        const uncertainRegions =
+            Math.max(
+                0,
+                this.safeNumber(
+                    interpretation
+                        .uncertainRegions
+                )
+            );
+
+
+        const usableRegions =
+            Math.max(
+                0,
+                this.safeNumber(
+                    interpretation
+                        .usableRegions
+                )
+            );
+
+
+        const totalRegional =
+            confidentRegions +
+            uncertainRegions;
+
+
+        const regionalCoverage =
+            totalRegional > 0
+                ? this.clamp(
+                    confidentRegions /
+                    totalRegional,
+                    0,
+                    1
+                )
+                : 0;
+
+
+        const uncertainRatio =
+            totalRegional > 0
+                ? this.clamp(
+                    uncertainRegions /
+                    totalRegional,
+                    0,
+                    1
+                )
+                : 1;
+
+
+        const evidenceConflicts =
+            interpretation
+                .evidenceConflicts ||
+            (
+                interpretation
+                    .contextualDiagnosis &&
+                interpretation
+                    .contextualDiagnosis
+                    .evidenceConflicts
+            ) ||
+            {
+
+                conflict:
+                    true,
+
+                conflictRatio:
+                    1,
+
+                conflicts: [
+                    "diagnostic-conflicts-unavailable"
+                ]
+            };
+
+
+        const conflictRatio =
+            this.clamp(
+                this.safeNumber(
+                    evidenceConflicts
+                        .conflictRatio
+                ),
+                0,
+                1
+            );
+
+
+        const hasConflict =
+            evidenceConflicts.conflict ===
+            true ||
+            conflictRatio > 0;
+
+
+        //
+        // Segurança fundamental:
+        //
+        // O Bridge nunca aumenta a autoridade
+        // recebida do Observer.
+        //
+        // Se o diagnóstico disser que não pode
+        // processar, continua não podendo.
+        //
+
+        const safeProcessingAllowed =
+            processingAllowed === true &&
+            processingPermission !==
+                "none" &&
+            diagnosticState !==
+                "uncertain" &&
+            !hasConflict &&
+            confidence >=
+                this.minimumDiagnosticConfidence;
+
+
+        return {
+
+            available:
+                true,
+
+            valid:
+                interpretation.valid !==
+                    false,
+
+            confidence,
+
+            diagnosticState,
+
+            processingAllowed:
+                safeProcessingAllowed,
+
+            processingPermission:
+                safeProcessingAllowed
+                    ? processingPermission
+                    : "none",
+
+            regionalCoverage,
+
+            uncertainRatio,
+
+            confidentRegions,
+
+            uncertainRegions,
+
+            usableRegions,
+
+            conflicts:
+                hasConflict,
+
+            conflictRatio,
+
+            conclusion:
+                interpretation.conclusion ||
+                "diagnostic-conclusion-unavailable"
+        };
+    }
+
+
+    // ======================================
+    // INFLUÊNCIA DIAGNÓSTICA
+    // ======================================
+    //
+    // Não é ganho de processamento.
+    //
+    // É somente peso de confiança.
+    //
+    // ======================================
+
+    calculateDiagnosticInfluence(
+        diagnostic
+    ) {
+
+        const normalized =
+            this.normalizeDiagnostic(
+                diagnostic
+            );
+
+
+        if (
+            !normalized.available ||
+            !normalized.valid
+        ) {
+
+            return 0;
+        }
+
+
+        if (
+            normalized.diagnosticState ===
+            "uncertain"
+        ) {
+
+            return 0;
+        }
+
+
+        if (
+            normalized.conflicts
+        ) {
+
+            return 0;
+        }
+
+
+        if (
+            normalized.regionalCoverage <
+            this.minimumRegionalCoverage
+        ) {
+
+            return 0;
+        }
+
+
+        return this.clamp(
+
+            normalized.confidence *
+            normalized.regionalCoverage,
+
+            0,
+            1
+        );
+    }
+
+
+    // ======================================
+    // ESTADO DIAGNÓSTICO SEGURO
+    // ======================================
+
+    determineDiagnosticSafety(
+        diagnostic
+    ) {
+
+        const normalized =
+            this.normalizeDiagnostic(
+                diagnostic
+            );
+
+
+        if (
+            !normalized.available
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            normalized.conflicts
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            normalized.diagnosticState ===
+            "uncertain"
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            normalized.confidence <
+            this.minimumDiagnosticConfidence
+        ) {
+
+            return "observe";
+        }
+
+
+        if (
+            normalized.regionalCoverage <
+            this.minimumRegionalCoverage
+        ) {
+
+            return "cautious";
+        }
+
+
+        if (
+            normalized.confidence >=
+            0.75
+        ) {
+
+            return "supported";
+        }
+
+
+        return "cautious";
+    }
+
+
+    // ======================================
     // COMPARAR COM UMA REGIÃO
     // ======================================
     //
     // IMPORTANTE:
     //
-    // O perfil espectral atual ainda é uma
+    // O perfil espectral global ainda é uma
     // evidência global.
     //
-    // Portanto não fingimos possuir uma
-    // medição específica de cada região.
+    // O Bridge não pode fingir possuir uma
+    // medição específica que não recebeu.
     //
     // ======================================
 
     evaluateRegion(
         profile,
-        regionName
+        regionName,
+        diagnostic = null
     ) {
 
         const signal =
             this.createSpectralSignal(
                 profile
+            );
+
+
+        const normalizedDiagnostic =
+            this.normalizeDiagnostic(
+                diagnostic
+            );
+
+
+        const diagnosticInfluence =
+            this.calculateDiagnosticInfluence(
+                diagnostic
             );
 
 
@@ -692,7 +1117,7 @@ class SpectralTreatmentBridge {
                     signal.evidence,
 
                 safety:
-                    signal.safety,
+                    "observe",
 
                 usable:
                     false,
@@ -703,6 +1128,13 @@ class SpectralTreatmentBridge {
                 evidenceSource:
                     "global-spectral-profile",
 
+                diagnosticAvailable:
+                    normalizedDiagnostic
+                        .available,
+
+                diagnosticInfluence:
+                    diagnosticInfluence,
+
                 reason:
                     "spectral-analysis-insufficient"
             };
@@ -712,12 +1144,80 @@ class SpectralTreatmentBridge {
         /*
          * Nesta fase o sistema ainda não
          * possui evidência espectral exclusiva
-         * desta região.
+         * desta região a partir do perfil global.
          *
-         * Portanto a informação pode apoiar
-         * uma decisão futura, mas não pode
-         * gerar tratamento por si só.
+         * Quando o Observer fornecer uma medição
+         * regional real, ela será preservada aqui.
          */
+
+
+        let regionSpecificEvidence =
+            false;
+
+
+        let regionalState =
+            "uncertain";
+
+
+        let regionalStateConfidence =
+            0;
+
+
+        if (
+            diagnostic &&
+            diagnostic.snapshot &&
+            diagnostic.snapshot.regions &&
+            diagnostic.snapshot.regions[
+                regionName
+            ]
+        ) {
+
+            const observed =
+                diagnostic
+                    .snapshot
+                    .regions[
+                        regionName
+                    ];
+
+
+            regionSpecificEvidence =
+                observed
+                    .regionSpecificEvidence ===
+                    true;
+
+
+            regionalState =
+                observed.acousticState ||
+                "uncertain";
+
+
+            regionalStateConfidence =
+                this.clamp(
+                    this.safeNumber(
+                        observed.stateConfidence
+                    ),
+                    0,
+                    1
+                );
+        }
+
+
+        const combinedConfidence =
+            this.clamp(
+
+                (
+                    signal.confidence *
+                    0.40
+                ) +
+
+                (
+                    regionalStateConfidence *
+                    0.60
+                ),
+
+                0,
+                1
+            );
 
 
         return {
@@ -726,25 +1226,48 @@ class SpectralTreatmentBridge {
                 regionName,
 
             support:
-                signal.influence,
+                regionSpecificEvidence
+                    ? diagnosticInfluence
+                    : 0,
 
             confidence:
-                signal.confidence,
+                combinedConfidence,
 
             evidence:
-                signal.evidence,
+                regionSpecificEvidence
+                    ? "regional-diagnostic"
+                    : signal.evidence,
 
             safety:
-                signal.safety,
+                regionSpecificEvidence
+                    ? this.determineDiagnosticSafety(
+                        diagnostic
+                    )
+                    : signal.safety,
 
             usable:
                 true,
 
             regionSpecificEvidence:
-                false,
+                regionSpecificEvidence,
 
             evidenceSource:
-                "global-spectral-profile",
+                regionSpecificEvidence
+                    ? "spectral-diagnostic-observer"
+                    : "global-spectral-profile",
+
+            diagnosticAvailable:
+                normalizedDiagnostic
+                    .available,
+
+            diagnosticInfluence:
+                diagnosticInfluence,
+
+            acousticState:
+                regionalState,
+
+            stateConfidence:
+                regionalStateConfidence,
 
             reference:
                 signal.reference,
@@ -753,7 +1276,9 @@ class SpectralTreatmentBridge {
                 signal.tonalDirection,
 
             reason:
-                "global-spectral-reference-available"
+                regionSpecificEvidence
+                    ? "validated-regional-diagnostic"
+                    : "global-spectral-reference-available"
         };
     }
 
@@ -763,12 +1288,25 @@ class SpectralTreatmentBridge {
     // ======================================
 
     createPlanningContext(
-        profile
+        profile,
+        diagnostic = null
     ) {
 
         const signal =
             this.createSpectralSignal(
                 profile
+            );
+
+
+        const normalizedDiagnostic =
+            this.normalizeDiagnostic(
+                diagnostic
+            );
+
+
+        const diagnosticSafety =
+            this.determineDiagnosticSafety(
+                diagnostic
             );
 
 
@@ -809,7 +1347,8 @@ class SpectralTreatmentBridge {
             ] =
                 this.evaluateRegion(
                     profile,
-                    region
+                    region,
+                    diagnostic
                 );
         }
 
@@ -849,8 +1388,58 @@ class SpectralTreatmentBridge {
                     signal.usable
             },
 
+
+            diagnostic: {
+
+                available:
+                    normalizedDiagnostic
+                        .available,
+
+                valid:
+                    normalizedDiagnostic
+                        .valid,
+
+                confidence:
+                    normalizedDiagnostic
+                        .confidence,
+
+                state:
+                    normalizedDiagnostic
+                        .diagnosticState,
+
+                regionalCoverage:
+                    normalizedDiagnostic
+                        .regionalCoverage,
+
+                uncertainRatio:
+                    normalizedDiagnostic
+                        .uncertainRatio,
+
+                conflicts:
+                    normalizedDiagnostic
+                        .conflicts,
+
+                conflictRatio:
+                    normalizedDiagnostic
+                        .conflictRatio,
+
+                safety:
+                    diagnosticSafety,
+
+                influence:
+                    this.calculateDiagnosticInfluence(
+                        diagnostic
+                    ),
+
+                conclusion:
+                    normalizedDiagnostic
+                        .conclusion
+            },
+
+
             regions:
                 regionContext,
+
 
             decisionPolicy: {
 
@@ -863,9 +1452,16 @@ class SpectralTreatmentBridge {
                 processingRequiresIndependentEvidence:
                     true,
 
+                diagnosticConfidenceRequired:
+                    true,
+
+                conflictingEvidenceFallsBackToUncertain:
+                    true,
+
                 tonalReferenceIsNotEqPreset:
                     true
             },
+
 
             safety: {
 
@@ -879,7 +1475,10 @@ class SpectralTreatmentBridge {
                     false,
 
                 reconstruction:
-                    false
+                    false,
+
+                processingPermission:
+                    "none"
             }
         };
     }
@@ -897,12 +1496,14 @@ class SpectralTreatmentBridge {
 
     enrichPlan(
         treatmentPlan,
-        profile
+        profile,
+        diagnostic = null
     ) {
 
         const context =
             this.createPlanningContext(
-                profile
+                profile,
+                diagnostic
             );
 
 
@@ -968,6 +1569,13 @@ class SpectralTreatmentBridge {
                 .safety
                 .reconstruction ===
                 false
+
+        ) && (
+
+            context
+                .safety
+                .processingPermission ===
+                "none"
         );
     }
 }
