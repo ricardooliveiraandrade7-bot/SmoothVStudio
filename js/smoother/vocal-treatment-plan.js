@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL TREATMENT PLAN
-// V0.1
+// V0.2
 // ==========================================
 //
 // Camada de decisão espectral.
@@ -11,7 +11,8 @@
 // Este módulo NÃO modifica áudio.
 //
 // Ele recebe a análise do VocalAnalyzer
-// e produz um plano de tratamento.
+// e, opcionalmente, o contexto produzido
+// pelo SpectralTreatmentBridge.
 //
 // Estados possíveis:
 //
@@ -20,8 +21,12 @@
 // - correct
 // - reconstruct
 //
-// A reconstrução permanece desativada
-// nesta primeira versão.
+// A reconstrução permanece desativada.
+//
+// O targetDb representa apenas uma
+// INTENÇÃO DE PLANEJAMENTO.
+//
+// Não representa ganho DSP.
 //
 // ==========================================
 
@@ -31,8 +36,9 @@ class VocalTreatmentPlan {
 
     constructor(options = {}) {
 
+
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
@@ -54,8 +60,34 @@ class VocalTreatmentPlan {
             0.60;
 
 
+        this.minimumDiagnosticConfidence =
+            options.minimumDiagnosticConfidence ??
+            0.55;
+
+
+        this.minimumRegionalCoverage =
+            options.minimumRegionalCoverage ??
+            0.50;
+
+
         this.reconstructionEnabled =
             options.reconstructionEnabled ??
+            false;
+
+
+        // ==================================
+        // AUTORIDADE DSP
+        // ==================================
+
+        this.processingPermission =
+            "none";
+
+
+        this.audioProcessingEnabled =
+            false;
+
+
+        this.reconstructionAuthority =
             false;
     }
 
@@ -90,13 +122,684 @@ class VocalTreatmentPlan {
     ) {
 
         const number =
-            Number(value);
+            Number(
+                value
+            );
+
 
         return Number.isFinite(
             number
         )
             ? number
             : fallback;
+    }
+
+
+    // ======================================
+    // BOOLEANO SEGURO
+    // ======================================
+
+    safeBoolean(
+        value
+    ) {
+
+        return value === true;
+    }
+
+
+    // ======================================
+    // NORMALIZAR CONTEXTO DO BRIDGE
+    // ======================================
+
+    normalizeSpectralContext(
+        context
+    ) {
+
+        if (
+            !context ||
+            typeof context !==
+                "object"
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                spectral: {
+
+                    valid:
+                        false,
+
+                    confidence:
+                        0,
+
+                    reference:
+                        "unknown",
+
+                    tonalDirection:
+                        "unknown",
+
+                    safety:
+                        "observe"
+                },
+
+                diagnostic: {
+
+                    available:
+                        false,
+
+                    valid:
+                        false,
+
+                    confidence:
+                        0,
+
+                    state:
+                        "uncertain",
+
+                    regionalCoverage:
+                        0,
+
+                    uncertainRatio:
+                        1,
+
+                    conflicts:
+                        true,
+
+                    conflictRatio:
+                        1,
+
+                    safety:
+                        "observe",
+
+                    influence:
+                        0
+                },
+
+                regions:
+                    {},
+
+                decisionPolicy: {
+
+                    analysisOnly:
+                        true,
+
+                    regionSpecificEvidenceRequired:
+                        true
+                },
+
+                safety: {
+
+                    audioProcessing:
+                        false,
+
+                    gainGeneration:
+                        false,
+
+                    filterGeneration:
+                        false,
+
+                    reconstruction:
+                        false,
+
+                    processingPermission:
+                        "none"
+                }
+            };
+        }
+
+
+        const spectral =
+            context.spectral ||
+            {};
+
+
+        const diagnostic =
+            context.diagnostic ||
+            {};
+
+
+        const safety =
+            context.safety ||
+            {};
+
+
+        const decisionPolicy =
+            context.decisionPolicy ||
+            {};
+
+
+        const diagnosticConfidence =
+            this.clamp(
+                this.safeNumber(
+                    diagnostic.confidence
+                ),
+                0,
+                1
+            );
+
+
+        const regionalCoverage =
+            this.clamp(
+                this.safeNumber(
+                    diagnostic.regionalCoverage
+                ),
+                0,
+                1
+            );
+
+
+        const uncertainRatio =
+            this.clamp(
+                this.safeNumber(
+                    diagnostic.uncertainRatio,
+                    1
+                ),
+                0,
+                1
+            );
+
+
+        const conflictRatio =
+            this.clamp(
+                this.safeNumber(
+                    diagnostic.conflictRatio,
+                    0
+                ),
+                0,
+                1
+            );
+
+
+        const conflicts =
+            diagnostic.conflicts === true ||
+            conflictRatio > 0;
+
+
+        return {
+
+            available:
+                true,
+
+            spectral: {
+
+                valid:
+                    spectral.valid !==
+                    false,
+
+                confidence:
+                    this.clamp(
+                        this.safeNumber(
+                            spectral.confidence
+                        ),
+                        0,
+                        1
+                    ),
+
+                reference:
+                    spectral.reference ||
+                    "unknown",
+
+                tonalDirection:
+                    spectral.tonalDirection ||
+                    "unknown",
+
+                safety:
+                    spectral.safety ||
+                    "observe"
+            },
+
+
+            diagnostic: {
+
+                available:
+                    diagnostic.available ===
+                    true,
+
+                valid:
+                    diagnostic.valid !==
+                    false,
+
+                confidence:
+                    diagnosticConfidence,
+
+                state:
+                    diagnostic.state ||
+                    "uncertain",
+
+                regionalCoverage,
+
+                uncertainRatio,
+
+                conflicts,
+
+                conflictRatio,
+
+                safety:
+                    diagnostic.safety ||
+                    "observe",
+
+                influence:
+                    this.clamp(
+                        this.safeNumber(
+                            diagnostic.influence
+                        ),
+                        0,
+                        1
+                    )
+            },
+
+
+            regions:
+                context.regions ||
+                {},
+
+
+            decisionPolicy: {
+
+                analysisOnly:
+                    decisionPolicy
+                        .analysisOnly !==
+                    false,
+
+                regionSpecificEvidenceRequired:
+                    decisionPolicy
+                        .regionSpecificEvidenceRequired !==
+                    false,
+
+                processingRequiresIndependentEvidence:
+                    decisionPolicy
+                        .processingRequiresIndependentEvidence !==
+                    false,
+
+                diagnosticConfidenceRequired:
+                    decisionPolicy
+                        .diagnosticConfidenceRequired !==
+                    false,
+
+                conflictingEvidenceFallsBackToUncertain:
+                    decisionPolicy
+                        .conflictingEvidenceFallsBackToUncertain !==
+                    false,
+
+                tonalReferenceIsNotEqPreset:
+                    decisionPolicy
+                        .tonalReferenceIsNotEqPreset !==
+                    false
+            },
+
+
+            safety: {
+
+                audioProcessing:
+                    safety.audioProcessing ===
+                    true,
+
+                gainGeneration:
+                    safety.gainGeneration ===
+                    true,
+
+                filterGeneration:
+                    safety.filterGeneration ===
+                    true,
+
+                reconstruction:
+                    safety.reconstruction ===
+                    true,
+
+                processingPermission:
+                    safety.processingPermission ||
+                    "none"
+            }
+        };
+    }
+
+
+    // ======================================
+    // DETERMINAR SE O CONTEXTO É SEGURO
+    // ======================================
+
+    isContextSafeForPlanning(
+        context
+    ) {
+
+        if (
+            !context.available
+        ) {
+
+            return true;
+        }
+
+
+        if (
+            context.diagnostic.conflicts
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            context.diagnostic.state ===
+            "uncertain"
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            context.diagnostic.confidence <
+            this.minimumDiagnosticConfidence
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            context.diagnostic.regionalCoverage <
+            this.minimumRegionalCoverage
+        ) {
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    // ======================================
+    // DETERMINAR ESTADO REGIONAL
+    // ======================================
+    //
+    // O estado acústico não é convertido
+    // diretamente em EQ.
+    //
+    // Apenas determina se existe evidência
+    // suficiente para manter ou limitar
+    // uma decisão.
+    //
+    // ======================================
+
+    getRegionalEvidence(
+        context,
+        regionName
+    ) {
+
+        if (
+            !context ||
+            !context.available
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    0,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence:
+                    false,
+
+                usable:
+                    false
+            };
+        }
+
+
+        const region =
+            context.regions[
+                regionName
+            ];
+
+
+        if (
+            !region ||
+            typeof region !==
+                "object"
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    0,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence:
+                    false,
+
+                usable:
+                    false
+            };
+        }
+
+
+        const state =
+            region.acousticState ||
+            "uncertain";
+
+
+        const confidence =
+            this.clamp(
+                this.safeNumber(
+                    region.stateConfidence,
+                    region.confidence
+                ),
+                0,
+                1
+            );
+
+
+        const regionSpecificEvidence =
+            region.regionSpecificEvidence ===
+            true;
+
+
+        const safety =
+            region.safety ||
+            "observe";
+
+
+        const conflicts =
+            context.diagnostic.conflicts;
+
+
+        if (
+            conflicts
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state:
+                    "uncertain",
+
+                confidence:
+                    0,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence,
+
+                usable:
+                    false
+            };
+        }
+
+
+        if (
+            state ===
+            "uncertain"
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state,
+
+                confidence,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence,
+
+                usable:
+                    false
+            };
+        }
+
+
+        if (
+            state ===
+            "unstable"
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state,
+
+                confidence,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence,
+
+                usable:
+                    false
+            };
+        }
+
+
+        /*
+         * "masked" não significa
+         * automaticamente deficiência.
+         *
+         * Pode representar mascaramento
+         * perceptual ou conflito entre regiões.
+         *
+         * Portanto, não liberamos tratamento
+         * apenas por esse estado.
+         */
+
+        if (
+            state ===
+            "masked"
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state,
+
+                confidence,
+
+                safety:
+                    "observe",
+
+                regionSpecificEvidence,
+
+                usable:
+                    false
+            };
+        }
+
+
+        if (
+            !regionSpecificEvidence
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state,
+
+                confidence,
+
+                safety:
+                    "cautious",
+
+                regionSpecificEvidence:
+                    false,
+
+                usable:
+                    false
+            };
+        }
+
+
+        if (
+            safety ===
+            "observe"
+        ) {
+
+            return {
+
+                available:
+                    true,
+
+                state,
+
+                confidence,
+
+                safety,
+
+                regionSpecificEvidence,
+
+                usable:
+                    false
+            };
+        }
+
+
+        return {
+
+            available:
+                true,
+
+            state,
+
+            confidence,
+
+            safety,
+
+            regionSpecificEvidence,
+
+            usable:
+                confidence >=
+                this.minimumDiagnosticConfidence
+        };
     }
 
 
@@ -131,6 +834,21 @@ class VocalTreatmentPlan {
             );
 
 
+        const evidenceState =
+            options.evidenceState ||
+            "unknown";
+
+
+        const evidenceSource =
+            options.evidenceSource ||
+            "analyzer";
+
+
+        const processingPermission =
+            options.processingPermission ||
+            "none";
+
+
         /*
          * Sem confiança suficiente,
          * a engine preserva a região.
@@ -157,7 +875,20 @@ class VocalTreatmentPlan {
                     0,
 
                 reconstruction:
-                    false
+                    false,
+
+                evidenceState,
+
+                evidenceSource,
+
+                processingPermission:
+                    "none",
+
+                planningOnly:
+                    true,
+
+                reason:
+                    "insufficient-confidence"
             };
         }
 
@@ -269,7 +1000,9 @@ class VocalTreatmentPlan {
         if (
             options.reconstructionScore >=
             0.80 &&
-            this.reconstructionEnabled
+            this.reconstructionEnabled &&
+            options.allowReconstruction ===
+            true
         ) {
 
             state =
@@ -284,6 +1017,11 @@ class VocalTreatmentPlan {
                 );
         }
 
+
+        /*
+         * A autoridade de processamento
+         * permanece bloqueada nesta versão.
+         */
 
         return {
 
@@ -300,7 +1038,457 @@ class VocalTreatmentPlan {
 
             reconstruction:
                 state ===
-                "reconstruct"
+                "reconstruct",
+
+            evidenceState,
+
+            evidenceSource,
+
+            processingPermission:
+                "none",
+
+            planningOnly:
+                true,
+
+            reason:
+                options.reason ||
+                "analysis-supported-planning"
+        };
+    }
+
+
+    // ======================================
+    // APLICAR CONTEXTO REGIONAL À DECISÃO
+    // ======================================
+    //
+    // Esta função NÃO cria uma nova ordem
+    // de EQ.
+    //
+    // Ela apenas pode reduzir a autoridade
+    // de uma decisão anterior.
+    //
+    // Nunca aumenta autoridade.
+    //
+    // ======================================
+
+    reconcileDecision(
+        decision,
+        context,
+        regionName
+    ) {
+
+        if (
+            !decision
+        ) {
+
+            return null;
+        }
+
+
+        const regional =
+            this.getRegionalEvidence(
+                context,
+                regionName
+            );
+
+
+        /*
+         * Sem contexto novo:
+         *
+         * preservar comportamento V0.1.
+         */
+
+        if (
+            !context.available
+        ) {
+
+            return {
+
+                ...decision,
+
+                contextApplied:
+                    false,
+
+                regionalState:
+                    "unavailable",
+
+                regionalConfidence:
+                    0,
+
+                authority:
+                    "legacy-analysis"
+            };
+        }
+
+
+        /*
+         * Qualquer conflito faz fallback
+         * para preservação.
+         */
+
+        if (
+            context.diagnostic.conflicts
+        ) {
+
+            return {
+
+                ...decision,
+
+                state:
+                    "preserve",
+
+                targetDb:
+                    0,
+
+                reconstruction:
+                    false,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    "uncertain",
+
+                regionalConfidence:
+                    0,
+
+                authority:
+                    "diagnostic-fallback",
+
+                processingPermission:
+                    "none",
+
+                reason:
+                    "conflicting-evidence"
+            };
+        }
+
+
+        /*
+         * Diagnóstico global incerto:
+         * não há autorização para tratamento.
+         */
+
+        if (
+            context.diagnostic.state ===
+            "uncertain"
+        ) {
+
+            return {
+
+                ...decision,
+
+                state:
+                    "preserve",
+
+                targetDb:
+                    0,
+
+                reconstruction:
+                    false,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    "uncertain",
+
+                regionalConfidence:
+                    0,
+
+                authority:
+                    "diagnostic-fallback",
+
+                processingPermission:
+                    "none",
+
+                reason:
+                    "diagnostic-uncertain"
+            };
+        }
+
+
+        /*
+         * Sem evidência regional específica,
+         * não aumentamos a decisão.
+         *
+         * A análise original continua registrada,
+         * mas a autoridade permanece observacional.
+         */
+
+        if (
+            !regional.usable
+        ) {
+
+            return {
+
+                ...decision,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    regional.state,
+
+                regionalConfidence:
+                    regional.confidence,
+
+                authority:
+                    "global-evidence-only",
+
+                processingPermission:
+                    "none",
+
+                planningOnly:
+                    true
+            };
+        }
+
+
+        /*
+         * Estado natural:
+         *
+         * preservação tem prioridade.
+         */
+
+        if (
+            regional.state ===
+            "natural"
+        ) {
+
+            return {
+
+                ...decision,
+
+                state:
+                    "preserve",
+
+                targetDb:
+                    0,
+
+                reconstruction:
+                    false,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    "natural",
+
+                regionalConfidence:
+                    regional.confidence,
+
+                authority:
+                    "regional-evidence",
+
+                processingPermission:
+                    "none",
+
+                reason:
+                    "natural-region-preserved"
+            };
+        }
+
+
+        /*
+         * Estado elevado:
+         *
+         * Pode confirmar uma decisão
+         * de excesso já existente.
+         *
+         * Nunca cria correção do zero.
+         */
+
+        if (
+            regional.state ===
+            "elevated"
+        ) {
+
+            if (
+                decision.state ===
+                    "correct" ||
+                decision.state ===
+                    "improve"
+            ) {
+
+                return {
+
+                    ...decision,
+
+                    contextApplied:
+                        true,
+
+                    regionalState:
+                        "elevated",
+
+                    regionalConfidence:
+                        regional.confidence,
+
+                    authority:
+                        "regional-confirmed",
+
+                    processingPermission:
+                        "none",
+
+                    planningOnly:
+                        true,
+
+                    reason:
+                        "regional-elevation-confirms-analysis"
+                };
+            }
+
+
+            return {
+
+                ...decision,
+
+                state:
+                    "preserve",
+
+                targetDb:
+                    0,
+
+                reconstruction:
+                    false,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    "elevated",
+
+                regionalConfidence:
+                    regional.confidence,
+
+                authority:
+                    "regional-evidence-insufficient-for-new-treatment",
+
+                processingPermission:
+                    "none",
+
+                reason:
+                    "elevated-state-does-not-create-treatment-alone"
+            };
+        }
+
+
+        /*
+         * Estado recessed:
+         *
+         * Pode confirmar uma deficiência
+         * já detectada.
+         *
+         * Nunca cria boost automaticamente.
+         */
+
+        if (
+            regional.state ===
+            "recessed"
+        ) {
+
+            if (
+                decision.state ===
+                "improve"
+            ) {
+
+                return {
+
+                    ...decision,
+
+                    contextApplied:
+                        true,
+
+                    regionalState:
+                        "recessed",
+
+                    regionalConfidence:
+                        regional.confidence,
+
+                    authority:
+                        "regional-confirmed",
+
+                    processingPermission:
+                        "none",
+
+                    planningOnly:
+                        true,
+
+                    reason:
+                        "regional-recession-confirms-analysis"
+                };
+            }
+
+
+            return {
+
+                ...decision,
+
+                state:
+                    "preserve",
+
+                targetDb:
+                    0,
+
+                reconstruction:
+                    false,
+
+                contextApplied:
+                    true,
+
+                regionalState:
+                    "recessed",
+
+                regionalConfidence:
+                    regional.confidence,
+
+                authority:
+                    "regional-evidence-insufficient-for-new-treatment",
+
+                processingPermission:
+                    "none",
+
+                reason:
+                    "recessed-state-does-not-create-treatment-alone"
+            };
+        }
+
+
+        /*
+         * Qualquer estado desconhecido
+         * retorna ao modo conservador.
+         */
+
+        return {
+
+            ...decision,
+
+            state:
+                "preserve",
+
+            targetDb:
+                0,
+
+            reconstruction:
+                false,
+
+            contextApplied:
+                true,
+
+            regionalState:
+                "uncertain",
+
+            regionalConfidence:
+                0,
+
+            authority:
+                "diagnostic-fallback",
+
+            processingPermission:
+                "none",
+
+            reason:
+                "unsupported-regional-state"
         };
     }
 
@@ -494,9 +1682,6 @@ class VocalTreatmentPlan {
 
         /*
          * Relação médio / médio-grave.
-         *
-         * Uma relação muito alta pode
-         * sugerir concentração nos médios.
          */
 
         const ratio =
@@ -875,9 +2060,25 @@ class VocalTreatmentPlan {
     // ======================================
     // GERAR PLANO
     // ======================================
+    //
+    // Compatibilidade:
+    //
+    // createPlan(analysis)
+    //
+    // continua funcionando.
+    //
+    // Nova forma:
+    //
+    // createPlan(
+    //     analysis,
+    //     spectralContext
+    // )
+    //
+    // ======================================
 
     createPlan(
-        analysis
+        analysis,
+        spectralContext = null
     ) {
 
         if (
@@ -887,6 +2088,67 @@ class VocalTreatmentPlan {
             throw new Error(
                 "Análise vocal inválida."
             );
+        }
+
+
+        const context =
+            this.normalizeSpectralContext(
+                spectralContext
+            );
+
+
+        const rawRegions = {
+
+            bass:
+                this.analyzeBass(
+                    analysis
+                ),
+
+            body:
+                this.analyzeBody(
+                    analysis
+                ),
+
+            mid:
+                this.analyzeMid(
+                    analysis
+                ),
+
+            presence:
+                this.analyzePresence(
+                    analysis
+                ),
+
+            harshness:
+                this.analyzeHarshness(
+                    analysis
+                ),
+
+            sibilance:
+                this.analyzeSibilance(
+                    analysis
+                ),
+
+            air:
+                this.analyzeAir(
+                    analysis
+                )
+        };
+
+
+        const regions = {};
+
+
+        for (
+            const key in rawRegions
+        ) {
+
+            regions[key] =
+                this.reconcileDecision(
+                    rawRegions[key],
+                    context,
+                    key
+                );
         }
 
 
@@ -900,42 +2162,41 @@ class VocalTreatmentPlan {
             // REGIÕES
             // ==================================
 
-            regions: {
+            regions,
 
-                bass:
-                    this.analyzeBass(
-                        analysis
-                    ),
 
-                body:
-                    this.analyzeBody(
-                        analysis
-                    ),
+            // ==================================
+            // CONTEXTO ESPECTRAL
+            // ==================================
 
-                mid:
-                    this.analyzeMid(
-                        analysis
-                    ),
+            spectralContext: {
 
-                presence:
-                    this.analyzePresence(
-                        analysis
-                    ),
+                available:
+                    context.available,
 
-                harshness:
-                    this.analyzeHarshness(
-                        analysis
-                    ),
+                reference:
+                    context.spectral.reference,
 
-                sibilance:
-                    this.analyzeSibilance(
-                        analysis
-                    ),
+                tonalDirection:
+                    context.spectral.tonalDirection,
 
-                air:
-                    this.analyzeAir(
-                        analysis
-                    )
+                confidence:
+                    context.spectral.confidence,
+
+                diagnosticState:
+                    context.diagnostic.state,
+
+                diagnosticConfidence:
+                    context.diagnostic.confidence,
+
+                regionalCoverage:
+                    context.diagnostic.regionalCoverage,
+
+                conflicts:
+                    context.diagnostic.conflicts,
+
+                safety:
+                    context.diagnostic.safety
             },
 
 
@@ -946,7 +2207,10 @@ class VocalTreatmentPlan {
             reconstruction: {
 
                 enabled:
-                    this.reconstructionEnabled,
+                    false,
+
+                authority:
+                    false,
 
                 body:
                     false,
@@ -972,12 +2236,92 @@ class VocalTreatmentPlan {
                     this.maxCutDb,
 
                 minimumConfidence:
-                    this.minimumConfidence
+                    this.minimumConfidence,
+
+                minimumDiagnosticConfidence:
+                    this.minimumDiagnosticConfidence,
+
+                minimumRegionalCoverage:
+                    this.minimumRegionalCoverage,
+
+                processingPermission:
+                    "none",
+
+                audioProcessing:
+                    false,
+
+                filterGeneration:
+                    false,
+
+                gainGeneration:
+                    false,
+
+                reconstruction:
+                    false,
+
+                planningOnly:
+                    true
             }
         };
 
 
         return plan;
+    }
+
+
+    // ======================================
+    // VERIFICAR SE O PLANO É OBSERVACIONAL
+    // ======================================
+
+    isAnalysisOnly(
+        plan
+    ) {
+
+        if (
+            !plan ||
+            !plan.safety
+        ) {
+
+            return false;
+        }
+
+
+        return (
+
+            plan.safety
+                .processingPermission ===
+            "none"
+
+        ) && (
+
+            plan.safety
+                .audioProcessing ===
+            false
+
+        ) && (
+
+            plan.safety
+                .filterGeneration ===
+            false
+
+        ) && (
+
+            plan.safety
+                .gainGeneration ===
+            false
+
+        ) && (
+
+            plan.safety
+                .reconstruction ===
+            false
+
+        ) && (
+
+            plan.safety
+                .planningOnly ===
+            true
+        );
     }
 
 
@@ -1025,7 +2369,28 @@ class VocalTreatmentPlan {
                     region.targetDb,
 
                 confidence:
-                    region.confidence
+                    region.confidence,
+
+                regionalState:
+                    region.regionalState ||
+                    "unavailable",
+
+                regionalConfidence:
+                    this.safeNumber(
+                        region.regionalConfidence
+                    ),
+
+                authority:
+                    region.authority ||
+                    "unknown",
+
+                planningOnly:
+                    region.planningOnly !==
+                    false,
+
+                reason:
+                    region.reason ||
+                    "unspecified"
             });
         }
 
