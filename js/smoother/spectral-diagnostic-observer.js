@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.6
+// V0.7
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -16,6 +16,7 @@
 // - correlacionar estados entre regiões;
 // - produzir diagnóstico contextual;
 // - calcular confiança diagnóstica;
+// - validar consistência das evidências;
 // - manter fallback conservador.
 //
 // ESTE MÓDULO NÃO:
@@ -42,7 +43,7 @@ class SpectralDiagnosticObserver {
 
     constructor(options = {}) {
 
-        this.version = "0.6";
+        this.version = "0.7";
 
         this.minimumConfidence =
             options.minimumConfidence ?? 0.55;
@@ -67,6 +68,15 @@ class SpectralDiagnosticObserver {
 
         this.naturalRelativeMax =
             options.naturalRelativeMax ?? 1.10;
+
+        this.minimumCoherence =
+            options.minimumCoherence ?? 0.50;
+
+        this.maximumUncertainRatio =
+            options.maximumUncertainRatio ?? 0.50;
+
+        this.maximumConflictRatio =
+            options.maximumConflictRatio ?? 0.40;
 
         this.lastSnapshot = null;
 
@@ -111,6 +121,23 @@ class SpectralDiagnosticObserver {
     }
 
 
+    normalizeConfidence(value) {
+
+        const number =
+            this.safeNumber(value, 0);
+
+        if (!Number.isFinite(number)) {
+            return 0;
+        }
+
+        return this.clamp(
+            number,
+            0,
+            1
+        );
+    }
+
+
     // ======================================
     // VALIDAÇÃO
     // ======================================
@@ -147,6 +174,64 @@ class SpectralDiagnosticObserver {
             "contextual",
             "supported"
         ].includes(state);
+    }
+
+
+    isValidEvidenceLevel(level) {
+
+        return [
+            "measure",
+            "strong-inference",
+            "moderate-inference",
+            "hypothesis",
+            "indeterminate",
+            "none"
+        ].includes(level);
+    }
+
+
+    normalizeEvidenceLevel(level) {
+
+        const normalized =
+            this.safeString(
+                level,
+                "none"
+            );
+
+        return this.isValidEvidenceLevel(
+            normalized
+        )
+            ? normalized
+            : "none";
+    }
+
+
+    evidenceLevelWeight(level) {
+
+        switch (
+            this.normalizeEvidenceLevel(
+                level
+            )
+        ) {
+
+            case "measure":
+                return 1.00;
+
+            case "strong-inference":
+                return 0.85;
+
+            case "moderate-inference":
+                return 0.65;
+
+            case "hypothesis":
+                return 0.40;
+
+            case "indeterminate":
+                return 0.10;
+
+            default:
+                return 0;
+        }
     }
 
 
@@ -210,15 +295,13 @@ class SpectralDiagnosticObserver {
         return {
 
             support:
-                this.safeNumber(region.support),
+                this.normalizeConfidence(
+                    region.support
+                ),
 
             confidence:
-                this.clamp(
-                    this.safeNumber(
-                        region.confidence
-                    ),
-                    0,
-                    1
+                this.normalizeConfidence(
+                    region.confidence
                 ),
 
             evidence:
@@ -275,12 +358,8 @@ class SpectralDiagnosticObserver {
                     : "uncertain",
 
             stateConfidence:
-                this.clamp(
-                    this.safeNumber(
-                        region.stateConfidence
-                    ),
-                    0,
-                    1
+                this.normalizeConfidence(
+                    region.stateConfidence
                 ),
 
             stateEvidence:
@@ -320,42 +399,42 @@ class SpectralDiagnosticObserver {
                 ),
 
             stability:
-                this.clamp(
-                    this.safeNumber(
-                        region.stability
-                    ),
-                    0,
-                    1
+                this.normalizeConfidence(
+                    region.stability
                 ),
 
             activity:
-                this.clamp(
-                    this.safeNumber(
-                        region.activity
-                    ),
-                    0,
-                    1
+                this.normalizeConfidence(
+                    region.activity
                 ),
 
             bandCount:
-                this.safeNumber(
-                    region.bandCount
+                Math.max(
+                    0,
+                    this.safeNumber(
+                        region.bandCount
+                    )
                 ),
 
             lowHz:
-                this.safeNumber(
-                    region.lowHz
+                Math.max(
+                    0,
+                    this.safeNumber(
+                        region.lowHz
+                    )
                 ),
 
             highHz:
-                this.safeNumber(
-                    region.highHz
+                Math.max(
+                    0,
+                    this.safeNumber(
+                        region.highHz
+                    )
                 ),
 
             evidenceLevel:
-                this.safeString(
-                    region.evidenceLevel,
-                    "none"
+                this.normalizeEvidenceLevel(
+                    region.evidenceLevel
                 )
         };
     }
@@ -544,6 +623,12 @@ class SpectralDiagnosticObserver {
         }
 
 
+        const evidenceWeight =
+            this.evidenceLevelWeight(
+                region.evidenceLevel
+            );
+
+
         return (
 
             region.confidence >=
@@ -556,7 +641,12 @@ class SpectralDiagnosticObserver {
                 this.minimumStability &&
 
             region.regionSpecificEvidence ===
-                true
+                true &&
+
+            evidenceWeight >=
+                this.evidenceLevelWeight(
+                    "moderate-inference"
+                )
         );
     }
 
@@ -972,6 +1062,192 @@ class SpectralDiagnosticObserver {
 
     // ======================================
     // NOVO:
+    // DETECÇÃO DE CONFLITO
+    // ======================================
+
+    detectEvidenceConflicts(regions) {
+
+        const r =
+            regions || {};
+
+        const names =
+            Object.keys(r);
+
+
+        if (
+            names.length === 0
+        ) {
+
+            return {
+
+                conflict: true,
+
+                conflictRatio: 1,
+
+                conflicts: [
+                    "no-regional-evidence"
+                ]
+            };
+        }
+
+
+        const conflicts = [];
+
+
+        const lowStates = [
+            "bass",
+            "body",
+            "lowMid"
+        ];
+
+
+        const upperStates = [
+            "presence",
+            "upperPresence",
+            "air"
+        ];
+
+
+        const lowElevated =
+            lowStates.filter(
+                name =>
+                    r[name] &&
+                    r[name].acousticState ===
+                        "elevated"
+            ).length;
+
+
+        const upperRecessed =
+            upperStates.filter(
+                name =>
+                    r[name] &&
+                    r[name].acousticState ===
+                        "recessed"
+            ).length;
+
+
+        if (
+            lowElevated > 0 &&
+            upperRecessed > 0
+        ) {
+
+            // Isso é um padrão espectral,
+            // não um conflito por si só.
+            //
+            // Portanto NÃO adicionamos
+            // conflito aqui.
+        }
+
+
+        const unstable =
+            names.filter(
+                name =>
+                    r[name] &&
+                    r[name].acousticState ===
+                        "unstable"
+            ).length;
+
+
+        if (
+            unstable >
+            names.length *
+            this.maximumConflictRatio
+        ) {
+
+            conflicts.push(
+                "regional-instability-dominant"
+            );
+        }
+
+
+        const uncertain =
+            names.filter(
+                name =>
+                    !r[name] ||
+                    r[name].acousticState ===
+                        "uncertain"
+            ).length;
+
+
+        const uncertainRatio =
+            uncertain /
+            names.length;
+
+
+        if (
+            uncertainRatio >
+            this.maximumUncertainRatio
+        ) {
+
+            conflicts.push(
+                "uncertainty-dominant"
+            );
+        }
+
+
+        const strongStates =
+            names.filter(
+                name => {
+
+                    const region =
+                        r[name];
+
+                    if (!region) {
+                        return false;
+                    }
+
+                    return (
+                        region.stateConfidence >=
+                        this.minimumConfidence &&
+                        region.evidenceLevel !==
+                            "hypothesis"
+                    );
+                }
+            ).length;
+
+
+        const coherence =
+            names.length > 0
+                ? strongStates /
+                    names.length
+                : 0;
+
+
+        if (
+            coherence <
+            this.minimumCoherence
+        ) {
+
+            conflicts.push(
+                "insufficient-coherent-regional-support"
+            );
+        }
+
+
+        const conflictRatio =
+            this.clamp(
+
+                conflicts.length /
+                3,
+
+                0,
+                1
+            );
+
+
+        return {
+
+            conflict:
+                conflicts.length > 0,
+
+            conflictRatio,
+
+            conflicts
+        };
+    }
+
+
+    // ======================================
     // CORRELAÇÃO CONTEXTUAL
     // ======================================
 
@@ -1120,13 +1396,6 @@ class SpectralDiagnosticObserver {
         // ----------------------------------
         // GRAVE ISOLADO
         // ----------------------------------
-        //
-        // MUITO IMPORTANTE:
-        //
-        // grave elevado sozinho NÃO é
-        // classificado como problema.
-        //
-        // ----------------------------------
 
         if (
             bass === "elevated" &&
@@ -1274,6 +1543,25 @@ class SpectralDiagnosticObserver {
 
 
         // ----------------------------------
+        // CONFIANÇA DOS PADRÕES
+        // ----------------------------------
+
+        patterns.forEach(
+            pattern => {
+
+                pattern.confidence =
+                    this.clamp(
+                        this.safeNumber(
+                            pattern.confidence
+                        ),
+                        0,
+                        1
+                    );
+            }
+        );
+
+
+        // ----------------------------------
         // DIAGNÓSTICO GLOBAL
         // ----------------------------------
 
@@ -1337,6 +1625,28 @@ class SpectralDiagnosticObserver {
         }
 
 
+        const conflict =
+            this.detectEvidenceConflicts(
+                regions
+            );
+
+
+        if (
+            conflict.conflict
+        ) {
+
+            globalState =
+                "uncertain";
+
+            globalConfidence =
+                globalConfidence *
+                (
+                    1 -
+                    conflict.conflictRatio
+                );
+        }
+
+
         if (
             patterns.some(
                 pattern =>
@@ -1354,9 +1664,17 @@ class SpectralDiagnosticObserver {
 
             globalState,
 
-            globalConfidence,
+            globalConfidence:
+                this.clamp(
+                    globalConfidence,
+                    0,
+                    1
+                ),
 
             patterns,
+
+            evidenceConflicts:
+                conflict,
 
             treatmentAuthority:
                 "none",
@@ -1452,21 +1770,13 @@ class SpectralDiagnosticObserver {
                     ),
 
                 confidence:
-                    this.clamp(
-                        this.safeNumber(
-                            spectral.confidence
-                        ),
-                        0,
-                        1
+                    this.normalizeConfidence(
+                        spectral.confidence
                     ),
 
                 tonalConfidence:
-                    this.clamp(
-                        this.safeNumber(
-                            spectral.tonalConfidence
-                        ),
-                        0,
-                        1
+                    this.normalizeConfidence(
+                        spectral.tonalConfidence
                     ),
 
                 tonalTendency:
@@ -1513,7 +1823,13 @@ class SpectralDiagnosticObserver {
                     this.minimumConfidence,
 
                 minimumRegionalEvidence:
-                    this.minimumRegionalEvidence
+                    this.minimumRegionalEvidence,
+
+                minimumCoherence:
+                    this.minimumCoherence,
+
+                fallbackState:
+                    "uncertain"
             },
 
             safety: {
@@ -1549,12 +1865,8 @@ class SpectralDiagnosticObserver {
                             ),
 
                         confidence:
-                            this.clamp(
-                                this.safeNumber(
-                                    regional.confidence
-                                ),
-                                0,
-                                1
+                            this.normalizeConfidence(
+                                regional.confidence
                             ),
 
                         evidence:
@@ -1579,12 +1891,8 @@ class SpectralDiagnosticObserver {
                             ),
 
                         temporalEvidence:
-                            this.clamp(
-                                this.safeNumber(
-                                    regional.temporalEvidence
-                                ),
-                                0,
-                                1
+                            this.normalizeConfidence(
+                                regional.temporalEvidence
                             ),
 
                         processingPermission:
@@ -1618,6 +1926,9 @@ class SpectralDiagnosticObserver {
 
                 processingPermission:
                     "none",
+
+                processingAllowed:
+                    false,
 
                 stateSummary:
                     this.summarizeStates(
@@ -1727,7 +2038,25 @@ class SpectralDiagnosticObserver {
                 : 0;
 
 
-        const confidence =
+        const conflict =
+            snapshot
+                .contextualDiagnosis
+                ? snapshot
+                    .contextualDiagnosis
+                    .evidenceConflicts
+                : {
+
+                    conflict: true,
+
+                    conflictRatio: 1,
+
+                    conflicts: [
+                        "contextual-diagnosis-unavailable"
+                    ]
+                };
+
+
+        let confidence =
             this.clamp(
 
                 (
@@ -1755,39 +2084,115 @@ class SpectralDiagnosticObserver {
             );
 
 
+        // ----------------------------------
+        // PENALIZAÇÃO DE CONFLITO
+        // ----------------------------------
+
+        if (
+            conflict.conflict
+        ) {
+
+            confidence =
+                confidence *
+                (
+                    1 -
+                    conflict.conflictRatio
+                );
+        }
+
+
+        // ----------------------------------
+        // FALLBACK CONSERVADOR
+        // ----------------------------------
+
         let conclusion =
             "insufficient-evidence";
 
 
+        let diagnosticState =
+            "uncertain";
+
+
         if (
-            confidence >=
+            names.length === 0
+        ) {
+
+            conclusion =
+                "no-regional-evidence";
+
+            diagnosticState =
+                "uncertain";
+
+        } else if (
+            uncertainRegions /
+            names.length >
+            this.maximumUncertainRatio
+        ) {
+
+            conclusion =
+                "evidence-remains-uncertain";
+
+            diagnosticState =
+                "uncertain";
+
+        } else if (
+            conflict.conflict
+        ) {
+
+            conclusion =
+                "evidence-conflict-requires-caution";
+
+            diagnosticState =
+                "uncertain";
+
+        } else if (
+            confidence <
             this.minimumConfidence
         ) {
 
-            if (
-                uncertainRegions >=
-                Math.ceil(
-                    names.length * 0.5
-                )
-            ) {
+            conclusion =
+                "insufficient-confidence";
 
-                conclusion =
-                    "evidence-remains-uncertain";
+            diagnosticState =
+                "uncertain";
 
-            } else if (
-                stateSummary.unstable >
-                0
-            ) {
+        } else if (
+            stateSummary.unstable >
+            0
+        ) {
 
-                conclusion =
-                    "regional-behavior-requires-caution";
+            conclusion =
+                "regional-behavior-requires-caution";
 
-            } else {
+            diagnosticState =
+                "contextual";
 
-                conclusion =
-                    "regional-evidence-coherent";
-            }
+        } else {
+
+            conclusion =
+                "regional-evidence-coherent";
+
+            diagnosticState =
+                "contextual";
         }
+
+
+        // ----------------------------------
+        // AUTORIDADE FINAL
+        // ----------------------------------
+
+        //
+        // Mesmo quando o diagnóstico é
+        // coerente, esta camada continua
+        // sem autoridade DSP.
+        //
+
+        const processingAllowed =
+            false;
+
+
+        const processingPermission =
+            "none";
 
 
         return {
@@ -1796,14 +2201,14 @@ class SpectralDiagnosticObserver {
 
             confidence,
 
+            diagnosticState,
+
             observationOnly:
                 true,
 
-            processingPermission:
-                "none",
+            processingPermission,
 
-            processingAllowed:
-                false,
+            processingAllowed,
 
             usableRegions,
 
@@ -1812,6 +2217,9 @@ class SpectralDiagnosticObserver {
             uncertainRegions,
 
             stateSummary,
+
+            evidenceConflicts:
+                conflict,
 
             contextualDiagnosis:
                 snapshot
