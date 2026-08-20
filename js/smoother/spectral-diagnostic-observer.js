@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.5
+// V0.6
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -9,16 +9,14 @@
 //
 // RESPONSABILIDADE:
 //
-// - receber o contexto do
-//   SpectralTreatmentBridge;
-// - receber evidência do
-//   SpectralRegionalMeasurement;
-// - validar a estrutura;
-// - criar snapshots seguros;
-// - interpretar a qualidade da evidência;
-// - distinguir evidência global de
-//   evidência específica de região;
-// - classificar estados acústicos regionais.
+// - receber contexto espectral;
+// - receber medições regionais;
+// - validar evidências;
+// - classificar estados acústicos;
+// - correlacionar estados entre regiões;
+// - produzir diagnóstico contextual;
+// - calcular confiança diagnóstica;
+// - manter fallback conservador.
 //
 // ESTE MÓDULO NÃO:
 //
@@ -26,19 +24,15 @@
 // - cria filtros;
 // - altera ganho;
 // - altera timbre;
-// - altera o TreatmentPlan;
 // - executa DSP;
-// - gera parâmetros de EQ;
-// - gera parâmetros de compressão;
-// - reconstrói espectro.
+// - gera EQ;
+// - gera compressão;
+// - gera de-esser;
+// - executa TreatmentPlan.
 //
-// REGRA FUNDAMENTAL:
+// REGRA:
 //
-// Estado acústico NÃO é ordem de processamento.
-//
-// A medição regional aumenta a qualidade
-// da evidência disponível, mas não concede
-// autoridade DSP.
+// DIAGNÓSTICO != TRATAMENTO
 //
 // ==========================================
 
@@ -46,219 +40,113 @@
 class SpectralDiagnosticObserver {
 
 
-    constructor(
-        options = {}
-    ) {
+    constructor(options = {}) {
 
-
-        this.version =
-            "0.5";
-
-
-        // ==================================
-        // CONFIGURAÇÃO CONSERVADORA
-        // ==================================
+        this.version = "0.6";
 
         this.minimumConfidence =
-            options.minimumConfidence ??
-            0.55;
-
+            options.minimumConfidence ?? 0.55;
 
         this.minimumRegionalEvidence =
-            options.minimumRegionalEvidence ??
-            0.60;
-
+            options.minimumRegionalEvidence ?? 0.60;
 
         this.minimumStability =
-            options.minimumStability ??
-            0.45;
-
+            options.minimumStability ?? 0.45;
 
         this.minimumActivity =
-            options.minimumActivity ??
-            0.08;
-
-
-        /*
-         * Os limiares abaixo não representam
-         * EQ ou intensidade de tratamento.
-         *
-         * São apenas limites diagnósticos
-         * usados para decidir se uma evidência
-         * é suficientemente forte para uma
-         * classificação.
-         */
+            options.minimumActivity ?? 0.08;
 
         this.highRelativeEnergy =
-            options.highRelativeEnergy ??
-            1.20;
-
+            options.highRelativeEnergy ?? 1.20;
 
         this.lowRelativeEnergy =
-            options.lowRelativeEnergy ??
-            0.80;
-
+            options.lowRelativeEnergy ?? 0.80;
 
         this.naturalRelativeMin =
-            options.naturalRelativeMin ??
-            0.90;
-
+            options.naturalRelativeMin ?? 0.90;
 
         this.naturalRelativeMax =
-            options.naturalRelativeMax ??
-            1.10;
+            options.naturalRelativeMax ?? 1.10;
 
+        this.lastSnapshot = null;
 
-        this.lastSnapshot =
-            null;
-
-
-        this.lastInterpretation =
-            null;
+        this.lastInterpretation = null;
     }
 
 
     // ======================================
-    // NÚMERO SEGURO
+    // UTILITÁRIOS
     // ======================================
 
-    safeNumber(
-        value,
-        fallback = 0
-    ) {
+    safeNumber(value, fallback = 0) {
 
-        const number =
-            Number(
-                value
-            );
+        const number = Number(value);
 
-
-        return Number.isFinite(
-            number
-        )
+        return Number.isFinite(number)
             ? number
             : fallback;
     }
 
 
-    // ======================================
-    // TEXTO SEGURO
-    // ======================================
+    safeString(value, fallback = "unknown") {
 
-    safeString(
-        value,
-        fallback = "unknown"
-    ) {
-
-        if (
-            typeof value !==
-            "string"
-        ) {
-
-            return fallback;
-        }
-
-
-        return value;
+        return typeof value === "string"
+            ? value
+            : fallback;
     }
 
 
-    // ======================================
-    // BOOLEANO SEGURO
-    // ======================================
+    safeBoolean(value) {
 
-    safeBoolean(
-        value
-    ) {
-
-        return value ===
-            true;
+        return value === true;
     }
 
 
-    // ======================================
-    // CLAMP
-    // ======================================
-
-    clamp(
-        value,
-        min,
-        max
-    ) {
+    clamp(value, min, max) {
 
         return Math.min(
             max,
-            Math.max(
-                min,
-                value
-            )
+            Math.max(min, value)
         );
     }
 
 
     // ======================================
-    // VALIDAR CONTEXTO
+    // VALIDAÇÃO
     // ======================================
 
-    validateContext(
-        context
-    ) {
+    validateContext(context) {
 
         if (
             !context ||
-            typeof context !==
-            "object"
+            typeof context !== "object"
         ) {
-
             return false;
         }
-
 
         if (
             !context.spectral ||
             !context.safety
         ) {
-
             return false;
         }
-
 
         return true;
     }
 
 
-    // ======================================
-    // VALIDAR ESTADO ACÚSTICO
-    // ======================================
+    isValidAcousticState(state) {
 
-    isValidAcousticState(
-        state
-    ) {
-
-        const validStates = [
-
+        return [
             "natural",
-
             "elevated",
-
             "recessed",
-
             "unstable",
-
             "masked",
-
             "uncertain",
-
             "contextual",
-
             "supported"
-        ];
-
-
-        return validStates
-            .indexOf(
-                state
-            ) !== -1;
+        ].includes(state);
     }
 
 
@@ -266,92 +154,48 @@ class SpectralDiagnosticObserver {
     // COPIAR REGIÃO
     // ======================================
 
-    copyRegion(
-        region
-    ) {
+    copyRegion(region) {
 
         if (
             !region ||
-            typeof region !==
-            "object"
+            typeof region !== "object"
         ) {
 
             return {
 
-                support:
-                    0,
+                support: 0,
+                confidence: 0,
+                evidence: "low",
+                safety: "observe",
+                usable: false,
 
-                confidence:
-                    0,
+                regionSpecificEvidence: false,
+                evidenceSource: "unknown",
+                reason: "region-unavailable",
 
-                evidence:
-                    "low",
+                reference: "unknown",
+                tonalDirection: "unknown",
 
-                safety:
-                    "observe",
+                acousticState: "uncertain",
+                stateConfidence: 0,
+                stateEvidence: "none",
 
-                usable:
-                    false,
+                temporalEvidence: false,
+                regionalMeasurement: false,
 
-                regionSpecificEvidence:
-                    false,
+                energy: 0,
+                energyShare: 0,
+                normalizedEnergy: 0,
+                relativeEnergy: 0,
 
-                evidenceSource:
-                    "unknown",
+                stability: 0,
+                activity: 0,
 
-                reason:
-                    "region-unavailable",
+                bandCount: 0,
+                lowHz: 0,
+                highHz: 0,
 
-                reference:
-                    "unknown",
-
-                tonalDirection:
-                    "unknown",
-
-                acousticState:
-                    "uncertain",
-
-                stateConfidence:
-                    0,
-
-                stateEvidence:
-                    "none",
-
-                temporalEvidence:
-                    false,
-
-                regionalMeasurement:
-                    false,
-
-                energy:
-                    0,
-
-                energyShare:
-                    0,
-
-                normalizedEnergy:
-                    0,
-
-                relativeEnergy:
-                    0,
-
-                stability:
-                    0,
-
-                activity:
-                    0,
-
-                bandCount:
-                    0,
-
-                lowHz:
-                    0,
-
-                highHz:
-                    0,
-
-                evidenceLevel:
-                    "none"
+                evidenceLevel: "none"
             };
         }
 
@@ -363,20 +207,10 @@ class SpectralDiagnosticObserver {
             );
 
 
-        const acousticState =
-            this.isValidAcousticState(
-                requestedState
-            )
-                ? requestedState
-                : "uncertain";
-
-
         return {
 
             support:
-                this.safeNumber(
-                    region.support
-                ),
+                this.safeNumber(region.support),
 
             confidence:
                 this.clamp(
@@ -434,7 +268,11 @@ class SpectralDiagnosticObserver {
                 ),
 
             acousticState:
-                acousticState,
+                this.isValidAcousticState(
+                    requestedState
+                )
+                    ? requestedState
+                    : "uncertain",
 
             stateConfidence:
                 this.clamp(
@@ -524,45 +362,28 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // MAPEAR MEDIÇÃO REGIONAL
+    // MAPA REGIONAL
     // ======================================
 
     getRegionalMeasurementMap() {
 
         return {
 
-            sub:
-                "sub",
-
-            bass:
-                "bass",
-
-            body:
-                "body",
-
-            lowMid:
-                "lowMid",
-
-            mid:
-                "mid",
-
-            presence:
-                "presence",
-
-            upperPresence:
-                "upperPresence",
-
-            sibilance:
-                "sibilance",
-
-            air:
-                "air"
+            sub: "sub",
+            bass: "bass",
+            body: "body",
+            lowMid: "lowMid",
+            mid: "mid",
+            presence: "presence",
+            upperPresence: "upperPresence",
+            sibilance: "sibilance",
+            air: "air"
         };
     }
 
 
     // ======================================
-    // ENRIQUECER REGIÕES COM MEDIÇÃO
+    // MESCLAR MEDIÇÃO
     // ======================================
 
     mergeRegionalMeasurement(
@@ -570,205 +391,142 @@ class SpectralDiagnosticObserver {
         regionalMeasurement
     ) {
 
-        const baseRegions =
+        const base =
             regions &&
-            typeof regions ===
-            "object"
-
+            typeof regions === "object"
                 ? regions
                 : {};
 
 
-        const measurement =
-            regionalMeasurement &&
-            typeof regionalMeasurement ===
-            "object"
-
-                ? regionalMeasurement
-                : null;
-
-
         if (
-            !measurement ||
-            !measurement.regions ||
-            typeof measurement.regions !==
-            "object"
+            !regionalMeasurement ||
+            typeof regionalMeasurement !==
+                "object" ||
+            !regionalMeasurement.regions ||
+            typeof regionalMeasurement.regions !==
+                "object"
         ) {
 
-            return baseRegions;
+            return base;
         }
 
 
-        const merged =
-            {};
-
-
-        const baseNames =
-            Object.keys(
-                baseRegions
-            );
-
-
-        for (
-            let i = 0;
-            i < baseNames.length;
-            i++
-        ) {
-
-            const name =
-                baseNames[i];
-
-
-            merged[name] =
-                baseRegions[name];
-        }
+        const merged = {
+            ...base
+        };
 
 
         const map =
             this.getRegionalMeasurementMap();
 
 
-        const measurementNames =
-            Object.keys(
-                map
-            );
+        Object.keys(map).forEach(
+            observerName => {
+
+                const measurementName =
+                    map[observerName];
 
 
-        for (
-            let i = 0;
-            i < measurementNames.length;
-            i++
-        ) {
-
-            const observerName =
-                measurementNames[i];
+                const measured =
+                    regionalMeasurement
+                        .regions[
+                            measurementName
+                        ];
 
 
-            const measurementName =
-                map[
-                    observerName
-                ];
+                if (!measured) {
+                    return;
+                }
 
 
-            const measuredRegion =
-                measurement
-                    .regions[
-                        measurementName
-                    ];
+                const existing =
+                    merged[
+                        observerName
+                    ] || {};
 
 
-            if (
-                !measuredRegion
-            ) {
-
-                continue;
-            }
-
-
-            const existingRegion =
                 merged[
                     observerName
-                ] || {};
+                ] = {
 
+                    ...existing,
 
-            merged[
-                observerName
-            ] = {
+                    lowHz:
+                        measured.lowHz ??
+                        existing.lowHz,
 
-                ...existingRegion,
+                    highHz:
+                        measured.highHz ??
+                        existing.highHz,
 
-                lowHz:
-                    measuredRegion.lowHz ??
-                    existingRegion.lowHz,
+                    bandCount:
+                        measured.bandCount ?? 0,
 
-                highHz:
-                    measuredRegion.highHz ??
-                    existingRegion.highHz,
+                    energy:
+                        measured.energy ?? 0,
 
-                bandCount:
-                    measuredRegion.bandCount ??
-                    0,
+                    energyShare:
+                        measured.energyShare ?? 0,
 
-                energy:
-                    measuredRegion.energy ??
-                    0,
+                    relativeEnergy:
+                        measured.relativeEnergy ?? 0,
 
-                energyShare:
-                    measuredRegion.energyShare ??
-                    0,
+                    normalizedEnergy:
+                        measured.normalizedEnergy ?? 0,
 
-                relativeEnergy:
-                    measuredRegion.relativeEnergy ??
-                    0,
+                    stability:
+                        measured.stability ?? 0,
 
-                normalizedEnergy:
-                    measuredRegion.normalizedEnergy ??
-                    0,
+                    confidence:
+                        measured.confidence ?? 0,
 
-                stability:
-                    measuredRegion.stability ??
-                    0,
+                    activity:
+                        measured.activity ?? 0,
 
-                confidence:
-                    measuredRegion.confidence ??
-                    0,
+                    temporalEvidence:
+                        measured.temporalEvidence === true,
 
-                activity:
-                    measuredRegion.activity ??
-                    0,
+                    evidence:
+                        measured.evidence ||
+                        "none",
 
-                temporalEvidence:
-                    measuredRegion.temporalEvidence ===
-                    true,
+                    evidenceLevel:
+                        measured.evidenceLevel ||
+                        measured.evidence ||
+                        "none",
 
-                evidence:
-                    measuredRegion.evidence ||
-                    "none",
+                    usable:
+                        measured.usable === true,
 
-                evidenceLevel:
-                    measuredRegion.evidenceLevel ||
-                    measuredRegion.evidence ||
-                    "none",
+                    regionalMeasurement:
+                        measured.regionalMeasurement === true,
 
-                usable:
-                    measuredRegion.usable ===
-                    true,
+                    regionSpecificEvidence:
+                        measured.regionSpecificEvidence === true,
 
-                regionalMeasurement:
-                    measuredRegion.regionalMeasurement ===
-                    true,
+                    stateConfidence:
+                        measured.stateConfidence ?? 0,
 
-                regionSpecificEvidence:
-                    measuredRegion.regionSpecificEvidence ===
-                    true,
+                    acousticState:
+                        this.isValidAcousticState(
+                            measured.acousticState
+                        )
+                            ? measured.acousticState
+                            : "uncertain",
 
-                stateConfidence:
-                    measuredRegion.stateConfidence ??
-                    0,
+                    stateEvidence:
+                        measured.stateEvidence ||
+                        "none",
 
-                acousticState:
-                    this.isValidAcousticState(
-                        measuredRegion.acousticState
-                    )
-                        ? measuredRegion.acousticState
-                        : "uncertain",
+                    evidenceSource:
+                        "spectral-regional-measurement",
 
-                stateEvidence:
-                    measuredRegion.stateEvidence ||
-                    "none",
-
-                evidenceSource:
-                    "spectral-regional-measurement",
-
-                reason:
-                    measuredRegion.reason ||
-                    "regional-measurement-available",
-
-                measurementBandCount:
-                    measuredRegion.bandCount ??
-                    0
-            };
-        }
+                    reason:
+                        measured.reason ||
+                        "regional-measurement-available"
+                };
+            }
+        );
 
 
         return merged;
@@ -776,125 +534,97 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // EVIDÊNCIA SUFICIENTE
+    // SUFICIÊNCIA
     // ======================================
 
-    hasSufficientEvidence(
-        region
-    ) {
+    hasSufficientEvidence(region) {
 
-        if (
-            !region
-        ) {
-
+        if (!region) {
             return false;
         }
 
 
-        const confidence =
-            this.clamp(
-                this.safeNumber(
-                    region.confidence
-                ),
-                0,
-                1
-            );
+        return (
 
+            region.confidence >=
+                this.minimumConfidence &&
 
-        const support =
-            this.clamp(
-                this.safeNumber(
-                    region.support
-                ),
-                0,
-                1
-            );
+            region.support >=
+                this.minimumRegionalEvidence &&
 
+            region.stability >=
+                this.minimumStability &&
 
-        const stability =
-            this.clamp(
-                this.safeNumber(
-                    region.stability
-                ),
-                0,
-                1
-            );
-
-
-        const regionalEvidence =
             region.regionSpecificEvidence ===
-            true;
+                true
+        );
+    }
 
 
-        if (
-            confidence <
-            this.minimumConfidence
-        ) {
+    hasMeaningfulActivity(region) {
 
+        if (!region) {
             return false;
         }
 
 
-        if (
-            support <
-            this.minimumRegionalEvidence
-        ) {
+        return (
+            region.activity >=
+            this.minimumActivity
+        );
+    }
 
+
+    classifyStability(region) {
+
+        return (
+            region &&
+            region.stability <
+                this.minimumStability
+        );
+    }
+
+
+    detectMaskedState(region) {
+
+        if (!region) {
             return false;
         }
 
 
-        if (
-            stability <
-            this.minimumStability
-        ) {
-
-            return false;
-        }
+        const reason =
+            this.safeString(
+                region.reason,
+                ""
+            ).toLowerCase();
 
 
-        if (
-            !regionalEvidence
-        ) {
+        const evidence =
+            this.safeString(
+                region.evidence,
+                ""
+            ).toLowerCase();
 
-            return false;
-        }
 
-
-        return true;
+        return (
+            reason.includes("mask") ||
+            evidence.includes("mask")
+        );
     }
 
 
     // ======================================
-    // CLASSIFICAR ENERGIA REGIONAL
-    // ======================================
-    //
-    // IMPORTANTE:
-    //
-    // Esta função não decide tratamento.
-    //
-    // Ela somente transforma evidência
-    // suficientemente confiável em uma
-    // classificação observacional.
-    //
+    // CLASSIFICAÇÃO ENERGÉTICA
     // ======================================
 
-    classifyEnergyState(
-        region
-    ) {
+    classifyEnergyState(region) {
 
-        if (
-            !region
-        ) {
+        if (!region) {
 
             return {
 
-                state:
-                    "uncertain",
-
-                confidence:
-                    0,
-
+                state: "uncertain",
+                confidence: 0,
                 evidence:
                     "region-unavailable"
             };
@@ -909,14 +639,11 @@ class SpectralDiagnosticObserver {
 
             return {
 
-                state:
-                    "uncertain",
+                state: "uncertain",
 
                 confidence:
                     this.clamp(
-                        this.safeNumber(
-                            region.confidence
-                        ) *
+                        region.confidence *
                         0.5,
                         0,
                         1
@@ -928,33 +655,20 @@ class SpectralDiagnosticObserver {
         }
 
 
-        const relativeEnergy =
-            this.safeNumber(
-                region.relativeEnergy,
-                NaN
+        const relative =
+            Number(
+                region.relativeEnergy
             );
 
 
-        /*
-         * Se relativeEnergy não estiver
-         * disponível, não tentamos deduzir
-         * um estado através de energia bruta.
-         */
-
         if (
-            !Number.isFinite(
-                relativeEnergy
-            )
+            !Number.isFinite(relative)
         ) {
 
             return {
 
-                state:
-                    "uncertain",
-
-                confidence:
-                    0,
-
+                state: "uncertain",
+                confidence: 0,
                 evidence:
                     "relative-energy-unavailable"
             };
@@ -963,43 +677,37 @@ class SpectralDiagnosticObserver {
 
         const confidence =
             this.clamp(
+
                 (
-                    this.safeNumber(
-                        region.confidence
-                    ) *
+                    region.confidence *
                     0.55
                 ) +
+
                 (
-                    this.safeNumber(
-                        region.stability
-                    ) *
+                    region.stability *
                     0.25
                 ) +
+
                 (
-                    this.safeBoolean(
-                        region.temporalEvidence
-                    )
+                    region.temporalEvidence
                         ? 0.20
                         : 0
                 ),
+
                 0,
                 1
             );
 
 
         if (
-            relativeEnergy >=
+            relative >=
             this.highRelativeEnergy
         ) {
 
             return {
 
-                state:
-                    "elevated",
-
-                confidence:
-                    confidence,
-
+                state: "elevated",
+                confidence,
                 evidence:
                     "relative-energy-elevated"
             };
@@ -1007,18 +715,14 @@ class SpectralDiagnosticObserver {
 
 
         if (
-            relativeEnergy <=
+            relative <=
             this.lowRelativeEnergy
         ) {
 
             return {
 
-                state:
-                    "recessed",
-
-                confidence:
-                    confidence,
-
+                state: "recessed",
+                confidence,
                 evidence:
                     "relative-energy-recessed"
             };
@@ -1026,20 +730,17 @@ class SpectralDiagnosticObserver {
 
 
         if (
-            relativeEnergy >=
-            this.naturalRelativeMin &&
-            relativeEnergy <=
-            this.naturalRelativeMax
+            relative >=
+                this.naturalRelativeMin &&
+
+            relative <=
+                this.naturalRelativeMax
         ) {
 
             return {
 
-                state:
-                    "natural",
-
-                confidence:
-                    confidence,
-
+                state: "natural",
+                confidence,
                 evidence:
                     "relative-energy-balanced"
             };
@@ -1048,8 +749,7 @@ class SpectralDiagnosticObserver {
 
         return {
 
-            state:
-                "uncertain",
+            state: "uncertain",
 
             confidence:
                 confidence * 0.5,
@@ -1061,158 +761,23 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // DETECTAR INSTABILIDADE
+    // CLASSIFICAR REGIÃO
     // ======================================
 
-    classifyStability(
-        region
-    ) {
+    classifyRegion(region) {
 
-        if (
-            !region
-        ) {
-
-            return false;
-        }
-
-
-        const stability =
-            this.clamp(
-                this.safeNumber(
-                    region.stability
-                ),
-                0,
-                1
-            );
-
-
-        return stability <
-            this.minimumStability;
-    }
-
-
-    // ======================================
-    // DETECTAR ATIVIDADE INSUFICIENTE
-    // ======================================
-
-    hasMeaningfulActivity(
-        region
-    ) {
-
-        if (
-            !region
-        ) {
-
-            return false;
-        }
-
-
-        return this.safeNumber(
-            region.activity
-        ) >=
-        this.minimumActivity;
-    }
-
-
-    // ======================================
-    // DETECTAR MASCARAMENTO
-    // ======================================
-    //
-    // "masked" não significa simplesmente
-    // energia baixa.
-    //
-    // É usado quando a própria evidência
-    // indica que a região pode estar sendo
-    // perceptualmente encoberta por outra
-    // região.
-    //
-    // ======================================
-
-    detectMaskedState(
-        region
-    ) {
-
-        if (
-            !region
-        ) {
-
-            return false;
-        }
-
-
-        const reason =
-            this.safeString(
-                region.reason,
-                ""
-            )
-                .toLowerCase();
-
-
-        const evidence =
-            this.safeString(
-                region.evidence,
-                ""
-            )
-                .toLowerCase();
+        const safe =
+            this.copyRegion(region);
 
 
         if (
-            reason.indexOf(
-                "mask"
-            ) !== -1
-        ) {
-
-            return true;
-        }
-
-
-        if (
-            evidence.indexOf(
-                "mask"
-            ) !== -1
-        ) {
-
-            return true;
-        }
-
-
-        return false;
-    }
-
-
-    // ======================================
-    // CLASSIFICAÇÃO FINAL DA REGIÃO
-    // ======================================
-    //
-    // Ordem deliberadamente conservadora:
-    //
-    // 1. dados ausentes
-    // 2. atividade insuficiente
-    // 3. instabilidade
-    // 4. mascaramento comprovado
-    // 5. energia regional
-    // 6. fallback uncertain
-    //
-    // ======================================
-
-    classifyRegion(
-        region
-    ) {
-
-        const safeRegion =
-            this.copyRegion(
-                region
-            );
-
-
-        if (
-            !safeRegion.usable &&
-            !safeRegion.regionalMeasurement
+            !safe.usable &&
+            !safe.regionalMeasurement
         ) {
 
             return {
 
-                ...safeRegion,
+                ...safe,
 
                 acousticState:
                     "uncertain",
@@ -1228,13 +793,13 @@ class SpectralDiagnosticObserver {
 
         if (
             !this.hasMeaningfulActivity(
-                safeRegion
+                safe
             )
         ) {
 
             return {
 
-                ...safeRegion,
+                ...safe,
 
                 acousticState:
                     "uncertain",
@@ -1250,20 +815,20 @@ class SpectralDiagnosticObserver {
 
         if (
             this.classifyStability(
-                safeRegion
+                safe
             )
         ) {
 
             return {
 
-                ...safeRegion,
+                ...safe,
 
                 acousticState:
                     "unstable",
 
                 stateConfidence:
                     this.clamp(
-                        safeRegion.confidence *
+                        safe.confidence *
                         0.5,
                         0,
                         1
@@ -1277,20 +842,20 @@ class SpectralDiagnosticObserver {
 
         if (
             this.detectMaskedState(
-                safeRegion
+                safe
             )
         ) {
 
             return {
 
-                ...safeRegion,
+                ...safe,
 
                 acousticState:
                     "masked",
 
                 stateConfidence:
                     this.clamp(
-                        safeRegion.confidence *
+                        safe.confidence *
                         0.75,
                         0,
                         1
@@ -1302,70 +867,53 @@ class SpectralDiagnosticObserver {
         }
 
 
-        const classification =
+        const result =
             this.classifyEnergyState(
-                safeRegion
+                safe
             );
 
 
         return {
 
-            ...safeRegion,
+            ...safe,
 
             acousticState:
-                classification.state,
+                result.state,
 
             stateConfidence:
-                classification.confidence,
+                result.confidence,
 
             stateEvidence:
-                classification.evidence
+                result.evidence
         };
     }
 
 
     // ======================================
-    // CLASSIFICAR TODAS AS REGIÕES
+    // CLASSIFICAR TODAS
     // ======================================
 
-    classifyRegions(
-        regions
-    ) {
+    classifyRegions(regions) {
 
         const source =
             regions &&
-            typeof regions ===
-            "object"
-
+            typeof regions === "object"
                 ? regions
                 : {};
 
 
-        const result =
-            {};
+        const result = {};
 
 
-        const names =
-            Object.keys(
-                source
-            );
+        Object.keys(source).forEach(
+            name => {
 
-
-        for (
-            let i = 0;
-            i < names.length;
-            i++
-        ) {
-
-            const name =
-                names[i];
-
-
-            result[name] =
-                this.classifyRegion(
-                    source[name]
-                );
-        }
+                result[name] =
+                    this.classifyRegion(
+                        source[name]
+                    );
+            }
+        );
 
 
         return result;
@@ -1373,12 +921,457 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // CRIAR SNAPSHOT
+    // ESTATÍSTICAS DOS ESTADOS
     // ======================================
 
-    createSnapshot(
-        context
-    ) {
+    summarizeStates(regions) {
+
+        const counts = {
+
+            natural: 0,
+            elevated: 0,
+            recessed: 0,
+            unstable: 0,
+            masked: 0,
+            uncertain: 0,
+            contextual: 0,
+            supported: 0
+        };
+
+
+        const source =
+            regions &&
+            typeof regions === "object"
+                ? regions
+                : {};
+
+
+        Object.keys(source).forEach(
+            name => {
+
+                const state =
+                    source[name]
+                        .acousticState;
+
+
+                if (
+                    this.isValidAcousticState(
+                        state
+                    )
+                ) {
+
+                    counts[state]++;
+                }
+            }
+        );
+
+
+        return counts;
+    }
+
+
+    // ======================================
+    // NOVO:
+    // CORRELAÇÃO CONTEXTUAL
+    // ======================================
+
+    buildContextualDiagnosis(regions) {
+
+        const r =
+            regions || {};
+
+
+        const getState =
+            name =>
+                r[name] &&
+                r[name].acousticState
+                    ? r[name].acousticState
+                    : "uncertain";
+
+
+        const bass =
+            getState("bass");
+
+        const body =
+            getState("body");
+
+        const lowMid =
+            getState("lowMid");
+
+        const mid =
+            getState("mid");
+
+        const presence =
+            getState("presence");
+
+        const upperPresence =
+            getState(
+                "upperPresence"
+            );
+
+        const sibilance =
+            getState("sibilance");
+
+        const air =
+            getState("air");
+
+
+        const patterns = [];
+
+
+        // ----------------------------------
+        // GRAVE/CORPO ELEVADOS
+        // ----------------------------------
+
+        if (
+            (
+                bass === "elevated" ||
+                body === "elevated"
+            ) &&
+            (
+                presence === "recessed" ||
+                upperPresence ===
+                    "recessed"
+            )
+        ) {
+
+            patterns.push({
+
+                id:
+                    "low-heavy-upper-recessed",
+
+                type:
+                    "spectral-imbalance",
+
+                confidence:
+                    0.70,
+
+                interpretation:
+                    "Predominância relativa de regiões inferiores com redução nas regiões superiores.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // POSSÍVEL LAMA
+        // ----------------------------------
+
+        if (
+            body === "elevated" &&
+            lowMid === "elevated"
+        ) {
+
+            patterns.push({
+
+                id:
+                    "body-lowmid-elevated",
+
+                type:
+                    "body-congestion",
+
+                confidence:
+                    0.68,
+
+                interpretation:
+                    "Corpo e médio-grave apresentam elevação simultânea.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // PRESENÇA REDUZIDA
+        // ----------------------------------
+
+        if (
+            presence === "recessed" &&
+            (
+                upperPresence ===
+                    "recessed" ||
+                air === "recessed"
+            )
+        ) {
+
+            patterns.push({
+
+                id:
+                    "upper-spectrum-recessed",
+
+                type:
+                    "presence-loss",
+
+                confidence:
+                    0.72,
+
+                interpretation:
+                    "Regiões superiores apresentam redução coerente.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // GRAVE ISOLADO
+        // ----------------------------------
+        //
+        // MUITO IMPORTANTE:
+        //
+        // grave elevado sozinho NÃO é
+        // classificado como problema.
+        //
+        // ----------------------------------
+
+        if (
+            bass === "elevated" &&
+            body !== "elevated" &&
+            lowMid !== "elevated"
+        ) {
+
+            patterns.push({
+
+                id:
+                    "isolated-bass-elevation",
+
+                type:
+                    "context-dependent-bass",
+
+                confidence:
+                    0.52,
+
+                interpretation:
+                    "Elevação isolada de grave; pode representar característica natural da voz.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // PRESENÇA REDUZIDA + SIBILÂNCIA
+        // ----------------------------------
+
+        if (
+            presence === "recessed" &&
+            (
+                sibilance ===
+                    "uncertain" ||
+                sibilance ===
+                    "recessed"
+            )
+        ) {
+
+            patterns.push({
+
+                id:
+                    "sibilance-masked",
+
+                type:
+                    "sibilance-uncertain",
+
+                confidence:
+                    0.58,
+
+                interpretation:
+                    "A ausência de energia superior pode mascarar a avaliação da sibilância.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // INSTABILIDADE
+        // ----------------------------------
+
+        const unstableCount =
+            Object.values(
+                r
+            )
+                .filter(
+                    region =>
+                        region &&
+                        region.acousticState ===
+                            "unstable"
+                )
+                .length;
+
+
+        if (
+            unstableCount > 0
+        ) {
+
+            patterns.push({
+
+                id:
+                    "regional-instability",
+
+                type:
+                    "unstable-spectrum",
+
+                confidence:
+                    0.65,
+
+                interpretation:
+                    "Uma ou mais regiões apresentam comportamento temporal instável.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // INCERTEZA GENERALIZADA
+        // ----------------------------------
+
+        const names =
+            Object.keys(r);
+
+
+        const uncertainCount =
+            names.filter(
+                name =>
+                    getState(name) ===
+                    "uncertain"
+            ).length;
+
+
+        if (
+            names.length > 0 &&
+            uncertainCount >=
+                Math.ceil(
+                    names.length * 0.5
+                )
+        ) {
+
+            patterns.push({
+
+                id:
+                    "insufficient-context",
+
+                type:
+                    "uncertain",
+
+                confidence:
+                    0.80,
+
+                interpretation:
+                    "Grande parte das regiões permanece indeterminada.",
+
+                treatmentAuthority:
+                    "none"
+            });
+        }
+
+
+        // ----------------------------------
+        // DIAGNÓSTICO GLOBAL
+        // ----------------------------------
+
+        let globalState =
+            "uncertain";
+
+
+        let globalConfidence =
+            0;
+
+
+        if (
+            patterns.length === 0
+        ) {
+
+            globalState =
+                "natural";
+
+            globalConfidence =
+                0.45;
+        }
+
+
+        if (
+            patterns.length === 1
+        ) {
+
+            globalState =
+                "contextual";
+
+            globalConfidence =
+                patterns[0]
+                    .confidence;
+        }
+
+
+        if (
+            patterns.length > 1
+        ) {
+
+            globalState =
+                "contextual";
+
+            globalConfidence =
+                this.clamp(
+
+                    patterns.reduce(
+                        (
+                            total,
+                            pattern
+                        ) =>
+                            total +
+                            pattern.confidence,
+                        0
+                    ) /
+                    patterns.length,
+
+                    0,
+                    1
+                );
+        }
+
+
+        if (
+            patterns.some(
+                pattern =>
+                    pattern.type ===
+                    "uncertain"
+            )
+        ) {
+
+            globalState =
+                "uncertain";
+        }
+
+
+        return {
+
+            globalState,
+
+            globalConfidence,
+
+            patterns,
+
+            treatmentAuthority:
+                "none",
+
+            processingAllowed:
+                false
+        };
+    }
+
+
+    // ======================================
+    // SNAPSHOT
+    // ======================================
+
+    createSnapshot(context) {
 
         if (
             !this.validateContext(
@@ -1388,8 +1381,7 @@ class SpectralDiagnosticObserver {
 
             return {
 
-                valid:
-                    false,
+                valid: false,
 
                 version:
                     this.version,
@@ -1397,17 +1389,16 @@ class SpectralDiagnosticObserver {
                 reason:
                     "invalid-spectral-context",
 
-                spectral:
+                spectral: null,
+
+                regions: {},
+
+                contextualDiagnosis:
                     null,
 
-                regions:
-                    {},
+                decisionPolicy: null,
 
-                decisionPolicy:
-                    null,
-
-                safety:
-                    null,
+                safety: null,
 
                 regionalMeasurement:
                     null
@@ -1419,112 +1410,24 @@ class SpectralDiagnosticObserver {
             context.spectral;
 
 
-        const baseRegions =
-            context.regions ||
-            {};
-
-
-        const mergedRegions =
-            this.mergeRegionalMeasurement(
-                baseRegions,
-                context.regionalMeasurement
-            );
-
-
-        const classifiedRegions =
+        const regions =
             this.classifyRegions(
-                mergedRegions
+
+                this.mergeRegionalMeasurement(
+                    context.regions || {},
+                    context.regionalMeasurement
+                )
             );
 
 
-        const policy =
-            context.decisionPolicy ||
-            {};
+        const contextualDiagnosis =
+            this.buildContextualDiagnosis(
+                regions
+            );
 
 
-        const safety =
-            context.safety ||
-            {};
-
-
-        const regionalMeasurement =
-            context.regionalMeasurement &&
-            typeof context.regionalMeasurement ===
-            "object"
-
-                ? {
-
-                    valid:
-                        this.safeBoolean(
-                            context
-                                .regionalMeasurement
-                                .valid
-                        ),
-
-                    available:
-                        this.safeBoolean(
-                            context
-                                .regionalMeasurement
-                                .available
-                        ),
-
-                    confidence:
-                        this.clamp(
-                            this.safeNumber(
-                                context
-                                    .regionalMeasurement
-                                    .confidence
-                            ),
-                            0,
-                            1
-                        ),
-
-                    evidence:
-                        this.safeString(
-                            context
-                                .regionalMeasurement
-                                .evidence,
-                            "none"
-                        ),
-
-                    regionCount:
-                        this.safeNumber(
-                            context
-                                .regionalMeasurement
-                                .regionCount
-                        ),
-
-                    usableRegions:
-                        this.safeNumber(
-                            context
-                                .regionalMeasurement
-                                .usableRegions
-                        ),
-
-                    supportedRegions:
-                        this.safeNumber(
-                            context
-                                .regionalMeasurement
-                                .supportedRegions
-                        ),
-
-                    temporalEvidence:
-                        this.clamp(
-                            this.safeNumber(
-                                context
-                                    .regionalMeasurement
-                                    .temporalEvidence
-                            ),
-                            0,
-                            1
-                        ),
-
-                    processingPermission:
-                        "none"
-
-                }
-
-                : null;
+        const regional =
+            context.regionalMeasurement;
 
 
         return {
@@ -1594,8 +1497,9 @@ class SpectralDiagnosticObserver {
                     )
             },
 
-            regions:
-                classifiedRegions,
+            regions,
+
+            contextualDiagnosis,
 
             decisionPolicy: {
 
@@ -1616,7 +1520,7 @@ class SpectralDiagnosticObserver {
 
                 status:
                     this.safeString(
-                        safety.status,
+                        context.safety.status,
                         "observe"
                     ),
 
@@ -1631,96 +1535,72 @@ class SpectralDiagnosticObserver {
             },
 
             regionalMeasurement:
-                regionalMeasurement
+                regional
+                    ? {
+
+                        valid:
+                            this.safeBoolean(
+                                regional.valid
+                            ),
+
+                        available:
+                            this.safeBoolean(
+                                regional.available
+                            ),
+
+                        confidence:
+                            this.clamp(
+                                this.safeNumber(
+                                    regional.confidence
+                                ),
+                                0,
+                                1
+                            ),
+
+                        evidence:
+                            this.safeString(
+                                regional.evidence,
+                                "none"
+                            ),
+
+                        regionCount:
+                            this.safeNumber(
+                                regional.regionCount
+                            ),
+
+                        usableRegions:
+                            this.safeNumber(
+                                regional.usableRegions
+                            ),
+
+                        supportedRegions:
+                            this.safeNumber(
+                                regional.supportedRegions
+                            ),
+
+                        temporalEvidence:
+                            this.clamp(
+                                this.safeNumber(
+                                    regional.temporalEvidence
+                                ),
+                                0,
+                                1
+                            ),
+
+                        processingPermission:
+                            "none"
+                    }
+
+                    : null
         };
     }
 
 
     // ======================================
-    // RESUMO DOS ESTADOS
+    // INTERPRETAÇÃO
     // ======================================
 
-    summarizeStates(
-        regions
-    ) {
-
-        const counts = {
-
-            natural:
-                0,
-
-            elevated:
-                0,
-
-            recessed:
-                0,
-
-            unstable:
-                0,
-
-            masked:
-                0,
-
-            uncertain:
-                0,
-
-            contextual:
-                0,
-
-            supported:
-                0
-        };
-
-
-        const source =
-            regions &&
-            typeof regions ===
-            "object"
-
-                ? regions
-                : {};
-
-
-        const names =
-            Object.keys(
-                source
-            );
-
-
-        for (
-            let i = 0;
-            i < names.length;
-            i++
-        ) {
-
-            const state =
-                source[
-                    names[i]
-                ].acousticState;
-
-
-            if (
-                this.isValidAcousticState(
-                    state
-                )
-            ) {
-
-                counts[state]++;
-            }
-        }
-
-
-        return counts;
-    }
-
-
-    // ======================================
-    // INTERPRETAR SNAPSHOT
-    // ======================================
-
-    interpret(
-        snapshot
-    ) {
+    interpret(snapshot) {
 
         if (
             !snapshot ||
@@ -1729,11 +1609,9 @@ class SpectralDiagnosticObserver {
 
             return {
 
-                valid:
-                    false,
+                valid: false,
 
-                confidence:
-                    0,
+                confidence: 0,
 
                 observationOnly:
                     true,
@@ -1746,101 +1624,132 @@ class SpectralDiagnosticObserver {
                         {}
                     ),
 
+                contextualDiagnosis:
+                    null,
+
                 conclusion:
                     "diagnostic-context-invalid"
             };
         }
 
 
+        const regions =
+            snapshot.regions;
+
+
+        const names =
+            Object.keys(
+                regions
+            );
+
+
         const stateSummary =
             this.summarizeStates(
-                snapshot.regions
+                regions
             );
 
 
-        const regionNames =
-            Object.keys(
-                snapshot.regions
-            );
-
-
-        let usableCount =
+        let confidentRegions =
             0;
 
 
-        let confidentCount =
+        let uncertainRegions =
             0;
 
 
-        let uncertainCount =
+        let usableRegions =
             0;
 
 
-        for (
-            let i = 0;
-            i < regionNames.length;
-            i++
-        ) {
+        names.forEach(
+            name => {
 
-            const region =
-                snapshot.regions[
-                    regionNames[i]
-                ];
+                const region =
+                    regions[name];
 
 
-            if (
-                region.usable
-            ) {
+                if (
+                    region.usable
+                ) {
 
-                usableCount++;
+                    usableRegions++;
+                }
+
+
+                if (
+                    region.stateConfidence >=
+                    this.minimumConfidence
+                ) {
+
+                    confidentRegions++;
+                }
+
+
+                if (
+                    region.acousticState ===
+                    "uncertain"
+                ) {
+
+                    uncertainRegions++;
+                }
             }
+        );
 
 
-            if (
-                region.stateConfidence >=
-                this.minimumConfidence
-            ) {
-
-                confidentCount++;
-            }
-
-
-            if (
-                region.acousticState ===
-                "uncertain"
-            ) {
-
-                uncertainCount++;
-            }
-        }
+        const spectralConfidence =
+            snapshot.spectral
+                .confidence;
 
 
         const regionalConfidence =
             snapshot.regionalMeasurement
-                ? snapshot.regionalMeasurement
+                ? snapshot
+                    .regionalMeasurement
                     .confidence
+                : 0;
+
+
+        const regionalCoverage =
+            names.length > 0
+                ? (
+                    confidentRegions /
+                    names.length
+                )
+                : 0;
+
+
+        const contextualConfidence =
+            snapshot
+                .contextualDiagnosis
+                ? snapshot
+                    .contextualDiagnosis
+                    .globalConfidence
                 : 0;
 
 
         const confidence =
             this.clamp(
+
                 (
-                    snapshot.spectral.confidence *
-                    0.40
+                    spectralConfidence *
+                    0.30
                 ) +
+
                 (
                     regionalConfidence *
-                    0.40
+                    0.30
                 ) +
+
                 (
-                    regionNames.length > 0
-                        ? (
-                            confidentCount /
-                            regionNames.length
-                        ) *
-                        0.20
-                        : 0
+                    regionalCoverage *
+                    0.20
+                ) +
+
+                (
+                    contextualConfidence *
+                    0.20
                 ),
+
                 0,
                 1
             );
@@ -1856,25 +1765,22 @@ class SpectralDiagnosticObserver {
         ) {
 
             if (
+                uncertainRegions >=
+                Math.ceil(
+                    names.length * 0.5
+                )
+            ) {
+
+                conclusion =
+                    "evidence-remains-uncertain";
+
+            } else if (
                 stateSummary.unstable >
                 0
             ) {
 
                 conclusion =
                     "regional-behavior-requires-caution";
-
-            } else if (
-                stateSummary.uncertain >
-                0 &&
-                uncertainCount >=
-                Math.ceil(
-                    regionNames.length *
-                    0.5
-                )
-            ) {
-
-                conclusion =
-                    "evidence-remains-uncertain";
 
             } else {
 
@@ -1886,11 +1792,9 @@ class SpectralDiagnosticObserver {
 
         return {
 
-            valid:
-                true,
+            valid: true,
 
-            confidence:
-                confidence,
+            confidence,
 
             observationOnly:
                 true,
@@ -1898,47 +1802,34 @@ class SpectralDiagnosticObserver {
             processingPermission:
                 "none",
 
-            stateSummary:
-                stateSummary,
+            processingAllowed:
+                false,
 
-            usableRegions:
-                usableCount,
+            usableRegions,
 
-            confidentRegions:
-                confidentCount,
+            confidentRegions,
 
-            uncertainRegions:
-                uncertainCount,
+            uncertainRegions,
 
-            conclusion:
-                conclusion
+            stateSummary,
+
+            contextualDiagnosis:
+                snapshot
+                    .contextualDiagnosis,
+
+            conclusion
         };
     }
 
 
     // ======================================
-    // OBSERVAR
-    // ======================================
-    //
-    // API principal utilizada pelo
-    // VocalSmoother.
-    //
+    // API PRINCIPAL
     // ======================================
 
     observe(
         context,
         regionalMeasurement = null
     ) {
-
-        /*
-         * Compatibilidade:
-         *
-         * A medição pode chegar como segundo
-         * argumento pelo VocalSmoother.
-         *
-         * Ela é anexada ao contexto somente
-         * para observação.
-         */
 
         let safeContext =
             context;
@@ -1950,12 +1841,9 @@ class SpectralDiagnosticObserver {
 
             safeContext = {
 
-                ...(
-                    context || {}
-                ),
+                ...(context || {}),
 
-                regionalMeasurement:
-                    regionalMeasurement
+                regionalMeasurement
             };
         }
 
@@ -1982,11 +1870,9 @@ class SpectralDiagnosticObserver {
 
         return {
 
-            snapshot:
-                snapshot,
+            snapshot,
 
-            interpretation:
-                interpretation,
+            interpretation,
 
             processingPermission:
                 "none",
@@ -2015,34 +1901,28 @@ class SpectralDiagnosticObserver {
 
     getLastRegions() {
 
-        if (
-            !this.lastSnapshot
-        ) {
-
-            return {};
-        }
-
-
-        return this.lastSnapshot.regions ||
-            {};
+        return this.lastSnapshot
+            ? this.lastSnapshot.regions || {}
+            : {};
     }
 
 
     getLastStateSummary() {
 
-        if (
-            !this.lastSnapshot
-        ) {
-
-            return this.summarizeStates(
-                {}
-            );
-        }
+        return this.lastSnapshot
+            ? this.summarizeStates(
+                this.lastSnapshot.regions
+            )
+            : this.summarizeStates({});
+    }
 
 
-        return this.summarizeStates(
-            this.lastSnapshot.regions
-        );
+    getLastContextualDiagnosis() {
+
+        return this.lastSnapshot
+            ? this.lastSnapshot
+                .contextualDiagnosis
+            : null;
     }
 }
 
