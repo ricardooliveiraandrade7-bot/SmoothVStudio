@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.3
+// V0.4
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -11,6 +11,8 @@
 //
 // - receber o contexto do
 //   SpectralTreatmentBridge;
+// - receber evidência do
+//   SpectralRegionalMeasurement;
 // - validar a estrutura;
 // - criar snapshots seguros;
 // - interpretar a qualidade da evidência;
@@ -34,9 +36,9 @@
 //
 // Estado acústico NÃO é ordem de processamento.
 //
-// Um estado regional somente pode ser
-// considerado sustentado quando existir
-// evidência específica da própria região.
+// A medição regional aumenta a qualidade
+// da evidência disponível, mas não concede
+// autoridade DSP.
 //
 // ==========================================
 
@@ -48,7 +50,7 @@ class SpectralDiagnosticObserver {
 
 
         this.version =
-            "0.3";
+            "0.4";
 
 
         this.lastSnapshot =
@@ -367,8 +369,351 @@ class SpectralDiagnosticObserver {
             regionalMeasurement:
                 this.safeBoolean(
                     region.regionalMeasurement
+                ),
+
+            energy:
+                this.safeNumber(
+                    region.energy
+                ),
+
+            energyShare:
+                this.safeNumber(
+                    region.energyShare
+                ),
+
+            normalizedEnergy:
+                this.safeNumber(
+                    region.normalizedEnergy
+                ),
+
+            relativeEnergy:
+                this.safeNumber(
+                    region.relativeEnergy
+                ),
+
+            stability:
+                this.clamp(
+                    this.safeNumber(
+                        region.stability
+                    ),
+                    0,
+                    1
+                ),
+
+            activity:
+                this.clamp(
+                    this.safeNumber(
+                        region.activity
+                    ),
+                    0,
+                    1
+                ),
+
+            bandCount:
+                this.safeNumber(
+                    region.bandCount
+                ),
+
+            lowHz:
+                this.safeNumber(
+                    region.lowHz
+                ),
+
+            highHz:
+                this.safeNumber(
+                    region.highHz
+                ),
+
+            evidenceLevel:
+                this.safeString(
+                    region.evidenceLevel,
+                    "none"
                 )
         };
+    }
+
+
+    // ======================================
+    // MAPEAR MEDIÇÃO REGIONAL
+    // ======================================
+    //
+    // A medição regional utiliza nomes
+    // próprios para suas regiões.
+    //
+    // O Bridge utiliza uma nomenclatura
+    // contextual diferente.
+    //
+    // Esta função cria uma ponte explícita
+    // sem alterar nenhum dos módulos
+    // anteriores.
+    //
+    // ======================================
+
+    getRegionalMeasurementMap() {
+
+        return {
+
+            sub:
+                "sub",
+
+            bass:
+                "bass",
+
+            body:
+                "body",
+
+            lowMid:
+                "lowMid",
+
+            mid:
+                "mid",
+
+            presence:
+                "presence",
+
+            upperPresence:
+                "upperPresence",
+
+            sibilance:
+                "sibilance",
+
+            air:
+                "air"
+        };
+    }
+
+
+    // ======================================
+    // ENRIQUECER REGIÕES COM MEDIÇÃO
+    // ======================================
+    //
+    // A medição regional tem prioridade
+    // apenas sobre campos de evidência
+    // regional.
+    //
+    // A referência tonal global continua
+    // vindo do SpectralTreatmentBridge.
+    //
+    // Nenhuma decisão DSP é criada aqui.
+    //
+    // ======================================
+
+    mergeRegionalMeasurement(
+        regions,
+        regionalMeasurement
+    ) {
+
+        const baseRegions =
+            regions &&
+            typeof regions ===
+            "object"
+
+                ? regions
+                : {};
+
+
+        const measurement =
+            regionalMeasurement &&
+            typeof regionalMeasurement ===
+            "object"
+
+                ? regionalMeasurement
+                : null;
+
+
+        if (
+            !measurement ||
+            !measurement.regions ||
+            typeof measurement.regions !==
+            "object"
+        ) {
+
+            return baseRegions;
+        }
+
+
+        const merged =
+            {};
+
+
+        const baseNames =
+            Object.keys(
+                baseRegions
+            );
+
+
+        for (
+            let i = 0;
+            i < baseNames.length;
+            i++
+        ) {
+
+            const name =
+                baseNames[i];
+
+
+            merged[name] =
+                baseRegions[name];
+        }
+
+
+        const map =
+            this.getRegionalMeasurementMap();
+
+
+        const measurementNames =
+            Object.keys(
+                map
+            );
+
+
+        for (
+            let i = 0;
+            i < measurementNames.length;
+            i++
+        ) {
+
+            const observerName =
+                measurementNames[i];
+
+
+            const measurementName =
+                map[
+                    observerName
+                ];
+
+
+            const measuredRegion =
+                measurement
+                    .regions[
+                        measurementName
+                    ];
+
+
+            if (
+                !measuredRegion
+            ) {
+
+                continue;
+            }
+
+
+            const existingRegion =
+                merged[
+                    observerName
+                ] || {};
+
+
+            /*
+             * A medição regional passa a
+             * representar a evidência específica
+             * da região.
+             *
+             * Campos globais do Bridge são
+             * preservados quando existentes.
+             */
+
+            merged[
+                observerName
+            ] = {
+
+                ...existingRegion,
+
+                lowHz:
+                    measuredRegion.lowHz ??
+                    existingRegion.lowHz,
+
+                highHz:
+                    measuredRegion.highHz ??
+                    existingRegion.highHz,
+
+                bandCount:
+                    measuredRegion.bandCount ??
+                    0,
+
+                energy:
+                    measuredRegion.energy ??
+                    0,
+
+                energyShare:
+                    measuredRegion.energyShare ??
+                    0,
+
+                relativeEnergy:
+                    measuredRegion.relativeEnergy ??
+                    0,
+
+                normalizedEnergy:
+                    measuredRegion.normalizedEnergy ??
+                    0,
+
+                stability:
+                    measuredRegion.stability ??
+                    0,
+
+                confidence:
+                    measuredRegion.confidence ??
+                    0,
+
+                activity:
+                    measuredRegion.activity ??
+                    0,
+
+                temporalEvidence:
+                    measuredRegion.temporalEvidence ===
+                    true,
+
+                evidence:
+                    measuredRegion.evidence ||
+                    "none",
+
+                evidenceLevel:
+                    measuredRegion.evidenceLevel ||
+                    measuredRegion.evidence ||
+                    "none",
+
+                usable:
+                    measuredRegion.usable ===
+                    true,
+
+                regionalMeasurement:
+                    measuredRegion.regionalMeasurement ===
+                    true,
+
+                regionSpecificEvidence:
+                    measuredRegion.regionSpecificEvidence ===
+                    true,
+
+                stateConfidence:
+                    measuredRegion.stateConfidence ??
+                    0,
+
+                acousticState:
+                    this.isValidAcousticState(
+                        measuredRegion.acousticState
+                    )
+                        ? measuredRegion.acousticState
+                        : "uncertain",
+
+                stateEvidence:
+                    measuredRegion.stateEvidence ||
+                    "none",
+
+                evidenceSource:
+                    "spectral-regional-measurement",
+
+                reason:
+                    measuredRegion.reason ||
+                    "regional-measurement-available",
+
+                measurementBandCount:
+                    measuredRegion.bandCount ??
+                    0
+            };
+        }
+
+
+        return merged;
     }
 
 
@@ -407,6 +752,9 @@ class SpectralDiagnosticObserver {
                     null,
 
                 safety:
+                    null,
+
+                regionalMeasurement:
                     null
             };
         }
@@ -416,9 +764,25 @@ class SpectralDiagnosticObserver {
             context.spectral;
 
 
-        const regions =
+        /*
+         * O contexto global continua sendo
+         * a base.
+         *
+         * A medição regional é anexada
+         * separadamente e somente então
+         * incorporada às regiões.
+         */
+
+        const baseRegions =
             context.regions ||
             {};
+
+
+        const mergedRegions =
+            this.mergeRegionalMeasurement(
+                baseRegions,
+                context.regionalMeasurement
+            );
 
 
         const snapshotRegions =
@@ -427,7 +791,7 @@ class SpectralDiagnosticObserver {
 
         const regionNames =
             Object.keys(
-                regions
+                mergedRegions
             );
 
 
@@ -443,7 +807,7 @@ class SpectralDiagnosticObserver {
 
             snapshotRegions[name] =
                 this.copyRegion(
-                    regions[name]
+                    mergedRegions[name]
                 );
         }
 
@@ -456,6 +820,86 @@ class SpectralDiagnosticObserver {
         const safety =
             context.safety ||
             {};
+
+
+        const regionalMeasurement =
+            context.regionalMeasurement &&
+            typeof context.regionalMeasurement ===
+            "object"
+
+                ? {
+
+                    valid:
+                        this.safeBoolean(
+                            context
+                                .regionalMeasurement
+                                .valid
+                        ),
+
+                    available:
+                        this.safeBoolean(
+                            context
+                                .regionalMeasurement
+                                .available
+                        ),
+
+                    confidence:
+                        this.clamp(
+                            this.safeNumber(
+                                context
+                                    .regionalMeasurement
+                                    .confidence
+                            ),
+                            0,
+                            1
+                        ),
+
+                    evidence:
+                        this.safeString(
+                            context
+                                .regionalMeasurement
+                                .evidence,
+                            "none"
+                        ),
+
+                    regionCount:
+                        this.safeNumber(
+                            context
+                                .regionalMeasurement
+                                .regionCount
+                        ),
+
+                    usableRegions:
+                        this.safeNumber(
+                            context
+                                .regionalMeasurement
+                                .usableRegions
+                        ),
+
+                    supportedRegions:
+                        this.safeNumber(
+                            context
+                                .regionalMeasurement
+                                .supportedRegions
+                        ),
+
+                    temporalEvidence:
+                        this.clamp(
+                            this.safeNumber(
+                                context
+                                    .regionalMeasurement
+                                    .temporalEvidence
+                            ),
+                            0,
+                            1
+                        ),
+
+                    processingPermission:
+                        "none"
+
+                }
+
+                : null;
 
 
         return {
@@ -533,6 +977,9 @@ class SpectralDiagnosticObserver {
             regions:
                 snapshotRegions,
 
+            regionalMeasurement:
+                regionalMeasurement,
+
             decisionPolicy: {
 
                 analysisOnly:
@@ -587,12 +1034,43 @@ class SpectralDiagnosticObserver {
     // ======================================
 
     observe(
-        context
+        context,
+        regionalMeasurement = null
     ) {
+
+        /*
+         * Compatibilidade:
+         *
+         * se a medição for passada como
+         * segundo argumento, ela é anexada
+         * ao contexto sem modificar o objeto
+         * original.
+         */
+
+        let observationContext =
+            context;
+
+
+        if (
+            regionalMeasurement &&
+            context &&
+            typeof context ===
+            "object"
+        ) {
+
+            observationContext = {
+
+                ...context,
+
+                regionalMeasurement:
+                    regionalMeasurement
+            };
+        }
+
 
         const snapshot =
             this.createSnapshot(
-                context
+                observationContext
             );
 
 
@@ -703,6 +1181,7 @@ class SpectralDiagnosticObserver {
         const confidence =
             this.clamp(
                 this.safeNumber(
+                    region.stateConfidence ??
                     region.confidence
                 ),
                 0,
@@ -734,13 +1213,16 @@ class SpectralDiagnosticObserver {
     // DETERMINAR ESTADO ACÚSTICO
     // ======================================
     //
-    // ESTA FUNÇÃO É CONSERVADORA.
+    // FUNÇÃO CONSERVADORA.
     //
-    // Sem medição regional real,
-    // o estado permanece "uncertain".
+    // A medição regional atual pode
+    // sustentar "supported", mas ainda
+    // não determina automaticamente
+    // elevated/recessed/natural.
     //
-    // O tonalDirection global NÃO pode
-    // determinar elevated/recessed.
+    // O Observer jamais transforma
+    // evidência global em evidência
+    // específica.
     //
     // ======================================
 
@@ -787,7 +1269,8 @@ class SpectralDiagnosticObserver {
         const regionalConfidence =
             this.clamp(
                 this.safeNumber(
-                    region.stateConfidence
+                    region.stateConfidence ??
+                    region.confidence
                 ),
                 0,
                 1
@@ -1024,11 +1507,17 @@ class SpectralDiagnosticObserver {
                 evidence.level,
 
             confidence:
-                globalConfidence,
+                region &&
+                region.regionalMeasurement
+                    ? state.confidence
+                    : globalConfidence,
 
             confidenceClass:
                 this.classifyConfidence(
-                    globalConfidence
+                    region &&
+                    region.regionalMeasurement
+                        ? state.confidence
+                        : globalConfidence
                 ),
 
             regionSpecificEvidence:
@@ -1297,16 +1786,16 @@ class SpectralDiagnosticObserver {
             snapshot.safety &&
             snapshot.safety
                 .audioProcessing ===
-                false &&
+            false &&
             snapshot.safety
                 .gainGeneration ===
-                false &&
+            false &&
             snapshot.safety
                 .filterGeneration ===
-                false &&
+            false &&
             snapshot.safety
                 .reconstruction ===
-                false;
+            false;
 
 
         return {
@@ -1357,6 +1846,22 @@ class SpectralDiagnosticObserver {
                 this.safeBoolean(
                     spectral.ambiguous
                 ),
+
+            regionalMeasurementAvailable:
+                !!snapshot.regionalMeasurement,
+
+            regionalMeasurementConfidence:
+                snapshot.regionalMeasurement
+                    ? this.clamp(
+                        this.safeNumber(
+                            snapshot
+                                .regionalMeasurement
+                                .confidence
+                        ),
+                        0,
+                        1
+                    )
+                    : 0,
 
             analysisOnly:
                 analysisOnly,
@@ -1448,6 +1953,22 @@ class SpectralDiagnosticObserver {
                 spectral &&
                 spectral.ambiguous ===
                 true,
+
+            regionalMeasurementAvailable:
+                !!snapshot.regionalMeasurement,
+
+            regionalMeasurementConfidence:
+                snapshot.regionalMeasurement
+                    ? this.clamp(
+                        this.safeNumber(
+                            snapshot
+                                .regionalMeasurement
+                                .confidence
+                        ),
+                        0,
+                        1
+                    )
+                    : 0,
 
             analysisOnly:
                 interpretation

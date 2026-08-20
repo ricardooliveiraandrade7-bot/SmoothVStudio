@@ -513,7 +513,8 @@ class VocalSmoother {
 
             return this.spectralDiagnosticObserver
                 .observe(
-                    spectralContext
+                    spectralContext,
+                    this.lastSpectralRegionalMeasurement
                 );
 
         } catch (error) {
