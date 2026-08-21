@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT DECISION PIPELINE
-// V0.1
+// V0.2
 // ==========================================
 //
 // Responsabilidade:
@@ -16,6 +16,8 @@
 // Treatment Decision Gate
 //       ↓
 // Treatment Decision Record
+//       ↓
+// Bounded Authority
 //
 // ==========================================
 //
@@ -32,7 +34,7 @@
 // - reconstrói espectro
 // - executa tratamento
 //
-// Sua única responsabilidade é garantir que
+// Sua responsabilidade é garantir que
 // as camadas de decisão sejam executadas em
 // uma ordem segura e rastreável.
 //
@@ -49,6 +51,27 @@
 // audioProcessing = false
 //
 // ==========================================
+//
+// AUTORIDADE PROGRESSIVA
+//
+// Esta versão introduz:
+//
+// authority.level = "bounded"
+//
+// Porém:
+//
+// processingPermission = "none"
+//
+// Portanto:
+//
+// "bounded" NÃO significa que o DSP
+// está autorizado a executar.
+//
+// Significa apenas que existe um
+// CONTRATO DE LIMITES preparado para
+// uma futura etapa de processamento.
+//
+// ==========================================
 
 
 class TreatmentDecisionPipeline {
@@ -58,8 +81,9 @@ class TreatmentDecisionPipeline {
         options = {}
     ) {
 
+
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
@@ -97,6 +121,21 @@ class TreatmentDecisionPipeline {
 
         this.reconstructionPermission =
             "none";
+
+
+        // ==================================
+        // AUTORIDADE BOUNDED
+        // ==================================
+        //
+        // Este objeto representa somente
+        // limites futuros de processamento.
+        //
+        // Ele NÃO executa DSP.
+        //
+        // ==================================
+
+        this.authorityProfile =
+            this.createBoundedAuthority();
     }
 
 
@@ -149,6 +188,167 @@ class TreatmentDecisionPipeline {
 
 
         return value.trim();
+    }
+
+
+    // ======================================
+    // NÚMERO FINITO
+    // ======================================
+
+    isFiniteNumber(
+        value
+    ) {
+
+        return (
+            typeof value ===
+                "number" &&
+            Number.isFinite(
+                value
+            )
+        );
+    }
+
+
+    // ======================================
+    // CLAMP NUMÉRICO
+    // ======================================
+
+    clamp(
+        value,
+        min,
+        max
+    ) {
+
+        if (
+            !this.isFiniteNumber(
+                value
+            )
+        ) {
+
+            return min;
+        }
+
+
+        return Math.min(
+            max,
+            Math.max(
+                min,
+                value
+            )
+        );
+    }
+
+
+    // ======================================
+    // CRIAR AUTORIDADE BOUNDED
+    // ======================================
+    //
+    // Esta função define o primeiro contrato
+    // de autoridade progressiva.
+    //
+    // IMPORTANTE:
+    //
+    // processingPermission permanece "none".
+    //
+    // Nenhum DSP pode usar este objeto
+    // diretamente para executar processamento
+    // nesta versão.
+    //
+    // ======================================
+
+    createBoundedAuthority() {
+
+        return {
+
+            level:
+                "bounded",
+
+            processingPermission:
+                "none",
+
+            audioProcessing:
+                false,
+
+            reconstructionPermission:
+                "none",
+
+            executorPermission:
+                "none",
+
+            limits: {
+
+                maxGainDb:
+                    2,
+
+                maxCutDb:
+                    -2,
+
+                maxInterventions:
+                    1,
+
+                regionalOnly:
+                    true,
+
+                globalProcessing:
+                    false,
+
+                reconstruction:
+                    false,
+
+                saturation:
+                    false,
+
+                dynamicsExpansion:
+                    false,
+
+                uncontrolledDeEssing:
+                    false
+            },
+
+            fallback:
+                "preserve"
+        };
+    }
+
+
+    // ======================================
+    // CLONAR AUTORIDADE
+    // ======================================
+    //
+    // Evita devolver a mesma referência
+    // interna para consumidores externos.
+    //
+    // ======================================
+
+    cloneAuthority(
+        authority
+    ) {
+
+        if (
+            !this.isObject(
+                authority
+            )
+        ) {
+
+            return this.createBoundedAuthority();
+        }
+
+
+        return {
+
+            ...authority,
+
+            limits: {
+
+                ...(
+                    this.isObject(
+                        authority.limits
+                    )
+                        ? authority.limits
+                        : {}
+                )
+            }
+        };
     }
 
 
@@ -367,10 +567,6 @@ class TreatmentDecisionPipeline {
     // Decision Record só é obrigatório
     // quando existir uma decisão efetivamente
     // autorizada pelo Gate.
-    //
-    // Um plano que apenas recomenda
-    // preservação não precisa fabricar
-    // um registro de decisão inexistente.
     //
     // ======================================
 
@@ -941,6 +1137,316 @@ class TreatmentDecisionPipeline {
 
 
     // ======================================
+    // VALIDAR LIMITES BOUNDED
+    // ======================================
+    //
+    // Esta validação não autoriza DSP.
+    //
+    // Ela somente garante que o contrato
+    // de limites futuros permanece seguro.
+    //
+    // ======================================
+
+    validateBoundedAuthority(
+        authority
+    ) {
+
+        const errors = [];
+
+
+        if (
+            !this.isObject(
+                authority
+            )
+        ) {
+
+            errors.push(
+                "Autoridade bounded ausente."
+            );
+
+
+            return {
+
+                valid:
+                    false,
+
+                errors
+            };
+        }
+
+
+        if (
+            authority.level !==
+            "bounded"
+        ) {
+
+            errors.push(
+                "Nível de autoridade bounded inválido."
+            );
+        }
+
+
+        if (
+            authority.processingPermission !==
+            "none"
+        ) {
+
+            errors.push(
+                "Autoridade bounded não pode liberar processingPermission nesta etapa."
+            );
+        }
+
+
+        if (
+            authority.audioProcessing !==
+            false
+        ) {
+
+            errors.push(
+                "Autoridade bounded não pode liberar processamento de áudio nesta etapa."
+            );
+        }
+
+
+        if (
+            authority.reconstructionPermission !==
+            "none"
+        ) {
+
+            errors.push(
+                "Autoridade bounded não pode liberar reconstrução nesta etapa."
+            );
+        }
+
+
+        if (
+            authority.executorPermission !==
+            "none"
+        ) {
+
+            errors.push(
+                "Autoridade bounded não pode liberar executor nesta etapa."
+            );
+        }
+
+
+        const limits =
+            authority.limits;
+
+
+        if (
+            !this.isObject(
+                limits
+            )
+        ) {
+
+            errors.push(
+                "Limites bounded ausentes."
+            );
+
+        } else {
+
+            if (
+                !this.isFiniteNumber(
+                    limits.maxGainDb
+                ) ||
+                limits.maxGainDb <
+                0 ||
+                limits.maxGainDb >
+                2
+            ) {
+
+                errors.push(
+                    "maxGainDb fora do limite seguro."
+                );
+            }
+
+
+            if (
+                !this.isFiniteNumber(
+                    limits.maxCutDb
+                ) ||
+                limits.maxCutDb >
+                0 ||
+                limits.maxCutDb <
+                -2
+            ) {
+
+                errors.push(
+                    "maxCutDb fora do limite seguro."
+                );
+            }
+
+
+            if (
+                !Number.isInteger(
+                    limits.maxInterventions
+                ) ||
+                limits.maxInterventions <
+                0 ||
+                limits.maxInterventions >
+                1
+            ) {
+
+                errors.push(
+                    "maxInterventions fora do limite seguro."
+                );
+            }
+
+
+            if (
+                limits.regionalOnly !==
+                true
+            ) {
+
+                errors.push(
+                    "Autoridade bounded deve permanecer regional."
+                );
+            }
+
+
+            if (
+                limits.globalProcessing !==
+                false
+            ) {
+
+                errors.push(
+                    "Processamento global não é permitido."
+                );
+            }
+
+
+            if (
+                limits.reconstruction !==
+                false
+            ) {
+
+                errors.push(
+                    "Reconstrução não é permitida."
+                );
+            }
+
+
+            if (
+                limits.saturation !==
+                false
+            ) {
+
+                errors.push(
+                    "Saturação não é permitida nesta etapa."
+                );
+            }
+
+
+            if (
+                limits.dynamicsExpansion !==
+                false
+            ) {
+
+                errors.push(
+                    "Expansão dinâmica não é permitida."
+                );
+            }
+
+
+            if (
+                limits.uncontrolledDeEssing !==
+                false
+            ) {
+
+                errors.push(
+                    "De-essing não controlado não é permitido."
+                );
+            }
+        }
+
+
+        if (
+            authority.fallback !==
+            "preserve"
+        ) {
+
+            errors.push(
+                "Fallback bounded deve ser preserve."
+            );
+        }
+
+
+        return {
+
+            valid:
+                errors.length ===
+                0,
+
+            errors
+        };
+    }
+
+
+    // ======================================
+    // CRIAR AUTORIDADE FINAL
+    // ======================================
+    //
+    // A decisão pode ser permitida,
+    // mas a autoridade DSP permanece
+    // explicitamente bloqueada.
+    //
+    // ======================================
+
+    buildAuthority(
+        gateResult
+    ) {
+
+        const authority =
+            this.cloneAuthority(
+                this.authorityProfile
+            );
+
+
+        if (
+            gateResult &&
+            gateResult.decisionPermission ===
+                "allowed"
+        ) {
+
+            authority.decisionPermission =
+                "allowed";
+
+        } else {
+
+            authority.decisionPermission =
+                "none";
+        }
+
+
+        /*
+         * HARD LOCK:
+         *
+         * Nunca herdar uma possível
+         * permissão DSP do Gate.
+         */
+
+        authority.processingPermission =
+            "none";
+
+
+        authority.audioProcessing =
+            false;
+
+
+        authority.reconstructionPermission =
+            "none";
+
+
+        authority.executorPermission =
+            "none";
+
+
+        return authority;
+    }
+
+
+    // ======================================
     // VERIFICAR HARD LOCK
     // ======================================
 
@@ -951,6 +1457,32 @@ class TreatmentDecisionPipeline {
     ) {
 
         const errors = [];
+
+
+        // ==================================
+        // AUTORIDADE BOUNDED
+        // ==================================
+
+        const authority =
+            this.buildAuthority(
+                gateResult
+            );
+
+
+        const boundedValidation =
+            this.validateBoundedAuthority(
+                authority
+            );
+
+
+        if (
+            !boundedValidation.valid
+        ) {
+
+            errors.push(
+                ...boundedValidation.errors
+            );
+        }
 
 
         // ==================================
@@ -1070,7 +1602,10 @@ class TreatmentDecisionPipeline {
                 errors.length ===
                 0,
 
-            errors
+            errors,
+
+            authority:
+                authority
         };
     }
 
@@ -1221,15 +1756,22 @@ class TreatmentDecisionPipeline {
 
 
         // ==================================
-        // DEPENDÊNCIAS INICIAIS
+        // AUTORIDADE BASE
         // ==================================
         //
-        // Neste ponto ainda não sabemos se
-        // haverá uma decisão registrável.
+        // Desde o início do pipeline,
+        // a autoridade DSP permanece bloqueada.
         //
-        // Por isso o Decision Record não
-        // é obrigatório nesta primeira etapa.
-        //
+        // ==================================
+
+        result.authority =
+            this.cloneAuthority(
+                this.authorityProfile
+            );
+
+
+        // ==================================
+        // DEPENDÊNCIAS INICIAIS
         // ==================================
 
         const dependencies =
@@ -1348,9 +1890,6 @@ class TreatmentDecisionPipeline {
         //
         // "preservar / observar".
         //
-        // Não existe motivo para criar um
-        // Decision Record artificial.
-        //
         // ==================================
 
         if (
@@ -1368,7 +1907,7 @@ class TreatmentDecisionPipeline {
 
 
             result.authority =
-                authority;
+                authority.authority;
 
 
             if (
@@ -1516,7 +2055,7 @@ class TreatmentDecisionPipeline {
 
 
         result.authority =
-            authority;
+            authority.authority;
 
 
         if (
@@ -1553,7 +2092,11 @@ class TreatmentDecisionPipeline {
 
             recommendation:
                 gateDecision
-                    .recommendation
+                    .recommendation,
+
+            authorityLevel:
+                authority.authority
+                    .level
         };
 
 
@@ -1582,6 +2125,28 @@ class TreatmentDecisionPipeline {
 
 
         result.reconstructionPermission =
+            "none";
+
+
+        /*
+         * A autoridade bounded existe como
+         * contrato de limites, mas não recebe
+         * autorização de execução.
+         */
+
+        result.authority.processingPermission =
+            "none";
+
+
+        result.authority.audioProcessing =
+            false;
+
+
+        result.authority.reconstructionPermission =
+            "none";
+
+
+        result.authority.executorPermission =
             "none";
 
 
