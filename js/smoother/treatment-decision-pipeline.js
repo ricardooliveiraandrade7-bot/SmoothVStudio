@@ -360,8 +360,23 @@ class TreatmentDecisionPipeline {
     // ======================================
     // VALIDAR DEPENDÊNCIAS
     // ======================================
+    //
+    // Validator e Decision Gate são sempre
+    // obrigatórios.
+    //
+    // Decision Record só é obrigatório
+    // quando existir uma decisão efetivamente
+    // autorizada pelo Gate.
+    //
+    // Um plano que apenas recomenda
+    // preservação não precisa fabricar
+    // um registro de decisão inexistente.
+    //
+    // ======================================
 
-    validateDependencies() {
+    validateDependencies(
+        requireDecisionRecord = false
+    ) {
 
         const result = {
 
@@ -376,6 +391,9 @@ class TreatmentDecisionPipeline {
 
             decisionRecord:
                 false,
+
+            decisionRecordRequired:
+                requireDecisionRecord,
 
             errors:
                 []
@@ -439,6 +457,7 @@ class TreatmentDecisionPipeline {
 
 
         if (
+            requireDecisionRecord &&
             !record
         ) {
 
@@ -446,7 +465,7 @@ class TreatmentDecisionPipeline {
                 false;
 
             result.errors.push(
-                "TreatmentDecisionRecord indisponível."
+                "TreatmentDecisionRecord indisponível para registrar uma decisão."
             );
         }
 
@@ -1202,11 +1221,21 @@ class TreatmentDecisionPipeline {
 
 
         // ==================================
-        // DEPENDÊNCIAS
+        // DEPENDÊNCIAS INICIAIS
+        // ==================================
+        //
+        // Neste ponto ainda não sabemos se
+        // haverá uma decisão registrável.
+        //
+        // Por isso o Decision Record não
+        // é obrigatório nesta primeira etapa.
+        //
         // ==================================
 
         const dependencies =
-            this.validateDependencies();
+            this.validateDependencies(
+                false
+            );
 
 
         result.dependencies =
@@ -1303,6 +1332,140 @@ class TreatmentDecisionPipeline {
         }
 
 
+        const gateDecision =
+            gateResult.result;
+
+
+        // ==================================
+        // PRESERVAÇÃO / OBSERVAÇÃO
+        // ==================================
+        //
+        // Se o Gate concluiu corretamente
+        // que não existe decisão de tratamento,
+        // isso NÃO é uma falha.
+        //
+        // É uma conclusão válida:
+        //
+        // "preservar / observar".
+        //
+        // Não existe motivo para criar um
+        // Decision Record artificial.
+        //
+        // ==================================
+
+        if (
+            gateDecision &&
+            gateDecision.decisionPermission !==
+                "allowed"
+        ) {
+
+            const authority =
+                this.validateAuthority(
+                    validationResult.result,
+                    gateDecision,
+                    null
+                );
+
+
+            result.authority =
+                authority;
+
+
+            if (
+                !authority.valid
+            ) {
+
+                result.errors.push(
+                    ...authority.errors
+                );
+
+
+                result.stage =
+                    "authority";
+
+
+                return result;
+            }
+
+
+            result.summary = {
+
+                records: {
+
+                    total:
+                        0,
+
+                    preserved:
+                        1,
+
+                    decisions:
+                        0
+                },
+
+                decisionPermission:
+                    "none",
+
+                recommendation:
+                    gateDecision.recommendation ||
+                    "preserve"
+            };
+
+
+            result.valid =
+                true;
+
+
+            result.stage =
+                "complete";
+
+
+            result.processingPermission =
+                "none";
+
+
+            result.audioProcessing =
+                false;
+
+
+            result.reconstructionPermission =
+                "none";
+
+
+            return result;
+        }
+
+
+        // ==================================
+        // DECISION RECORD NECESSÁRIO
+        // ==================================
+
+        const recordDependencies =
+            this.validateDependencies(
+                true
+            );
+
+
+        result.dependencies =
+            recordDependencies;
+
+
+        if (
+            !recordDependencies.valid
+        ) {
+
+            result.errors.push(
+                ...recordDependencies.errors
+            );
+
+
+            result.stage =
+                "decision-record-dependencies";
+
+
+            return result;
+        }
+
+
         // ==================================
         // DECISION RECORD
         // ==================================
@@ -1310,7 +1473,7 @@ class TreatmentDecisionPipeline {
         const recordResult =
             this.runDecisionRecord(
                 plan,
-                gateResult.result
+                gateDecision
             );
 
 
@@ -1347,7 +1510,7 @@ class TreatmentDecisionPipeline {
         const authority =
             this.validateAuthority(
                 validationResult.result,
-                gateResult.result,
+                gateDecision,
                 recordResult.result
             );
 
@@ -1385,11 +1548,11 @@ class TreatmentDecisionPipeline {
                 ),
 
             decisionPermission:
-                gateResult.result
+                gateDecision
                     .decisionPermission,
 
             recommendation:
-                gateResult.result
+                gateDecision
                     .recommendation
         };
 

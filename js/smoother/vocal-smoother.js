@@ -22,6 +22,7 @@
 // - VocalDynamics
 // - VocalSibilance
 // - VocalTreatmentPlan
+// - TreatmentDecisionPipeline
 //
 // V1.0:
 //
@@ -32,6 +33,8 @@
 // - SpectralTreatmentBridge preservado;
 // - diagnóstico espectral preservado;
 // - plano adaptativo continua isolado do DSP;
+// - TreatmentDecisionPipeline integrado em
+//   modo observacional;
 // - caminho DSP anterior preservado;
 // - falhas na camada espectral não interrompem
 //   o processamento principal.
@@ -41,9 +44,12 @@
 // O SpectralRegionalRuntime nesta etapa atua
 // somente como camada de observação.
 //
+// O TreatmentDecisionPipeline também atua
+// somente como camada de decisão/validação.
+//
 // Nenhum ganho, corte, compressão,
 // de-essing ou reconstrução adicional
-// é aplicado por ele.
+// é aplicado por essas camadas.
 //
 // ==========================================
 
@@ -195,6 +201,35 @@ class VocalSmoother {
 
 
         // ==================================
+        // DECISION PIPELINE
+        // ==================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // O Pipeline valida:
+        //
+        // Treatment Plan
+        //       ↓
+        // Validator
+        //       ↓
+        // Decision Gate
+        //       ↓
+        // Decision Record
+        //
+        // Nenhuma autoridade DSP é concedida.
+        //
+        // ==================================
+
+        this.treatmentDecisionPipeline =
+            options.treatmentDecisionPipeline ||
+            (
+                window.TreatmentDecisionPipeline
+                    ? new TreatmentDecisionPipeline()
+                    : null
+            );
+
+
+        // ==================================
         // ESTADO
         // ==================================
 
@@ -223,6 +258,10 @@ class VocalSmoother {
 
 
         this.lastTreatmentPlan =
+            null;
+
+
+        this.lastTreatmentDecisionPipeline =
             null;
 
 
@@ -626,6 +665,105 @@ class VocalSmoother {
 
 
     // ======================================
+    // EXECUTAR TREATMENT DECISION PIPELINE
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // O resultado é armazenado para auditoria
+    // e validação.
+    //
+    // Esta função NÃO interfere no caminho
+    // de processamento de áudio.
+    //
+    // ======================================
+
+    createTreatmentDecisionPipeline(
+        treatmentPlan
+    ) {
+
+        if (
+            !this.treatmentDecisionPipeline
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            !treatmentPlan
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof this.treatmentDecisionPipeline.evaluate !==
+            "function"
+        ) {
+
+            console.warn(
+                "TreatmentDecisionPipeline não possui evaluate()."
+            );
+
+
+            return null;
+        }
+
+
+        try {
+
+            const result =
+                this.treatmentDecisionPipeline.evaluate(
+                    treatmentPlan
+                );
+
+
+            /*
+             * HARD LOCK LOCAL.
+             *
+             * Mesmo que uma camada futura
+             * retorne propriedades inesperadas,
+             * o VocalSmoother não converte
+             * este resultado em autoridade DSP.
+             */
+
+            if (
+                result &&
+                typeof result ===
+                "object"
+            ) {
+
+                result.processingPermission =
+                    "none";
+
+
+                result.audioProcessing =
+                    false;
+
+
+                result.reconstructionPermission =
+                    "none";
+            }
+
+
+            return result;
+
+        } catch (error) {
+
+            console.warn(
+                "TreatmentDecisionPipeline indisponível nesta etapa:",
+                error
+            );
+
+
+            return null;
+        }
+    }
+
+
+    // ======================================
     // PROCESSAR
     // ======================================
 
@@ -774,7 +912,26 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. CONTEXTO OFFLINE
+        // 8. VALIDAR DECISÃO
+        // ==================================
+        //
+        // O Treatment Decision Pipeline
+        // passa a receber o plano completo.
+        //
+        // IMPORTANTE:
+        //
+        // O resultado NÃO altera o caminho DSP.
+        //
+        // ==================================
+
+        this.lastTreatmentDecisionPipeline =
+            this.createTreatmentDecisionPipeline(
+                this.lastTreatmentPlan
+            );
+
+
+        // ==================================
+        // 9. CONTEXTO OFFLINE
         // ==================================
 
         const context =
@@ -786,7 +943,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. SOURCE
+        // 10. SOURCE
         // ==================================
 
         const source =
@@ -798,7 +955,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 10. VOCAL BODY
+        // 11. VOCAL BODY
         // ==================================
 
         const bodyResult =
@@ -839,7 +996,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. VOCAL TONE
+        // 12. VOCAL TONE
         // ==================================
 
         let toneInput =
@@ -904,7 +1061,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 12. DINÂMICA
+        // 13. DINÂMICA
         // ==================================
 
         const dynamicsResult =
@@ -936,7 +1093,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 13. SIBILÂNCIA
+        // 14. SIBILÂNCIA
         // ==================================
 
         let finalOutput =
@@ -1004,7 +1161,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 14. CONEXÃO BODY → TONE
+        // 15. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -1013,7 +1170,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. CONEXÃO TONE → DYNAMICS
+        // 16. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -1022,7 +1179,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. CONEXÃO FINAL
+        // 17. CONEXÃO FINAL
         // ==================================
 
         if (
@@ -1042,7 +1199,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 17. SOURCE → BODY
+        // 18. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -1051,7 +1208,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 18. INICIAR
+        // 19. INICIAR
         // ==================================
 
         source.start(
@@ -1060,7 +1217,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 19. RENDER
+        // 20. RENDER
         // ==================================
 
         const result =
@@ -1138,6 +1295,16 @@ class VocalSmoother {
     getLastTreatmentPlan() {
 
         return this.lastTreatmentPlan;
+    }
+
+
+    // ======================================
+    // ÚLTIMA DECISÃO DO PIPELINE
+    // ======================================
+
+    getLastTreatmentDecisionPipeline() {
+
+        return this.lastTreatmentDecisionPipeline;
     }
 
 
