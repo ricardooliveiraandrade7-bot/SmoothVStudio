@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT CONTRACT AUDIT
-// V0.1
+// V0.2
 // ==========================================
 //
 // Auditoria observacional dos contratos entre:
@@ -16,6 +16,14 @@
 //        ↓
 // Treatment Decision Pipeline
 //
+// E, opcionalmente:
+//
+// Treatment Plan
+//        ↓
+// DSP Snapshot
+//        ↓
+// Reconciliation
+//
 // ==========================================
 //
 // ESTE MÓDULO NÃO:
@@ -28,10 +36,14 @@
 // - altera ganho;
 // - executa tratamento;
 // - modifica outros módulos;
-// - corrige automaticamente contratos.
+// - corrige automaticamente contratos;
+// - autoriza processamento.
 //
-// Sua única responsabilidade é OBSERVAR
-// compatibilidade estrutural.
+// Sua responsabilidade é OBSERVAR
+// compatibilidade estrutural e,
+// quando explicitamente fornecidos,
+// compatibilidade entre intenção de tratamento
+// e snapshot de intenção/configuração DSP.
 //
 // ==========================================
 //
@@ -50,7 +62,7 @@ class TreatmentContractAudit {
     ) {
 
         this.version =
-            "0.1";
+            "0.2";
 
 
         this.validator =
@@ -70,6 +82,28 @@ class TreatmentContractAudit {
 
         this.pipeline =
             options.pipeline ||
+            null;
+
+
+        // Snapshot opcional de Treatment Plan.
+        //
+        // Não é criado automaticamente.
+        // Não é executado.
+        //
+        this.treatmentPlan =
+            options.treatmentPlan ||
+            null;
+
+
+        // Snapshot opcional dos módulos DSP.
+        //
+        // Deve representar somente intenção,
+        // parâmetros ou configuração observável.
+        //
+        // Nunca recebe AudioBuffer.
+        //
+        this.dspSnapshot =
+            options.dspSnapshot ||
             null;
 
 
@@ -136,6 +170,24 @@ class TreatmentContractAudit {
             "string"
             ? value.trim()
             : fallback;
+    }
+
+
+    // ======================================
+    // NÚMERO
+    // ======================================
+
+    isFiniteNumber(
+        value
+    ) {
+
+        return (
+            typeof value ===
+                "number" &&
+            Number.isFinite(
+                value
+            )
+        );
     }
 
 
@@ -818,6 +870,715 @@ class TreatmentContractAudit {
             result.errors.push(
                 "decision-pipeline-evaluate-missing"
             );
+        }
+
+
+        return result;
+    }
+
+
+    // ======================================
+    // NORMALIZAR REGIÕES
+    // ======================================
+
+    getTreatmentRegions(
+        treatmentPlan
+    ) {
+
+        if (
+            !this.isObject(
+                treatmentPlan
+            )
+        ) {
+
+            return {};
+        }
+
+
+        if (
+            this.isObject(
+                treatmentPlan.decisions
+            )
+        ) {
+
+            return treatmentPlan.decisions;
+        }
+
+
+        if (
+            this.isObject(
+                treatmentPlan.regions
+            )
+        ) {
+
+            return treatmentPlan.regions;
+        }
+
+
+        return {};
+    }
+
+
+    // ======================================
+    // NORMALIZAR ESTADO
+    // ======================================
+
+    getDecisionState(
+        decision
+    ) {
+
+        if (
+            !this.isObject(
+                decision
+            )
+        ) {
+
+            return "";
+        }
+
+
+        return this.safeString(
+            decision.state ||
+            decision.status ||
+            decision.action ||
+            "",
+            ""
+        ).toLowerCase();
+    }
+
+
+    // ======================================
+    // NORMALIZAR GANHO
+    // ======================================
+
+    getTargetDb(
+        decision
+    ) {
+
+        if (
+            !this.isObject(
+                decision
+            )
+        ) {
+
+            return null;
+        }
+
+
+        const candidates = [
+
+            decision.targetDb,
+
+            decision.gainDb,
+
+            decision.reductionDb
+        ];
+
+
+        for (
+            let i = 0;
+            i < candidates.length;
+            i++
+        ) {
+
+            if (
+                this.isFiniteNumber(
+                    candidates[i]
+                )
+            ) {
+
+                return candidates[i];
+            }
+        }
+
+
+        return null;
+    }
+
+
+    // ======================================
+    // NORMALIZAR DSP SNAPSHOT
+    // ======================================
+
+    getDspRegion(
+        dspSnapshot,
+        region
+    ) {
+
+        if (
+            !this.isObject(
+                dspSnapshot
+            )
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            this.isObject(
+                dspSnapshot[region]
+            )
+        ) {
+
+            return dspSnapshot[region];
+        }
+
+
+        if (
+            this.isObject(
+                dspSnapshot.regions
+            ) &&
+            this.isObject(
+                dspSnapshot.regions[
+                    region
+                ]
+            )
+        ) {
+
+            return dspSnapshot.regions[
+                region
+            ];
+        }
+
+
+        return null;
+    }
+
+
+    // ======================================
+    // CLASSIFICAR RECONCILIAÇÃO
+    // ======================================
+
+    classifyReconciliation(
+        decision,
+        dspRegion
+    ) {
+
+        if (
+            !this.isObject(
+                decision
+            )
+        ) {
+
+            return "UNSUPPORTED";
+        }
+
+
+        if (
+            !this.isObject(
+                dspRegion
+            )
+        ) {
+
+            return "UNSUPPORTED";
+        }
+
+
+        const state =
+            this.getDecisionState(
+                decision
+            );
+
+
+        const blockedStates = [
+
+            "uncertain",
+
+            "unstable",
+
+            "masked",
+
+            "blocked",
+
+            "none",
+
+            "skip"
+        ];
+
+
+        if (
+            blockedStates.indexOf(
+                state
+            ) !==
+            -1
+        ) {
+
+            return "BLOCKED";
+        }
+
+
+        const treatment =
+            this.safeString(
+                decision.treatment ||
+                decision.action ||
+                decision.type ||
+                "",
+                ""
+            ).toLowerCase();
+
+
+        const dspEnabled =
+            dspRegion.enabled;
+
+
+        const dspActive =
+            dspRegion.active;
+
+
+        const hasDspIntent =
+            (
+                dspEnabled === true ||
+                dspActive === true
+            );
+
+
+        const targetDb =
+            this.getTargetDb(
+                decision
+            );
+
+
+        const dspGainDb =
+            this.isFiniteNumber(
+                dspRegion.gainDb
+            )
+            ? dspRegion.gainDb
+            : null;
+
+
+        const plannedTreatment =
+            (
+                state === "correct" ||
+                state === "improve" ||
+                state === "reduce" ||
+                state === "cut" ||
+                state === "boost" ||
+                state === "treat" ||
+                treatment !== ""
+            );
+
+
+        if (
+            !plannedTreatment
+        ) {
+
+            if (
+                hasDspIntent
+            ) {
+
+                return "DIVERGENT";
+            }
+
+
+            return "ALIGNED";
+        }
+
+
+        if (
+            targetDb === null &&
+            !hasDspIntent
+        ) {
+
+            return "UNSUPPORTED";
+        }
+
+
+        if (
+            targetDb !== null &&
+            dspGainDb !== null
+        ) {
+
+            const difference =
+                Math.abs(
+                    targetDb -
+                    dspGainDb
+                );
+
+
+            if (
+                difference <=
+                0.25
+            ) {
+
+                return "ALIGNED";
+            }
+
+
+            return "PARTIALLY_ALIGNED";
+        }
+
+
+        if (
+            hasDspIntent
+        ) {
+
+            return "PARTIALLY_ALIGNED";
+        }
+
+
+        return "UNSUPPORTED";
+    }
+
+
+    // ======================================
+    // AUDITAR UMA REGIÃO
+    // ======================================
+
+    auditReconciliationRegion(
+        region,
+        decision,
+        dspRegion
+    ) {
+
+        const classification =
+            this.classifyReconciliation(
+                decision,
+                dspRegion
+            );
+
+
+        const targetDb =
+            this.getTargetDb(
+                decision
+            );
+
+
+        const dspGainDb =
+            this.isObject(
+                dspRegion
+            ) &&
+            this.isFiniteNumber(
+                dspRegion.gainDb
+            )
+            ? dspRegion.gainDb
+            : null;
+
+
+        let differenceDb =
+            null;
+
+
+        if (
+            targetDb !== null &&
+            dspGainDb !== null
+        ) {
+
+            differenceDb =
+                dspGainDb -
+                targetDb;
+        }
+
+
+        return {
+
+            region,
+
+            classification,
+
+            decisionState:
+                this.getDecisionState(
+                    decision
+                ),
+
+            treatment:
+                this.safeString(
+                    decision &&
+                    (
+                        decision.treatment ||
+                        decision.action ||
+                        decision.type
+                    ),
+                    ""
+                ),
+
+            targetDb,
+
+            dspGainDb,
+
+            differenceDb,
+
+            evidence:
+
+                decision &&
+                decision.evidence
+                    ? decision.evidence
+                    : null,
+
+            processingPermission:
+                "none",
+
+            audioProcessing:
+                false
+        };
+    }
+
+
+    // ======================================
+    // RECONCILIAR PLAN ↔ DSP
+    // ======================================
+    //
+    // Esta função é puramente observacional.
+    //
+    // Não chama processadores.
+    // Não altera parâmetros.
+    // Não cria filtros.
+    // Não recebe AudioBuffer.
+    //
+    // O DSP snapshot deve ser fornecido
+    // explicitamente pelo chamador.
+    //
+    // ======================================
+
+    auditTreatmentDspReconciliation(
+        treatmentPlan =
+            this.treatmentPlan,
+
+        dspSnapshot =
+            this.dspSnapshot
+    ) {
+
+        const result = {
+
+            available:
+                false,
+
+            classification:
+                "NOT_EVALUATED",
+
+            regions:
+                {},
+
+            summary: {
+
+                aligned:
+                    0,
+
+                partiallyAligned:
+                    0,
+
+                divergent:
+                    0,
+
+                unsupported:
+                    0,
+
+                blocked:
+                    0
+            },
+
+            processingPermission:
+                "none",
+
+            audioProcessing:
+                false,
+
+            executorPermission:
+                "none",
+
+            errors:
+                [],
+
+            warnings:
+                []
+        };
+
+
+        if (
+            !this.isObject(
+                treatmentPlan
+            )
+        ) {
+
+            result.warnings.push(
+                "treatment-plan-unavailable"
+            );
+
+
+            return result;
+        }
+
+
+        if (
+            !this.isObject(
+                dspSnapshot
+            )
+        ) {
+
+            result.warnings.push(
+                "dsp-snapshot-unavailable"
+            );
+
+
+            return result;
+        }
+
+
+        const decisions =
+            this.getTreatmentRegions(
+                treatmentPlan
+            );
+
+
+        if (
+            !this.isObject(
+                decisions
+            )
+        ) {
+
+            result.warnings.push(
+                "treatment-decisions-unavailable"
+            );
+
+
+            return result;
+        }
+
+
+        result.available =
+            true;
+
+
+        const regions = [
+
+            "bass",
+
+            "body",
+
+            "mid",
+
+            "presence",
+
+            "harshness",
+
+            "sibilance",
+
+            "air"
+        ];
+
+
+        let hasDivergence =
+            false;
+
+        let hasPartial =
+            false;
+
+        let hasUnsupported =
+            false;
+
+
+        for (
+            let i = 0;
+            i < regions.length;
+            i++
+        ) {
+
+            const region =
+                regions[i];
+
+
+            const decision =
+                decisions[
+                    region
+                ] || null;
+
+
+            const dspRegion =
+                this.getDspRegion(
+                    dspSnapshot,
+                    region
+                );
+
+
+            const audit =
+                this.auditReconciliationRegion(
+                    region,
+                    decision,
+                    dspRegion
+                );
+
+
+            result.regions[
+                region
+            ] =
+                audit;
+
+
+            switch (
+                audit.classification
+            ) {
+
+                case "ALIGNED":
+
+                    result.summary.aligned++;
+
+                    break;
+
+
+                case "PARTIALLY_ALIGNED":
+
+                    result.summary.partiallyAligned++;
+
+                    hasPartial =
+                        true;
+
+                    break;
+
+
+                case "DIVERGENT":
+
+                    result.summary.divergent++;
+
+                    hasDivergence =
+                        true;
+
+                    break;
+
+
+                case "UNSUPPORTED":
+
+                    result.summary.unsupported++;
+
+                    hasUnsupported =
+                        true;
+
+                    break;
+
+
+                case "BLOCKED":
+
+                    result.summary.blocked++;
+
+                    break;
+            }
+        }
+
+
+        if (
+            hasDivergence
+        ) {
+
+            result.classification =
+                "DIVERGENT";
+
+        } else if (
+            hasPartial
+        ) {
+
+            result.classification =
+                "PARTIALLY_ALIGNED";
+
+        } else if (
+            hasUnsupported
+        ) {
+
+            result.classification =
+                "UNSUPPORTED";
+
+        } else {
+
+            result.classification =
+                "ALIGNED";
         }
 
 
