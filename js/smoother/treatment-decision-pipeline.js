@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT DECISION PIPELINE
-// V0.2
+// V0.3
 // ==========================================
 //
 // Responsabilidade:
@@ -18,6 +18,8 @@
 // Treatment Decision Record
 //       ↓
 // Bounded Authority
+//       ↓
+// Regional Intervention Intent
 //
 // ==========================================
 //
@@ -34,9 +36,9 @@
 // - reconstrói espectro
 // - executa tratamento
 //
-// Sua responsabilidade é garantir que
-// as camadas de decisão sejam executadas em
-// uma ordem segura e rastreável.
+// Sua responsabilidade é transformar decisões
+// diagnósticas em contratos seguros e
+// rastreáveis para futuras etapas.
 //
 // ==========================================
 //
@@ -54,8 +56,6 @@
 //
 // AUTORIDADE PROGRESSIVA
 //
-// Esta versão introduz:
-//
 // authority.level = "bounded"
 //
 // Porém:
@@ -67,9 +67,23 @@
 // "bounded" NÃO significa que o DSP
 // está autorizado a executar.
 //
-// Significa apenas que existe um
-// CONTRATO DE LIMITES preparado para
-// uma futura etapa de processamento.
+// ==========================================
+//
+// INTERVENTION INTENT
+//
+// Esta versão introduz:
+//
+// regionalInterventionIntent
+//
+// Estados:
+//
+// preserve
+// candidate
+// blocked
+//
+// A intenção é apenas descritiva.
+//
+// executionPermission = "none"
 //
 // ==========================================
 
@@ -83,17 +97,12 @@ class TreatmentDecisionPipeline {
 
 
         this.version =
-            "0.2";
+            "0.3";
 
 
         // ==================================
         // DEPENDÊNCIAS
         // ==================================
-        //
-        // Podem ser fornecidas externamente
-        // para reduzir acoplamento e facilitar
-        // testes.
-        //
 
         this.validator =
             options.validator || null;
@@ -125,13 +134,6 @@ class TreatmentDecisionPipeline {
 
         // ==================================
         // AUTORIDADE BOUNDED
-        // ==================================
-        //
-        // Este objeto representa somente
-        // limites futuros de processamento.
-        //
-        // Ele NÃO executa DSP.
-        //
         // ==================================
 
         this.authorityProfile =
@@ -242,19 +244,6 @@ class TreatmentDecisionPipeline {
     // ======================================
     // CRIAR AUTORIDADE BOUNDED
     // ======================================
-    //
-    // Esta função define o primeiro contrato
-    // de autoridade progressiva.
-    //
-    // IMPORTANTE:
-    //
-    // processingPermission permanece "none".
-    //
-    // Nenhum DSP pode usar este objeto
-    // diretamente para executar processamento
-    // nesta versão.
-    //
-    // ======================================
 
     createBoundedAuthority() {
 
@@ -314,11 +303,6 @@ class TreatmentDecisionPipeline {
     // ======================================
     // CLONAR AUTORIDADE
     // ======================================
-    //
-    // Evita devolver a mesma referência
-    // interna para consumidores externos.
-    //
-    // ======================================
 
     cloneAuthority(
         authority
@@ -348,6 +332,1164 @@ class TreatmentDecisionPipeline {
                         : {}
                 )
             }
+        };
+    }
+
+
+    // ======================================
+    // CRIAR INTENÇÃO REGIONAL
+    // ======================================
+
+    createRegionalInterventionIntent(
+        options = {}
+    ) {
+
+        const state =
+            this.safeString(
+                options.state,
+                "preserve"
+            );
+
+
+        const normalizedState =
+            (
+                state === "candidate" ||
+                state === "blocked" ||
+                state === "preserve"
+            )
+                ? state
+                : "blocked";
+
+
+        return {
+
+            state:
+                normalizedState,
+
+            executionPermission:
+                "none",
+
+            processingPermission:
+                "none",
+
+            audioProcessing:
+                false,
+
+            region:
+                options.region || null,
+
+            treatmentType:
+                this.safeString(
+                    options.treatmentType,
+                    "none"
+                ),
+
+            confidence:
+                this.safeString(
+                    options.confidence,
+                    "indeterminate"
+                ),
+
+            evidence:
+                this.isArray(
+                    options.evidence
+                )
+                    ? [
+                        ...options.evidence
+                    ]
+                    : [],
+
+            rationale:
+                this.safeString(
+                    options.rationale,
+                    ""
+                ),
+
+            requestedGainDb:
+                this.isFiniteNumber(
+                    options.requestedGainDb
+                )
+                    ? options.requestedGainDb
+                    : 0,
+
+            boundedGainDb:
+                this.isFiniteNumber(
+                    options.boundedGainDb
+                )
+                    ? options.boundedGainDb
+                    : 0,
+
+            fallback:
+                "preserve"
+        };
+    }
+
+
+    // ======================================
+    // NORMALIZAR REGIÃO
+    // ======================================
+
+    normalizeRegion(
+        value
+    ) {
+
+        if (
+            typeof value ===
+            "string"
+        ) {
+
+            const name =
+                this.safeString(
+                    value
+                );
+
+
+            if (
+                !name
+            ) {
+
+                return null;
+            }
+
+
+            return {
+
+                id:
+                    name,
+
+                name:
+                    name
+            };
+        }
+
+
+        if (
+            this.isObject(
+                value
+            )
+        ) {
+
+            const id =
+                this.safeString(
+                    value.id ||
+                    value.key ||
+                    value.name,
+                    "unknown"
+                );
+
+
+            const name =
+                this.safeString(
+                    value.name ||
+                    value.label ||
+                    id,
+                    id
+                );
+
+
+            return {
+
+                id,
+
+                name
+            };
+        }
+
+
+        return null;
+    }
+
+
+    // ======================================
+    // EXTRAIR REGIÃO DO REGISTRO
+    // ======================================
+
+    extractRegionFromRecord(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return null;
+        }
+
+
+        return this.normalizeRegion(
+            record.region ||
+            record.regionResult ||
+            record.regionData ||
+            record.targetRegion ||
+            record.area ||
+            record.frequencyRegion ||
+            null
+        );
+    }
+
+
+    // ======================================
+    // EXTRAIR TIPO DE TRATAMENTO
+    // ======================================
+
+    extractTreatmentType(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return "none";
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        return this.safeString(
+            record.treatmentType ||
+            record.treatment ||
+            record.actionType ||
+            decision.treatmentType ||
+            decision.treatment ||
+            decision.type ||
+            decision.actionType ||
+            "none",
+            "none"
+        );
+    }
+
+
+    // ======================================
+    // EXTRAIR CONFIANÇA
+    // ======================================
+
+    extractConfidence(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return "indeterminate";
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const value =
+            record.confidence ||
+            record.decisionConfidence ||
+            decision.confidence ||
+            record.evidenceConfidence ||
+            null;
+
+
+        if (
+            typeof value ===
+            "number"
+        ) {
+
+            if (
+                value >= 0.8
+            ) {
+
+                return "strong";
+            }
+
+
+            if (
+                value >= 0.5
+            ) {
+
+                return "moderate";
+            }
+
+
+            if (
+                value > 0
+            ) {
+
+                return "weak";
+            }
+
+
+            return "indeterminate";
+        }
+
+
+        const text =
+            this.safeString(
+                value,
+                "indeterminate"
+            )
+                .toLowerCase();
+
+
+        if (
+            text === "strong" ||
+            text === "forte"
+        ) {
+
+            return "strong";
+        }
+
+
+        if (
+            text === "moderate" ||
+            text === "moderada"
+        ) {
+
+            return "moderate";
+        }
+
+
+        if (
+            text === "weak" ||
+            text === "fraca"
+        ) {
+
+            return "weak";
+        }
+
+
+        return "indeterminate";
+    }
+
+
+    // ======================================
+    // EXTRAIR EVIDÊNCIAS
+    // ======================================
+
+    extractEvidence(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return [];
+        }
+
+
+        const sources = [
+
+            record.evidence,
+
+            record.evidenceList,
+
+            record.supportingEvidence,
+
+            record.observations,
+
+            record.diagnostics,
+
+            record.measurements,
+
+            record.decision &&
+            record.decision.evidence
+        ];
+
+
+        for (
+            let i = 0;
+            i < sources.length;
+            i++
+        ) {
+
+            if (
+                this.isArray(
+                    sources[i]
+                )
+            ) {
+
+                return [
+                    ...sources[i]
+                ];
+            }
+        }
+
+
+        return [];
+    }
+
+
+    // ======================================
+    // EXTRAIR GANHO SOLICITADO
+    // ======================================
+
+    extractRequestedGainDb(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return 0;
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const candidates = [
+
+            record.requestedGainDb,
+
+            record.gainDb,
+
+            record.recommendedGainDb,
+
+            record.amountDb,
+
+            decision.requestedGainDb,
+
+            decision.gainDb,
+
+            decision.recommendedGainDb,
+
+            decision.amountDb
+        ];
+
+
+        for (
+            let i = 0;
+            i < candidates.length;
+            i++
+        ) {
+
+            if (
+                this.isFiniteNumber(
+                    candidates[i]
+                )
+            ) {
+
+                return candidates[i];
+            }
+        }
+
+
+        return 0;
+    }
+
+
+    // ======================================
+    // IDENTIFICAR PRESERVAÇÃO
+    // ======================================
+
+    isPreserveRecord(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return true;
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const actions = [
+
+            record.action,
+
+            record.decisionAction,
+
+            record.recommendation,
+
+            decision.action,
+
+            decision.recommendation
+        ];
+
+
+        for (
+            let i = 0;
+            i < actions.length;
+            i++
+        ) {
+
+            const action =
+                this.safeString(
+                    actions[i],
+                    ""
+                )
+                    .toLowerCase();
+
+
+            if (
+                action ===
+                    "preserve" ||
+                action ===
+                    "preservar"
+            ) {
+
+                return true;
+            }
+        }
+
+
+        return false;
+    }
+
+
+    // ======================================
+    // CRIAR INTENÇÃO A PARTIR DE REGISTRO
+    // ======================================
+
+    createIntentFromRecord(
+        record,
+        authority
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return this.createRegionalInterventionIntent({
+
+                state:
+                    "blocked",
+
+                rationale:
+                    "Registro de decisão inválido."
+            });
+        }
+
+
+        if (
+            this.isPreserveRecord(
+                record
+            )
+        ) {
+
+            return this.createRegionalInterventionIntent({
+
+                state:
+                    "preserve",
+
+                region:
+                    this.extractRegionFromRecord(
+                        record
+                    ),
+
+                treatmentType:
+                    "none",
+
+                confidence:
+                    this.extractConfidence(
+                        record
+                    ),
+
+                evidence:
+                    this.extractEvidence(
+                        record
+                    ),
+
+                rationale:
+                    "Decisão indica preservação."
+            });
+        }
+
+
+        const region =
+            this.extractRegionFromRecord(
+                record
+            );
+
+
+        const treatmentType =
+            this.extractTreatmentType(
+                record
+            );
+
+
+        const confidence =
+            this.extractConfidence(
+                record
+            );
+
+
+        const evidence =
+            this.extractEvidence(
+                record
+            );
+
+
+        const requestedGainDb =
+            this.extractRequestedGainDb(
+                record
+            );
+
+
+        // ==================================
+        // SEM REGIÃO
+        // ==================================
+
+        if (
+            !region
+        ) {
+
+            return this.createRegionalInterventionIntent({
+
+                state:
+                    "blocked",
+
+                treatmentType,
+
+                confidence,
+
+                evidence,
+
+                requestedGainDb,
+
+                rationale:
+                    "Intervenção sem região explicitamente identificável."
+            });
+        }
+
+
+        // ==================================
+        // SEM TRATAMENTO
+        // ==================================
+
+        if (
+            treatmentType ===
+            "none"
+        ) {
+
+            return this.createRegionalInterventionIntent({
+
+                state:
+                    "blocked",
+
+                region,
+
+                treatmentType,
+
+                confidence,
+
+                evidence,
+
+                requestedGainDb,
+
+                rationale:
+                    "Nenhum tipo de tratamento explicitamente identificado."
+            });
+        }
+
+
+        // ==================================
+        // CONFIANÇA INSUFICIENTE
+        // ==================================
+
+        if (
+            confidence ===
+                "weak" ||
+            confidence ===
+                "indeterminate"
+        ) {
+
+            return this.createRegionalInterventionIntent({
+
+                state:
+                    "blocked",
+
+                region,
+
+                treatmentType,
+
+                confidence,
+
+                evidence,
+
+                requestedGainDb,
+
+                rationale:
+                    "Confiança insuficiente para formar intenção de intervenção."
+            });
+        }
+
+
+        // ==================================
+        // LIMITAÇÃO DO GANHO
+        // ==================================
+
+        const maxGain =
+            authority &&
+            authority.limits &&
+            this.isFiniteNumber(
+                authority.limits.maxGainDb
+            )
+                ? authority.limits.maxGainDb
+                : 2;
+
+
+        const maxCut =
+            authority &&
+            authority.limits &&
+            this.isFiniteNumber(
+                authority.limits.maxCutDb
+            )
+                ? authority.limits.maxCutDb
+                : -2;
+
+
+        const boundedGain =
+            this.clamp(
+                requestedGainDb,
+                maxCut,
+                maxGain
+            );
+
+
+        // ==================================
+        // INTENÇÃO CANDIDATA
+        // ==================================
+
+        return this.createRegionalInterventionIntent({
+
+            state:
+                "candidate",
+
+            region,
+
+            treatmentType,
+
+            confidence,
+
+            evidence,
+
+            requestedGainDb,
+
+            boundedGainDb:
+                boundedGain,
+
+            rationale:
+                "Existe evidência suficiente para uma possível intervenção regional limitada; execução permanece bloqueada."
+        });
+    }
+
+
+    // ======================================
+    // CRIAR INTENÇÕES REGIONAIS
+    // ======================================
+
+    buildRegionalInterventionIntents(
+        recordResult,
+        authority
+    ) {
+
+        const records =
+            recordResult &&
+            this.isArray(
+                recordResult.records
+            )
+                ? recordResult.records
+                : [];
+
+
+        const intents = [];
+
+
+        const maxInterventions =
+            authority &&
+            authority.limits &&
+            Number.isInteger(
+                authority.limits.maxInterventions
+            )
+                ? authority.limits.maxInterventions
+                : 1;
+
+
+        for (
+            let i = 0;
+            i < records.length;
+            i++
+        ) {
+
+            if (
+                intents.length >=
+                maxInterventions
+            ) {
+
+                break;
+            }
+
+
+            const intent =
+                this.createIntentFromRecord(
+                    records[i],
+                    authority
+                );
+
+
+            intents.push(
+                intent
+            );
+        }
+
+
+        if (
+            intents.length ===
+            0
+        ) {
+
+            intents.push(
+                this.createRegionalInterventionIntent({
+
+                    state:
+                        "preserve",
+
+                    rationale:
+                        "Nenhum registro de decisão gerou intenção regional."
+                })
+            );
+        }
+
+
+        return intents;
+    }
+
+
+    // ======================================
+    // VALIDAR INTENÇÃO REGIONAL
+    // ======================================
+
+    validateRegionalInterventionIntent(
+        intent,
+        authority
+    ) {
+
+        const errors = [];
+
+
+        if (
+            !this.isObject(
+                intent
+            )
+        ) {
+
+            errors.push(
+                "Intenção regional ausente."
+            );
+
+
+            return {
+
+                valid:
+                    false,
+
+                errors
+            };
+        }
+
+
+        if (
+            intent.state !==
+                "preserve" &&
+            intent.state !==
+                "candidate" &&
+            intent.state !==
+                "blocked"
+        ) {
+
+            errors.push(
+                "Estado da intenção regional inválido."
+            );
+        }
+
+
+        if (
+            intent.executionPermission !==
+            "none"
+        ) {
+
+            errors.push(
+                "Intenção regional não pode autorizar execução."
+            );
+        }
+
+
+        if (
+            intent.processingPermission !==
+            "none"
+        ) {
+
+            errors.push(
+                "Intenção regional não pode liberar processamento."
+            );
+        }
+
+
+        if (
+            intent.audioProcessing !==
+            false
+        ) {
+
+            errors.push(
+                "Intenção regional não pode executar processamento de áudio."
+            );
+        }
+
+
+        if (
+            intent.state ===
+            "candidate"
+        ) {
+
+            if (
+                !this.isObject(
+                    intent.region
+                )
+            ) {
+
+                errors.push(
+                    "Intenção candidata sem região."
+                );
+            }
+
+
+            if (
+                intent.treatmentType ===
+                "none"
+            ) {
+
+                errors.push(
+                    "Intenção candidata sem tratamento definido."
+                );
+            }
+
+
+            if (
+                intent.confidence ===
+                    "weak" ||
+                intent.confidence ===
+                    "indeterminate"
+            ) {
+
+                errors.push(
+                    "Intenção candidata possui confiança insuficiente."
+                );
+            }
+        }
+
+
+        if (
+            !this.isFiniteNumber(
+                intent.requestedGainDb
+            )
+        ) {
+
+            errors.push(
+                "requestedGainDb inválido."
+            );
+        }
+
+
+        if (
+            !this.isFiniteNumber(
+                intent.boundedGainDb
+            )
+        ) {
+
+            errors.push(
+                "boundedGainDb inválido."
+            );
+        }
+
+
+        if (
+            authority &&
+            authority.limits
+        ) {
+
+            const min =
+                authority.limits.maxCutDb;
+
+
+            const max =
+                authority.limits.maxGainDb;
+
+
+            if (
+                this.isFiniteNumber(
+                    min
+                ) &&
+                this.isFiniteNumber(
+                    max
+                )
+            ) {
+
+                if (
+                    intent.boundedGainDb <
+                    min ||
+                    intent.boundedGainDb >
+                    max
+                ) {
+
+                    errors.push(
+                        "boundedGainDb ultrapassa o orçamento de autoridade."
+                    );
+                }
+            }
+
+
+            if (
+                authority.limits.regionalOnly !==
+                true
+            ) {
+
+                errors.push(
+                    "Autoridade regional não está restrita a regiões."
+                );
+            }
+        }
+
+
+        if (
+            intent.fallback !==
+            "preserve"
+        ) {
+
+            errors.push(
+                "Fallback da intenção regional deve ser preserve."
+            );
+        }
+
+
+        return {
+
+            valid:
+                errors.length ===
+                0,
+
+            errors
+        };
+    }
+
+
+    // ======================================
+    // VALIDAR TODAS AS INTENÇÕES
+    // ======================================
+
+    validateRegionalInterventionIntents(
+        intents,
+        authority
+    ) {
+
+        const errors = [];
+
+
+        if (
+            !this.isArray(
+                intents
+            )
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                errors: [
+                    "Lista de intenções regionais inválida."
+                ]
+            };
+        }
+
+
+        const maxInterventions =
+            authority &&
+            authority.limits &&
+            authority.limits.maxInterventions;
+
+
+        if (
+            Number.isInteger(
+                maxInterventions
+            ) &&
+            intents.length >
+            maxInterventions
+        ) {
+
+            errors.push(
+                "Número de intenções excede o orçamento bounded."
+            );
+        }
+
+
+        intents.forEach(
+            intent => {
+
+                const validation =
+                    this.validateRegionalInterventionIntent(
+                        intent,
+                        authority
+                    );
+
+
+                if (
+                    !validation.valid
+                ) {
+
+                    errors.push(
+                        ...validation.errors
+                    );
+                }
+            }
+        );
+
+
+        return {
+
+            valid:
+                errors.length ===
+                0,
+
+            errors
         };
     }
 
@@ -559,15 +1701,6 @@ class TreatmentDecisionPipeline {
 
     // ======================================
     // VALIDAR DEPENDÊNCIAS
-    // ======================================
-    //
-    // Validator e Decision Gate são sempre
-    // obrigatórios.
-    //
-    // Decision Record só é obrigatório
-    // quando existir uma decisão efetivamente
-    // autorizada pelo Gate.
-    //
     // ======================================
 
     validateDependencies(
@@ -1139,13 +2272,6 @@ class TreatmentDecisionPipeline {
     // ======================================
     // VALIDAR LIMITES BOUNDED
     // ======================================
-    //
-    // Esta validação não autoriza DSP.
-    //
-    // Ela somente garante que o contrato
-    // de limites futuros permanece seguro.
-    //
-    // ======================================
 
     validateBoundedAuthority(
         authority
@@ -1386,12 +2512,6 @@ class TreatmentDecisionPipeline {
     // ======================================
     // CRIAR AUTORIDADE FINAL
     // ======================================
-    //
-    // A decisão pode ser permitida,
-    // mas a autoridade DSP permanece
-    // explicitamente bloqueada.
-    //
-    // ======================================
 
     buildAuthority(
         gateResult
@@ -1419,12 +2539,7 @@ class TreatmentDecisionPipeline {
         }
 
 
-        /*
-         * HARD LOCK:
-         *
-         * Nunca herdar uma possível
-         * permissão DSP do Gate.
-         */
+        // HARD LOCK
 
         authority.processingPermission =
             "none";
@@ -1459,10 +2574,6 @@ class TreatmentDecisionPipeline {
         const errors = [];
 
 
-        // ==================================
-        // AUTORIDADE BOUNDED
-        // ==================================
-
         const authority =
             this.buildAuthority(
                 gateResult
@@ -1485,10 +2596,6 @@ class TreatmentDecisionPipeline {
         }
 
 
-        // ==================================
-        // VALIDATOR
-        // ==================================
-
         if (
             validation &&
             validation.processingPermission !==
@@ -1500,10 +2607,6 @@ class TreatmentDecisionPipeline {
             );
         }
 
-
-        // ==================================
-        // GATE
-        // ==================================
 
         if (
             gateResult &&
@@ -1528,10 +2631,6 @@ class TreatmentDecisionPipeline {
             );
         }
 
-
-        // ==================================
-        // RECORDS
-        // ==================================
 
         if (
             recordResult &&
@@ -1721,6 +2820,9 @@ class TreatmentDecisionPipeline {
             authority:
                 null,
 
+            regionalInterventionIntent:
+                [],
+
             summary:
                 null,
 
@@ -1757,11 +2859,6 @@ class TreatmentDecisionPipeline {
 
         // ==================================
         // AUTORIDADE BASE
-        // ==================================
-        //
-        // Desde o início do pipeline,
-        // a autoridade DSP permanece bloqueada.
-        //
         // ==================================
 
         result.authority =
@@ -1881,16 +2978,6 @@ class TreatmentDecisionPipeline {
         // ==================================
         // PRESERVAÇÃO / OBSERVAÇÃO
         // ==================================
-        //
-        // Se o Gate concluiu corretamente
-        // que não existe decisão de tratamento,
-        // isso NÃO é uma falha.
-        //
-        // É uma conclusão válida:
-        //
-        // "preservar / observar".
-        //
-        // ==================================
 
         if (
             gateDecision &&
@@ -1927,6 +3014,20 @@ class TreatmentDecisionPipeline {
             }
 
 
+            result.regionalInterventionIntent = [
+
+                this.createRegionalInterventionIntent({
+
+                    state:
+                        "preserve",
+
+                    rationale:
+                        gateDecision.recommendation ||
+                        "Nenhuma intervenção autorizada; preservar."
+                })
+            ];
+
+
             result.summary = {
 
                 records: {
@@ -1946,7 +3047,10 @@ class TreatmentDecisionPipeline {
 
                 recommendation:
                     gateDecision.recommendation ||
-                    "preserve"
+                    "preserve",
+
+                regionalIntentCount:
+                    1
             };
 
 
@@ -2076,6 +3180,45 @@ class TreatmentDecisionPipeline {
 
 
         // ==================================
+        // INTENÇÕES REGIONAIS
+        // ==================================
+
+        const regionalIntents =
+            this.buildRegionalInterventionIntents(
+                recordResult.result,
+                authority.authority
+            );
+
+
+        const intentValidation =
+            this.validateRegionalInterventionIntents(
+                regionalIntents,
+                authority.authority
+            );
+
+
+        if (
+            !intentValidation.valid
+        ) {
+
+            result.errors.push(
+                ...intentValidation.errors
+            );
+
+
+            result.stage =
+                "regional-intervention-intent";
+
+
+            return result;
+        }
+
+
+        result.regionalInterventionIntent =
+            regionalIntents;
+
+
+        // ==================================
         // RESUMO
         // ==================================
 
@@ -2096,7 +3239,10 @@ class TreatmentDecisionPipeline {
 
             authorityLevel:
                 authority.authority
-                    .level
+                    .level,
+
+            regionalIntentCount:
+                regionalIntents.length
         };
 
 
@@ -2128,12 +3274,6 @@ class TreatmentDecisionPipeline {
             "none";
 
 
-        /*
-         * A autoridade bounded existe como
-         * contrato de limites, mas não recebe
-         * autorização de execução.
-         */
-
         result.authority.processingPermission =
             "none";
 
@@ -2148,6 +3288,32 @@ class TreatmentDecisionPipeline {
 
         result.authority.executorPermission =
             "none";
+
+
+        // ==================================
+        // HARD LOCK DAS INTENÇÕES
+        // ==================================
+
+        result.regionalInterventionIntent =
+            result.regionalInterventionIntent
+                .map(
+                    intent => ({
+
+                        ...intent,
+
+                        executionPermission:
+                            "none",
+
+                        processingPermission:
+                            "none",
+
+                        audioProcessing:
+                            false,
+
+                        fallback:
+                            "preserve"
+                    })
+                );
 
 
         return result;
