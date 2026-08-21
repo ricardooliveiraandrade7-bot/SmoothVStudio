@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V1.0
+// V1.1
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -24,7 +24,7 @@
 // - VocalTreatmentPlan
 // - TreatmentDecisionPipeline
 //
-// V1.0:
+// V1.1:
 //
 // - integração segura da medição espectral
 //   regional;
@@ -37,7 +37,9 @@
 //   modo observacional;
 // - caminho DSP anterior preservado;
 // - falhas na camada espectral não interrompem
-//   o processamento principal.
+//   o processamento principal;
+// - snapshot observacional dos parâmetros DSP
+//   efetivamente calculados.
 //
 // IMPORTANTE:
 //
@@ -46,6 +48,9 @@
 //
 // O TreatmentDecisionPipeline também atua
 // somente como camada de decisão/validação.
+//
+// O DSP Snapshot também atua somente como
+// camada de observação.
 //
 // Nenhum ganho, corte, compressão,
 // de-essing ou reconstrução adicional
@@ -63,7 +68,7 @@ class VocalSmoother {
 
 
         this.version =
-            "1.0";
+            "1.1";
 
 
         // ==================================
@@ -764,6 +769,97 @@ class VocalSmoother {
 
 
     // ======================================
+    // CRIAR SNAPSHOT DSP
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // Este método consolida os parâmetros
+    // efetivamente retornados pelos módulos
+    // DSP durante a última execução.
+    //
+    // Não recalcula parâmetros.
+    // Não altera parâmetros.
+    // Não cria AudioNode.
+    // Não recebe AudioBuffer.
+    // Não executa processamento.
+    //
+    // O snapshot usa cópias rasas dos objetos
+    // para evitar expor diretamente os objetos
+    // internos de configuração.
+    //
+    // ======================================
+
+    createDspSnapshot() {
+
+        const copySettings =
+            settings => {
+
+                if (
+                    !settings ||
+                    typeof settings !==
+                    "object"
+                ) {
+
+                    return null;
+                }
+
+
+                return {
+                    ...settings
+                };
+            };
+
+
+        return {
+
+            version:
+                "1.0",
+
+
+            body:
+                copySettings(
+                    this.lastBodySettings
+                ),
+
+
+            tone:
+                copySettings(
+                    this.lastToneSettings
+                ),
+
+
+            dynamics:
+                copySettings(
+                    this.lastSettings
+                ),
+
+
+            sibilance:
+                copySettings(
+                    this.lastSibilanceSettings
+                ),
+
+
+            processingPermission:
+                "none",
+
+
+            audioProcessing:
+                false,
+
+
+            reconstructionPermission:
+                "none",
+
+
+            executorPermission:
+                "none"
+        };
+    }
+
+
+    // ======================================
     // PROCESSAR
     // ======================================
 
@@ -1345,6 +1441,24 @@ class VocalSmoother {
     getLastSibilanceSettings() {
 
         return this.lastSibilanceSettings;
+    }
+
+
+    // ======================================
+    // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // Retorna uma cópia consolidada dos
+    // parâmetros efetivamente armazenados
+    // pelos módulos DSP.
+    //
+    // ======================================
+
+    getLastDspSnapshot() {
+
+        return this.createDspSnapshot();
     }
 }
 
