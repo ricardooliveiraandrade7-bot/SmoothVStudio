@@ -428,9 +428,20 @@ class VocalSmoother {
     // ======================================
     // GERAR CONTEXTO ESPECTRAL
     // ======================================
+    //
+    // O diagnóstico é opcional para manter
+    // compatibilidade com a criação inicial
+    // do contexto.
+    //
+    // Quando fornecido, o Bridge passa a
+    // incorporar a interpretação regional
+    // ao contexto de planejamento.
+    //
+    // ======================================
 
     createSpectralContext(
-        spectralProfile
+        spectralProfile,
+        spectralDiagnostic = null
     ) {
 
         if (
@@ -463,7 +474,8 @@ class VocalSmoother {
 
             return this.spectralTreatmentBridge
                 .createPlanningContext(
-                    spectralProfile
+                    spectralProfile,
+                    spectralDiagnostic
                 );
 
         } catch (error) {
@@ -560,36 +572,32 @@ class VocalSmoother {
 
             const plan =
                 this.treatmentPlan.createPlan(
-                    analysis
+                    analysis,
+                    spectralContext
                 );
 
 
             /*
-             * O plano original continua sendo
-             * preservado.
+             * O plano agora recebe o contexto
+             * DURANTE sua construção.
              *
-             * O contexto espectral continua
-             * sendo informação de observação.
+             * Isso permite que o
+             * VocalTreatmentPlan execute
+             * sua própria reconciliação regional
+             * com as evidências fornecidas pelo
+             * SpectralTreatmentBridge.
              *
              * Nenhum parâmetro DSP é alterado.
              */
 
-            if (
-                plan &&
-                spectralContext
-            ) {
-
-                plan.spectralContext =
-                    spectralContext;
-            }
-
 
             /*
-             * A medição regional também é
-             * anexada apenas como diagnóstico.
+             * A medição regional continua
+             * anexada apenas como evidência
+             * observacional adicional.
              *
-             * Ela não recebe autorização
-             * para controlar o processamento.
+             * Ela não recebe autoridade para
+             * controlar o processamento.
              */
 
             if (
@@ -674,10 +682,19 @@ class VocalSmoother {
 
 
         // ==================================
-        // 4. CONTEXTO ESPECTRAL
+        // 4. CONTEXTO ESPECTRAL INICIAL
+        // ==================================
+        //
+        // Nesta primeira passagem o Bridge
+        // recebe somente o perfil.
+        //
+        // O objetivo é produzir a base
+        // espectral necessária para que o
+        // Observer possa interpretar o áudio.
+        //
         // ==================================
 
-        this.lastSpectralContext =
+        const initialSpectralContext =
             this.createSpectralContext(
                 this.lastSpectralProfile
             );
@@ -687,25 +704,65 @@ class VocalSmoother {
         // 5. DIAGNÓSTICO ESPECTRAL
         // ==================================
         //
-        // SOMENTE OBSERVAÇÃO.
+        // O Observer recebe:
+        //
+        // - contexto espectral;
+        // - medição regional.
+        //
+        // Ele continua sendo exclusivamente
+        // observacional.
         //
         // ==================================
 
         this.lastSpectralDiagnostic =
             this.createSpectralDiagnostic(
-                this.lastSpectralContext
+                initialSpectralContext
             );
 
 
         // ==================================
-        // 6. GERAR PLANO ADAPTATIVO
+        // 6. CONTEXTO ESPECTRAL ENRIQUECIDO
         // ==================================
         //
-        // O contexto espectral e a medição
-        // regional são apenas anexados.
+        // Agora o diagnóstico volta para o
+        // Bridge.
         //
-        // Eles ainda NÃO controlam nenhum
-        // parâmetro do processamento.
+        // Isso fecha o fluxo:
+        //
+        // Profile
+        //    ↓
+        // Bridge inicial
+        //    ↓
+        // Observer
+        //    ↓
+        // Bridge + diagnóstico
+        //    ↓
+        // Contexto de planejamento
+        //
+        // Nenhum DSP é executado aqui.
+        //
+        // ==================================
+
+        this.lastSpectralContext =
+            this.createSpectralContext(
+                this.lastSpectralProfile,
+                this.lastSpectralDiagnostic
+            );
+
+
+        // ==================================
+        // 7. GERAR PLANO ADAPTATIVO
+        // ==================================
+        //
+        // O contexto espectral enriquecido
+        // agora participa da construção do
+        // Treatment Plan.
+        //
+        // O próprio Treatment Plan decide
+        // quando a evidência regional pode
+        // confirmar ou reduzir uma decisão.
+        //
+        // A autoridade DSP continua bloqueada.
         //
         // ==================================
 
@@ -717,7 +774,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 7. CONTEXTO OFFLINE
+        // 8. CONTEXTO OFFLINE
         // ==================================
 
         const context =
@@ -729,7 +786,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. SOURCE
+        // 9. SOURCE
         // ==================================
 
         const source =
@@ -741,7 +798,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. VOCAL BODY
+        // 10. VOCAL BODY
         // ==================================
 
         const bodyResult =
@@ -782,7 +839,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 10. VOCAL TONE
+        // 11. VOCAL TONE
         // ==================================
 
         let toneInput =
@@ -847,7 +904,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. DINÂMICA
+        // 12. DINÂMICA
         // ==================================
 
         const dynamicsResult =
@@ -879,7 +936,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 12. SIBILÂNCIA
+        // 13. SIBILÂNCIA
         // ==================================
 
         let finalOutput =
@@ -947,7 +1004,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 13. CONEXÃO BODY → TONE
+        // 14. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -956,7 +1013,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 14. CONEXÃO TONE → DYNAMICS
+        // 15. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -965,7 +1022,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. CONEXÃO FINAL
+        // 16. CONEXÃO FINAL
         // ==================================
 
         if (
@@ -985,7 +1042,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. SOURCE → BODY
+        // 17. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -994,7 +1051,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 17. INICIAR
+        // 18. INICIAR
         // ==================================
 
         source.start(
@@ -1003,7 +1060,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 18. RENDER
+        // 19. RENDER
         // ==================================
 
         const result =
