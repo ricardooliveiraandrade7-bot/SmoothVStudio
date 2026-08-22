@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.8
+// V0.9
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -43,7 +43,7 @@ class SpectralDiagnosticObserver {
 
     constructor(options = {}) {
 
-        this.version = "0.8";
+        this.version = "0.9";
 
         this.minimumConfidence =
             options.minimumConfidence ?? 0.55;
@@ -181,6 +181,23 @@ class SpectralDiagnosticObserver {
                     return;
                 }
 
+                // ----------------------------------
+                // SEGURANÇA: REGIÃO NÃO UTILIZÁVEL
+                // ----------------------------------
+                //
+                // Uma região marcada como não
+                // utilizável não deve contribuir
+                // para a confiança contextual como
+                // se fosse uma evidência válida.
+                //
+                if (
+                    region.usable !== true
+                ) {
+
+                    qualities.push(0);
+                    return;
+                }
+
                 const evidenceWeight =
                     this.evidenceLevelWeight(
                         region.evidenceLevel
@@ -211,18 +228,45 @@ class SpectralDiagnosticObserver {
                         ? 1
                         : 0;
 
+                // ----------------------------------
+                // QUALIDADE DA ATIVIDADE
+                // ----------------------------------
+                //
+                // Quando a atividade está abaixo
+                // do mínimo necessário, a região
+                // continua observável, mas sua
+                // contribuição para a confiança
+                // deve ser reduzida.
+                //
+                // Acima do mínimo, não há bônus.
+                //
+                const activity =
+                    this.normalizeConfidence(
+                        region.activity
+                    );
+
+                const activityQuality =
+                    this.minimumActivity > 0
+                        ? this.clamp(
+                            activity /
+                            this.minimumActivity,
+                            0,
+                            1
+                        )
+                        : 1;
+
                 const quality =
                     (
                         evidenceWeight *
-                        0.30
+                        0.27
                     ) +
                     (
                         confidence *
-                        0.25
+                        0.23
                     ) +
                     (
                         stateConfidence *
-                        0.20
+                        0.18
                     ) +
                     (
                         stability *
@@ -235,6 +279,10 @@ class SpectralDiagnosticObserver {
                     (
                         regionSpecificEvidence *
                         0.10
+                    ) +
+                    (
+                        activityQuality *
+                        0.07
                     );
 
                 qualities.push(
