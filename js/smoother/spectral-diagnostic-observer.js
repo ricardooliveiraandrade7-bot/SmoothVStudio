@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL DIAGNOSTIC OBSERVER
-// V0.7
+// V0.8
 // ==========================================
 //
 // Camada de observação e interpretação
@@ -43,7 +43,7 @@ class SpectralDiagnosticObserver {
 
     constructor(options = {}) {
 
-        this.version = "0.7";
+        this.version = "0.8";
 
         this.minimumConfidence =
             options.minimumConfidence ?? 0.55;
@@ -135,6 +135,196 @@ class SpectralDiagnosticObserver {
             0,
             1
         );
+    }
+
+
+    // ======================================
+    // CONFIANÇA CONTEXTUAL BASEADA EM
+    // EVIDÊNCIAS
+    // ======================================
+
+    calculateContextualEvidenceQuality(
+        regionNames,
+        regions
+    ) {
+
+        const names =
+            Array.isArray(regionNames)
+                ? regionNames
+                    .filter(
+                        name =>
+                            typeof name ===
+                            "string"
+                    )
+                : [];
+
+        if (names.length === 0) {
+            return 0;
+        }
+
+        const source =
+            regions &&
+            typeof regions === "object"
+                ? regions
+                : {};
+
+        const qualities = [];
+
+        names.forEach(
+            name => {
+
+                const region =
+                    source[name];
+
+                if (!region) {
+                    qualities.push(0);
+                    return;
+                }
+
+                const evidenceWeight =
+                    this.evidenceLevelWeight(
+                        region.evidenceLevel
+                    );
+
+                const confidence =
+                    this.normalizeConfidence(
+                        region.confidence
+                    );
+
+                const stateConfidence =
+                    this.normalizeConfidence(
+                        region.stateConfidence
+                    );
+
+                const stability =
+                    this.normalizeConfidence(
+                        region.stability
+                    );
+
+                const temporalEvidence =
+                    region.temporalEvidence === true
+                        ? 1
+                        : 0;
+
+                const regionSpecificEvidence =
+                    region.regionSpecificEvidence === true
+                        ? 1
+                        : 0;
+
+                const quality =
+                    (
+                        evidenceWeight *
+                        0.30
+                    ) +
+                    (
+                        confidence *
+                        0.25
+                    ) +
+                    (
+                        stateConfidence *
+                        0.20
+                    ) +
+                    (
+                        stability *
+                        0.10
+                    ) +
+                    (
+                        temporalEvidence *
+                        0.05
+                    ) +
+                    (
+                        regionSpecificEvidence *
+                        0.10
+                    );
+
+                qualities.push(
+                    this.clamp(
+                        quality,
+                        0,
+                        1
+                    )
+                );
+            }
+        );
+
+        if (qualities.length === 0) {
+            return 0;
+        }
+
+        return this.clamp(
+            qualities.reduce(
+                (
+                    total,
+                    quality
+                ) =>
+                    total + quality,
+                0
+            ) /
+            qualities.length,
+            0,
+            1
+        );
+    }
+
+
+    applyContextualEvidenceConfidence(
+        pattern,
+        regions
+    ) {
+
+        if (
+            !pattern ||
+            typeof pattern !== "object"
+        ) {
+            return pattern;
+        }
+
+        const baseConfidence =
+            this.clamp(
+                this.safeNumber(
+                    pattern.confidence
+                ),
+                0,
+                1
+            );
+
+        const evidenceRegions =
+            Array.isArray(
+                pattern.evidenceRegions
+            )
+                ? pattern.evidenceRegions
+                : [];
+
+        const evidenceQuality =
+            this.calculateContextualEvidenceQuality(
+                evidenceRegions,
+                regions
+            );
+
+        const adjustedConfidence =
+            baseConfidence *
+            evidenceQuality;
+
+        return {
+            ...pattern,
+
+            confidence:
+                this.clamp(
+                    adjustedConfidence,
+                    0,
+                    baseConfidence
+                ),
+
+            confidenceBase:
+                baseConfidence,
+
+            evidenceQuality:
+                this.clamp(
+                    evidenceQuality,
+                    0,
+                    1
+                )
+        };
     }
 
 
@@ -1061,7 +1251,6 @@ class SpectralDiagnosticObserver {
 
 
     // ======================================
-    // NOVO:
     // DETECÇÃO DE CONFLITO
     // ======================================
 
@@ -1311,6 +1500,41 @@ class SpectralDiagnosticObserver {
             )
         ) {
 
+            const evidenceRegions = [];
+
+            if (
+                bass === "elevated"
+            ) {
+                evidenceRegions.push(
+                    "bass"
+                );
+            }
+
+            if (
+                body === "elevated"
+            ) {
+                evidenceRegions.push(
+                    "body"
+                );
+            }
+
+            if (
+                presence === "recessed"
+            ) {
+                evidenceRegions.push(
+                    "presence"
+                );
+            }
+
+            if (
+                upperPresence ===
+                    "recessed"
+            ) {
+                evidenceRegions.push(
+                    "upperPresence"
+                );
+            }
+
             patterns.push({
 
                 id:
@@ -1321,6 +1545,8 @@ class SpectralDiagnosticObserver {
 
                 confidence:
                     0.70,
+
+                evidenceRegions,
 
                 interpretation:
                     "Predominância relativa de regiões inferiores com redução nas regiões superiores.",
@@ -1351,6 +1577,11 @@ class SpectralDiagnosticObserver {
                 confidence:
                     0.68,
 
+                evidenceRegions: [
+                    "body",
+                    "lowMid"
+                ],
+
                 interpretation:
                     "Corpo e médio-grave apresentam elevação simultânea.",
 
@@ -1373,6 +1604,27 @@ class SpectralDiagnosticObserver {
             )
         ) {
 
+            const evidenceRegions = [
+                "presence"
+            ];
+
+            if (
+                upperPresence ===
+                    "recessed"
+            ) {
+                evidenceRegions.push(
+                    "upperPresence"
+                );
+            }
+
+            if (
+                air === "recessed"
+            ) {
+                evidenceRegions.push(
+                    "air"
+                );
+            }
+
             patterns.push({
 
                 id:
@@ -1383,6 +1635,8 @@ class SpectralDiagnosticObserver {
 
                 confidence:
                     0.72,
+
+                evidenceRegions,
 
                 interpretation:
                     "Regiões superiores apresentam redução coerente.",
@@ -1413,6 +1667,12 @@ class SpectralDiagnosticObserver {
 
                 confidence:
                     0.52,
+
+                evidenceRegions: [
+                    "bass",
+                    "body",
+                    "lowMid"
+                ],
 
                 interpretation:
                     "Elevação isolada de grave; pode representar característica natural da voz.",
@@ -1448,6 +1708,11 @@ class SpectralDiagnosticObserver {
                 confidence:
                     0.58,
 
+                evidenceRegions: [
+                    "presence",
+                    "sibilance"
+                ],
+
                 interpretation:
                     "A ausência de energia superior pode mascarar a avaliação da sibilância.",
 
@@ -1461,17 +1726,18 @@ class SpectralDiagnosticObserver {
         // INSTABILIDADE
         // ----------------------------------
 
-        const unstableCount =
-            Object.values(
-                r
-            )
+        const unstableRegionNames =
+            Object.keys(r)
                 .filter(
-                    region =>
-                        region &&
-                        region.acousticState ===
+                    name =>
+                        r[name] &&
+                        r[name].acousticState ===
                             "unstable"
-                )
-                .length;
+                );
+
+
+        const unstableCount =
+            unstableRegionNames.length;
 
 
         if (
@@ -1488,6 +1754,9 @@ class SpectralDiagnosticObserver {
 
                 confidence:
                     0.65,
+
+                evidenceRegions:
+                    unstableRegionNames,
 
                 interpretation:
                     "Uma ou mais regiões apresentam comportamento temporal instável.",
@@ -1533,6 +1802,9 @@ class SpectralDiagnosticObserver {
                 confidence:
                     0.80,
 
+                evidenceRegions:
+                    names,
+
                 interpretation:
                     "Grande parte das regiões permanece indeterminada.",
 
@@ -1548,6 +1820,17 @@ class SpectralDiagnosticObserver {
 
         patterns.forEach(
             pattern => {
+
+                const adjusted =
+                    this.applyContextualEvidenceConfidence(
+                        pattern,
+                        r
+                    );
+
+                Object.assign(
+                    pattern,
+                    adjusted
+                );
 
                 pattern.confidence =
                     this.clamp(
