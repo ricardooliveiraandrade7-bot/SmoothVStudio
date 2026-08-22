@@ -337,6 +337,36 @@ class TreatmentDecisionPipeline {
 
 
     // ======================================
+    // RESOLVER AUTORIDADE DO DECISION RECORD
+    // ======================================
+
+    resolveDecisionAuthority(
+        record,
+        fallbackAuthority
+    ) {
+
+        if (
+            this.isObject(
+                record
+            ) &&
+            this.isObject(
+                record.authority
+            )
+        ) {
+
+            return this.cloneAuthority(
+                record.authority
+            );
+        }
+
+
+        return this.cloneAuthority(
+            fallbackAuthority
+        );
+    }
+
+
+    // ======================================
     // CRIAR INTENÇÃO REGIONAL
     // ======================================
 
@@ -365,6 +395,11 @@ class TreatmentDecisionPipeline {
 
             state:
                 normalizedState,
+
+            decisionAuthority:
+                this.cloneAuthority(
+                    options.decisionAuthority
+                ),
 
             executionPermission:
                 "none",
@@ -893,6 +928,8 @@ class TreatmentDecisionPipeline {
                 state:
                     "blocked",
 
+                decisionAuthority,
+
                 rationale:
                     "Registro de decisão inválido."
             });
@@ -909,6 +946,8 @@ class TreatmentDecisionPipeline {
 
                 state:
                     "preserve",
+
+                decisionAuthority,
 
                 region:
                     this.extractRegionFromRecord(
@@ -932,6 +971,13 @@ class TreatmentDecisionPipeline {
                     "Decisão indica preservação."
             });
         }
+
+
+        const decisionAuthority =
+            this.resolveDecisionAuthority(
+                record,
+                authority
+            );
 
 
         const region =
@@ -1183,6 +1229,9 @@ class TreatmentDecisionPipeline {
                     state:
                         "preserve",
 
+                    decisionAuthority:
+                        authority,
+
                     rationale:
                         "Nenhum registro de decisão gerou intenção regional."
                 })
@@ -1239,6 +1288,74 @@ class TreatmentDecisionPipeline {
             errors.push(
                 "Estado da intenção regional inválido."
             );
+        }
+
+
+        if (
+            !this.isObject(
+                intent.decisionAuthority
+            )
+        ) {
+
+            errors.push(
+                "Intenção regional sem decisionAuthority."
+            );
+
+        } else {
+
+            if (
+                intent.decisionAuthority.level !==
+                "bounded"
+            ) {
+
+                errors.push(
+                    "decisionAuthority deve possuir level bounded."
+                );
+            }
+
+
+            if (
+                intent.decisionAuthority.processingPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "decisionAuthority não pode liberar processamento."
+                );
+            }
+
+
+            if (
+                intent.decisionAuthority.audioProcessing !==
+                false
+            ) {
+
+                errors.push(
+                    "decisionAuthority não pode liberar processamento de áudio."
+                );
+            }
+
+
+            if (
+                intent.decisionAuthority.reconstructionPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "decisionAuthority não pode liberar reconstrução."
+                );
+            }
+
+
+            if (
+                intent.decisionAuthority.executorPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "decisionAuthority não pode liberar executor."
+                );
+            }
         }
 
 
@@ -3021,6 +3138,9 @@ class TreatmentDecisionPipeline {
                     state:
                         "preserve",
 
+                    decisionAuthority:
+                        authority.authority,
+
                     rationale:
                         gateDecision.recommendation ||
                         "Nenhuma intervenção autorizada; preservar."
@@ -3300,6 +3420,19 @@ class TreatmentDecisionPipeline {
                     intent => ({
 
                         ...intent,
+
+                        decisionAuthority:
+                            {
+                                ...intent.decisionAuthority,
+                                processingPermission:
+                                    "none",
+                                audioProcessing:
+                                    false,
+                                reconstructionPermission:
+                                    "none",
+                                executorPermission:
+                                    "none"
+                            },
 
                         executionPermission:
                             "none",
