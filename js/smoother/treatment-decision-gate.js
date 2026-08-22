@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT DECISION GATE
-// V0.1
+// V0.2
 // ==========================================
 //
 // Responsabilidade:
@@ -10,41 +10,9 @@
 // para transformar um Treatment Plan coerente
 // em uma DECISÃO DE TRATAMENTO.
 //
-// Fluxo:
-//
-// Analyzer / Measurement
-//        ↓
-// Diagnostic Observer
-//        ↓
-// Treatment Bridge
-//        ↓
-// VocalTreatmentPlan
-//        ↓
-// TreatmentPlanValidator
-//        ↓
-// TreatmentDecisionGate
-//        ↓
-// DECISION
-//        ↓
-// futura autoridade DSP
-//
-// IMPORTANTE:
-//
-// Este módulo NÃO:
-//
-// - modifica áudio
-// - aplica EQ
-// - cria filtros
-// - altera ganho
-// - executa DSP
-// - libera processamento de áudio
-// - altera o Treatment Plan
+// Este módulo NÃO executa DSP.
 //
 // DECISION ALLOWED ≠ DSP ALLOWED
-//
-// Mesmo quando uma decisão for autorizada:
-//
-// processingPermission = "none"
 //
 // ==========================================
 
@@ -52,15 +20,13 @@
 class TreatmentDecisionGate {
 
 
-    constructor(options = {}) {
+    constructor(
+        options = {}
+    ) {
 
         this.version =
-            "0.1";
+            "0.2";
 
-
-        // ==================================
-        // LIMITES DE DECISÃO
-        // ==================================
 
         this.minimumDiagnosticConfidence =
             options.minimumDiagnosticConfidence ??
@@ -77,42 +43,22 @@ class TreatmentDecisionGate {
             0.50;
 
 
-        // ==================================
-        // ESTADOS QUE NÃO AUTORIZAM
-        // TRATAMENTO
-        // ==================================
-
         this.blockedRegionalStates =
             new Set([
-
                 "uncertain",
                 "unstable",
                 "masked"
-
             ]);
 
-
-        // ==================================
-        // ESTADOS QUE REPRESENTAM
-        // PRESERVAÇÃO
-        // ==================================
 
         this.preservedRegionalStates =
             new Set([
-
                 "natural",
                 "supported"
-
             ]);
 
 
-        // ==================================
-        // AUTORIDADE
-        // ==================================
-        //
-        // Esta camada ainda NÃO concede
-        // autoridade DSP.
-        //
+        // HARD LOCK
 
         this.processingPermission =
             "none";
@@ -124,8 +70,9 @@ class TreatmentDecisionGate {
 
 
     // ======================================
-    // NÚMERO SEGURO
+    // UTILITÁRIOS
     // ======================================
+
 
     safeNumber(
         value,
@@ -133,18 +80,18 @@ class TreatmentDecisionGate {
     ) {
 
         const number =
-            Number(value);
+            Number(
+                value
+            );
 
 
-        return Number.isFinite(number)
+        return Number.isFinite(
+            number
+        )
             ? number
             : fallback;
     }
 
-
-    // ======================================
-    // CLAMP
-    // ======================================
 
     clamp(
         value,
@@ -161,10 +108,6 @@ class TreatmentDecisionGate {
         );
     }
 
-
-    // ======================================
-    // RESULTADO DE REGRA
-    // ======================================
 
     rule(
         id,
@@ -187,10 +130,6 @@ class TreatmentDecisionGate {
     }
 
 
-    // ======================================
-    // VALIDAR OBJETO
-    // ======================================
-
     isObject(
         value
     ) {
@@ -206,6 +145,7 @@ class TreatmentDecisionGate {
     // ======================================
     // EXTRAIR CONTEXTO DIAGNÓSTICO
     // ======================================
+
 
     getDiagnosticContext(
         plan
@@ -235,10 +175,6 @@ class TreatmentDecisionGate {
     }
 
 
-    // ======================================
-    // EXTRAIR DIAGNÓSTICO
-    // ======================================
-
     getDiagnostic(
         plan
     ) {
@@ -264,10 +200,6 @@ class TreatmentDecisionGate {
     }
 
 
-    // ======================================
-    // EXTRAIR SEGURANÇA
-    // ======================================
-
     getSafety(
         plan
     ) {
@@ -288,8 +220,9 @@ class TreatmentDecisionGate {
 
 
     // ======================================
-    // VALIDAR EXISTÊNCIA DO VALIDATOR
+    // VALIDAR RESULTADO DO VALIDATOR
     // ======================================
+
 
     validateValidatorResult(
         validation
@@ -358,8 +291,9 @@ class TreatmentDecisionGate {
 
 
     // ======================================
-    // VALIDAR CONFIANÇA GLOBAL
+    // VALIDAR EVIDÊNCIA GLOBAL
     // ======================================
+
 
     validateGlobalEvidence(
         plan
@@ -453,6 +387,7 @@ class TreatmentDecisionGate {
     // VALIDAR POLÍTICA
     // ======================================
 
+
     validatePolicy(
         plan
     ) {
@@ -475,6 +410,10 @@ class TreatmentDecisionGate {
                 : null;
 
 
+        // A política não é opcional.
+        // Ela contém regras fundamentais
+        // da arquitetura de decisão.
+
         if (
             !policy
         ) {
@@ -483,8 +422,8 @@ class TreatmentDecisionGate {
                 this.rule(
                     "decision-policy-exists",
                     false,
-                    "warning",
-                    "Política explícita de decisão não encontrada."
+                    "error",
+                    "Política explícita de decisão ausente."
                 )
             );
 
@@ -555,6 +494,7 @@ class TreatmentDecisionGate {
     // ======================================
     // VALIDAR SEGURANÇA
     // ======================================
+
 
     validateSafety(
         plan
@@ -655,8 +595,9 @@ class TreatmentDecisionGate {
 
 
     // ======================================
-    // VALIDAR UMA DECISÃO REGIONAL
+    // AVALIAR UMA REGIÃO
     // ======================================
+
 
     evaluateRegion(
         regionName,
@@ -691,10 +632,6 @@ class TreatmentDecisionGate {
                 []
         };
 
-
-        // ==================================
-        // DECISÃO AUSENTE
-        // ==================================
 
         if (
             !this.isObject(
@@ -764,8 +701,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: ESTADO BLOQUEADO
+        // ESTADOS QUE DEVEM SER PRESERVADOS
         // ==================================
+
 
         if (
             this.blockedRegionalStates.has(
@@ -795,10 +733,6 @@ class TreatmentDecisionGate {
             return result;
         }
 
-
-        // ==================================
-        // REGRA: NATURAL
-        // ==================================
 
         if (
             this.preservedRegionalStates.has(
@@ -831,8 +765,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: CONTEXTO REGIONAL
+        // CONTEXTO
         // ==================================
+
 
         const context =
             this.getDiagnosticContext(
@@ -844,6 +779,15 @@ class TreatmentDecisionGate {
             this.getDiagnostic(
                 plan
             );
+
+
+        const policy =
+            context &&
+            this.isObject(
+                context.decisionPolicy
+            )
+                ? context.decisionPolicy
+                : null;
 
 
         const coverage =
@@ -864,8 +808,51 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: CONFIANÇA GLOBAL
+        // EVIDÊNCIA REGIONAL OBRIGATÓRIA
         // ==================================
+        //
+        // Se a política exige evidência
+        // específica da região, não podemos
+        // autorizar uma decisão regional
+        // quando o contexto regional não
+        // foi realmente aplicado.
+        //
+
+
+        if (
+            policy &&
+            policy.regionSpecificEvidenceRequired ===
+                true &&
+            !contextApplied
+        ) {
+
+            result.reasons.push(
+                "evidência regional não aplicada"
+            );
+
+
+            result.rules.push(
+                this.rule(
+                    `${regionName}-regional-evidence-required`,
+                    false,
+                    "error",
+                    `A região ${regionName} não possui evidência regional aplicada.`
+                )
+            );
+
+
+            result.recommendedAction =
+                "preserve";
+
+
+            return result;
+        }
+
+
+        // ==================================
+        // CONFIANÇA GLOBAL
+        // ==================================
+
 
         if (
             confidence <
@@ -896,8 +883,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: CONFIANÇA REGIONAL
+        // CONFIANÇA REGIONAL
         // ==================================
+
 
         if (
             contextApplied &&
@@ -929,8 +917,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: COBERTURA
+        // COBERTURA
         // ==================================
+
 
         if (
             contextApplied &&
@@ -962,8 +951,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // REGRA: DECISÃO DE PRESERVAÇÃO
+        // PRESERVAÇÃO SOLICITADA
         // ==================================
+
 
         if (
             decisionState ===
@@ -994,8 +984,9 @@ class TreatmentDecisionGate {
 
 
         // ==================================
-        // DECISÃO POTENCIALMENTE AUTORIZADA
+        // DECISÃO APOIADA
         // ==================================
+
 
         result.decisionPermission =
             "allowed";
@@ -1027,6 +1018,7 @@ class TreatmentDecisionGate {
     // ======================================
     // AVALIAR TODAS AS REGIÕES
     // ======================================
+
 
     evaluateRegions(
         plan
@@ -1062,16 +1054,12 @@ class TreatmentDecisionGate {
                 regionNames[i];
 
 
-            const decision =
-                plan.regions[
-                    regionName
-                ];
-
-
             results.push(
                 this.evaluateRegion(
                     regionName,
-                    decision,
+                    plan.regions[
+                        regionName
+                    ],
                     plan
                 )
             );
@@ -1085,6 +1073,7 @@ class TreatmentDecisionGate {
     // ======================================
     // RESUMIR REGRAS
     // ======================================
+
 
     summarizeRules(
         rules
@@ -1160,15 +1149,12 @@ class TreatmentDecisionGate {
     // DECISÃO GLOBAL
     // ======================================
 
+
     buildGlobalDecision(
         validation,
         globalRules,
         regionResults
     ) {
-
-        // ==================================
-        // ERROS DO VALIDATOR
-        // ==================================
 
         if (
             !validation ||
@@ -1189,10 +1175,6 @@ class TreatmentDecisionGate {
             };
         }
 
-
-        // ==================================
-        // ERROS GLOBAIS
-        // ==================================
 
         const globalSummary =
             this.summarizeRules(
@@ -1218,10 +1200,6 @@ class TreatmentDecisionGate {
             };
         }
 
-
-        // ==================================
-        // VERIFICAR REGIÕES DECIDÍVEIS
-        // ==================================
 
         let decisionRegions =
             0;
@@ -1264,10 +1242,6 @@ class TreatmentDecisionGate {
         }
 
 
-        // ==================================
-        // NENHUMA REGIÃO DECIDÍVEL
-        // ==================================
-
         if (
             decisionRegions ===
                 0
@@ -1288,10 +1262,6 @@ class TreatmentDecisionGate {
             };
         }
 
-
-        // ==================================
-        // EXISTEM REGIÕES DECIDÍVEIS
-        // ==================================
 
         return {
 
@@ -1315,6 +1285,7 @@ class TreatmentDecisionGate {
     // AVALIAÇÃO COMPLETA
     // ======================================
 
+
     evaluate(
         plan,
         validation
@@ -1337,7 +1308,6 @@ class TreatmentDecisionGate {
             ...this.validateSafety(
                 plan
             )
-
         ];
 
 
@@ -1361,9 +1331,7 @@ class TreatmentDecisionGate {
             );
 
 
-        // ==================================
-        // SEGURANÇA FINAL
-        // ==================================
+        // HARD LOCK FINAL
 
         const processingPermission =
             "none";
@@ -1413,13 +1381,7 @@ class TreatmentDecisionGate {
     // ======================================
     // VERIFICAR DECISÃO
     // ======================================
-    //
-    // Retorna true somente quando existe
-    // base suficiente para uma decisão.
-    //
-    // NUNCA significa autorização DSP.
-    //
-    // ======================================
+
 
     canDecide(
         result
@@ -1442,10 +1404,7 @@ class TreatmentDecisionGate {
     // ======================================
     // VERIFICAR PROCESSAMENTO
     // ======================================
-    //
-    // Hard lock.
-    //
-    // ======================================
+
 
     canProcessAudio() {
 
@@ -1456,6 +1415,7 @@ class TreatmentDecisionGate {
     // ======================================
     // VERIFICAR RECONSTRUÇÃO
     // ======================================
+
 
     canReconstruct() {
 
@@ -1468,5 +1428,12 @@ class TreatmentDecisionGate {
 // DISPONIBILIZAÇÃO GLOBAL
 // ==========================================
 
-window.TreatmentDecisionGate =
-    TreatmentDecisionGate;
+
+if (
+    typeof window !==
+    "undefined"
+) {
+
+    window.TreatmentDecisionGate =
+        TreatmentDecisionGate;
+}
