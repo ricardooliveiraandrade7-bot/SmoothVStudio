@@ -362,552 +362,6 @@ class TreatmentDecisionPipeline {
 
         return this.cloneAuthority(
             fallbackAuthority
-        );
-    }
-
-
-    // ======================================
-    // CRIAR INTENÇÃO REGIONAL
-    // ======================================
-
-    createRegionalInterventionIntent(
-        options = {}
-    ) {
-
-        const state =
-            this.safeString(
-                options.state,
-                "preserve"
-            );
-
-
-        const normalizedState =
-            (
-                state === "candidate" ||
-                state === "blocked" ||
-                state === "preserve"
-            )
-                ? state
-                : "blocked";
-
-
-        return {
-
-            state:
-                normalizedState,
-
-            decisionAuthority:
-                this.cloneAuthority(
-                    options.decisionAuthority
-                ),
-
-            executionPermission:
-                "none",
-
-            processingPermission:
-                "none",
-
-            audioProcessing:
-                false,
-
-            region:
-                options.region || null,
-
-            treatmentType:
-                this.safeString(
-                    options.treatmentType,
-                    "none"
-                ),
-
-            confidence:
-                this.safeString(
-                    options.confidence,
-                    "indeterminate"
-                ),
-
-            evidence:
-                this.isArray(
-                    options.evidence
-                )
-                    ? [
-                        ...options.evidence
-                    ]
-                    : [],
-
-            rationale:
-                this.safeString(
-                    options.rationale,
-                    ""
-                ),
-
-            requestedGainDb:
-                this.isFiniteNumber(
-                    options.requestedGainDb
-                )
-                    ? options.requestedGainDb
-                    : 0,
-
-            boundedGainDb:
-                this.isFiniteNumber(
-                    options.boundedGainDb
-                )
-                    ? options.boundedGainDb
-                    : 0,
-
-            fallback:
-                "preserve"
-        };
-    }
-
-
-    // ======================================
-    // NORMALIZAR REGIÃO
-    // ======================================
-
-    normalizeRegion(
-        value
-    ) {
-
-        if (
-            typeof value ===
-            "string"
-        ) {
-
-            const name =
-                this.safeString(
-                    value
-                );
-
-
-            if (
-                !name
-            ) {
-
-                return null;
-            }
-
-
-            return {
-
-                id:
-                    name,
-
-                name:
-                    name
-            };
-        }
-
-
-        if (
-            this.isObject(
-                value
-            )
-        ) {
-
-            const id =
-                this.safeString(
-                    value.id ||
-                    value.key ||
-                    value.name,
-                    "unknown"
-                );
-
-
-            const name =
-                this.safeString(
-                    value.name ||
-                    value.label ||
-                    id,
-                    id
-                );
-
-
-            return {
-
-                id,
-
-                name
-            };
-        }
-
-
-        return null;
-    }
-
-
-    // ======================================
-    // EXTRAIR REGIÃO DO REGISTRO
-    // ======================================
-
-    extractRegionFromRecord(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return null;
-        }
-
-
-        return this.normalizeRegion(
-            record.region ||
-            record.regionResult ||
-            record.regionData ||
-            record.targetRegion ||
-            record.area ||
-            record.frequencyRegion ||
-            null
-        );
-    }
-
-
-    // ======================================
-    // EXTRAIR TIPO DE TRATAMENTO
-    // ======================================
-
-    extractTreatmentType(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return "none";
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        return this.safeString(
-            record.treatmentType ||
-            record.treatment ||
-            record.actionType ||
-            decision.treatmentType ||
-            decision.treatment ||
-            decision.type ||
-            decision.actionType ||
-            "none",
-            "none"
-        );
-    }
-
-
-    // ======================================
-    // EXTRAIR CONFIANÇA
-    // ======================================
-
-    extractConfidence(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return "indeterminate";
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        const value =
-            record.confidence ||
-            record.decisionConfidence ||
-            decision.confidence ||
-            record.evidenceConfidence ||
-            null;
-
-
-        if (
-            typeof value ===
-            "number"
-        ) {
-
-            if (
-                value >= 0.8
-            ) {
-
-                return "strong";
-            }
-
-
-            if (
-                value >= 0.5
-            ) {
-
-                return "moderate";
-            }
-
-
-            if (
-                value > 0
-            ) {
-
-                return "weak";
-            }
-
-
-            return "indeterminate";
-        }
-
-
-        const text =
-            this.safeString(
-                value,
-                "indeterminate"
-            )
-                .toLowerCase();
-
-
-        if (
-            text === "strong" ||
-            text === "forte"
-        ) {
-
-            return "strong";
-        }
-
-
-        if (
-            text === "moderate" ||
-            text === "moderada"
-        ) {
-
-            return "moderate";
-        }
-
-
-        if (
-            text === "weak" ||
-            text === "fraca"
-        ) {
-
-            return "weak";
-        }
-
-
-        return "indeterminate";
-    }
-
-
-    // ======================================
-    // EXTRAIR EVIDÊNCIAS
-    // ======================================
-
-    extractEvidence(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return [];
-        }
-
-
-        const sources = [
-
-            record.evidence,
-
-            record.evidenceList,
-
-            record.supportingEvidence,
-
-            record.observations,
-
-            record.diagnostics,
-
-            record.measurements,
-
-            record.decision &&
-            record.decision.evidence
-        ];
-
-
-        for (
-            let i = 0;
-            i < sources.length;
-            i++
-        ) {
-
-            if (
-                this.isArray(
-                    sources[i]
-                )
-            ) {
-
-                return [
-                    ...sources[i]
-                ];
-            }
-        }
-
-
-        return [];
-    }
-
-
-    // ======================================
-    // EXTRAIR GANHO SOLICITADO
-    // ======================================
-
-    extractRequestedGainDb(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return 0;
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        const candidates = [
-
-            record.requestedGainDb,
-
-            record.gainDb,
-
-            record.recommendedGainDb,
-
-            record.amountDb,
-
-            decision.requestedGainDb,
-
-            decision.gainDb,
-
-            decision.recommendedGainDb,
-
-            decision.amountDb
-        ];
-
-
-        for (
-            let i = 0;
-            i < candidates.length;
-            i++
-        ) {
-
-            if (
-                this.isFiniteNumber(
-                    candidates[i]
-                )
-            ) {
-
-                return candidates[i];
-            }
-        }
-
-
-        return 0;
-    }
-
-
-    // ======================================
-    // IDENTIFICAR PRESERVAÇÃO
-    // ======================================
-
-    isPreserveRecord(
-        record
-    ) {
-
-        if (
-            !this.isObject(
-                record
-            )
-        ) {
-
-            return true;
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        const actions = [
-
-            record.action,
-
-            record.decisionAction,
-
-            record.recommendation,
-
-            decision.action,
-
-            decision.recommendation
-        ];
-
-
-        for (
-            let i = 0;
-            i < actions.length;
-            i++
-        ) {
-
-            const action =
-                this.safeString(
-                    actions[i],
-                    ""
-                )
-                    .toLowerCase();
-
-
-            if (
-                action ===
-                    "preserve" ||
-                action ===
-                    "preservar"
-            ) {
-
-                return true;
-            }
-        }
-
-
-        return false;
-    }
-
-
     // ======================================
     // CRIAR INTENÇÃO A PARTIR DE REGISTRO
     // ======================================
@@ -916,6 +370,13 @@ class TreatmentDecisionPipeline {
         record,
         authority
     ) {
+
+        const decisionAuthority =
+            this.resolveDecisionAuthority(
+                record,
+                authority
+            );
+
 
         if (
             !this.isObject(
@@ -973,13 +434,6 @@ class TreatmentDecisionPipeline {
         }
 
 
-        const decisionAuthority =
-            this.resolveDecisionAuthority(
-                record,
-                authority
-            );
-
-
         const region =
             this.extractRegionFromRecord(
                 record
@@ -1023,6 +477,8 @@ class TreatmentDecisionPipeline {
                 state:
                     "blocked",
 
+                decisionAuthority,
+
                 treatmentType,
 
                 confidence,
@@ -1050,6 +506,8 @@ class TreatmentDecisionPipeline {
 
                 state:
                     "blocked",
+
+                decisionAuthority,
 
                 region,
 
@@ -1083,6 +541,8 @@ class TreatmentDecisionPipeline {
                 state:
                     "blocked",
 
+                decisionAuthority,
+
                 region,
 
                 treatmentType,
@@ -1104,22 +564,22 @@ class TreatmentDecisionPipeline {
         // ==================================
 
         const maxGain =
-            authority &&
-            authority.limits &&
+            decisionAuthority &&
+            decisionAuthority.limits &&
             this.isFiniteNumber(
-                authority.limits.maxGainDb
+                decisionAuthority.limits.maxGainDb
             )
-                ? authority.limits.maxGainDb
+                ? decisionAuthority.limits.maxGainDb
                 : 2;
 
 
         const maxCut =
-            authority &&
-            authority.limits &&
+            decisionAuthority &&
+            decisionAuthority.limits &&
             this.isFiniteNumber(
-                authority.limits.maxCutDb
+                decisionAuthority.limits.maxCutDb
             )
-                ? authority.limits.maxCutDb
+                ? decisionAuthority.limits.maxCutDb
                 : -2;
 
 
@@ -1139,6 +599,8 @@ class TreatmentDecisionPipeline {
 
             state:
                 "candidate",
+
+            decisionAuthority,
 
             region,
 
