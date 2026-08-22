@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT DECISION RECORD
-// V0.1
+// V0.2
 // ==========================================
 //
 // Responsabilidade:
@@ -60,7 +60,7 @@ class TreatmentDecisionRecord {
     ) {
 
         this.version =
-            "0.1";
+            "0.2";
 
 
         this.maxRecords =
@@ -607,6 +607,9 @@ class TreatmentDecisionRecord {
                 decisionPermission:
                     "none",
 
+                regionDecision:
+                    "none",
+
                 processingPermission:
                     "none",
 
@@ -626,6 +629,13 @@ class TreatmentDecisionRecord {
                     true,
 
             decisionPermission:
+                gateResult
+                    .decisionPermission ===
+                    "allowed"
+                    ? "allowed"
+                    : "none",
+
+            regionDecision:
                 gateResult
                     .decisionPermission ===
                     "allowed"
@@ -686,6 +696,15 @@ class TreatmentDecisionRecord {
 
         if (
             gate.decisionPermission !==
+            "allowed"
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            gate.regionDecision !==
             "allowed"
         ) {
 
@@ -851,12 +870,45 @@ class TreatmentDecisionRecord {
                 decisionPermission:
                     gate.decisionPermission,
 
+                regionDecision:
+                    gate.regionDecision,
+
                 recommendation:
                     gate.recommendation,
 
                 reason:
                     gate.reason
             },
+
+            // ==================================
+            // ORIGEM DA DECISÃO
+            // ==================================
+            //
+            // Estrutura explícita consumida pelo
+            // TreatmentExecutionValidator.
+            //
+            // Isto registra a origem da decisão,
+            // mas continua sem liberar DSP.
+            //
+
+            decisionAuthority: {
+
+                decisionPermission:
+                    gate.decisionPermission,
+
+                regionDecision:
+                    gate.regionDecision,
+
+                processingPermission:
+                    "none",
+
+                audioProcessing:
+                    false
+            },
+
+            // ==================================
+            // AUTORIDADE HARD-LOCK
+            // ==================================
 
             authority: {
 
@@ -881,6 +933,86 @@ class TreatmentDecisionRecord {
         // ==================================
         // HARD SAFETY CHECK
         // ==================================
+
+        if (
+            record.decisionAuthority
+                .decisionPermission !==
+                "allowed"
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                record:
+                    null,
+
+                reason:
+                    "decision-authority-invalid"
+            };
+        }
+
+
+        if (
+            record.decisionAuthority
+                .regionDecision !==
+                "allowed"
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                record:
+                    null,
+
+                reason:
+                    "regional-decision-authority-invalid"
+            };
+        }
+
+
+        if (
+            record.decisionAuthority
+                .processingPermission !==
+                "none"
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                record:
+                    null,
+
+                reason:
+                    "processing-authority-violation"
+            };
+        }
+
+
+        if (
+            record.decisionAuthority
+                .audioProcessing !==
+                false
+        ) {
+
+            return {
+
+                valid:
+                    false,
+
+                record:
+                    null,
+
+                reason:
+                    "audio-processing-violation"
+            };
+        }
+
 
         if (
             record.authority
@@ -1151,6 +1283,75 @@ class TreatmentDecisionRecord {
         }
 
 
+        if (
+            !this.isObject(
+                record.decisionAuthority
+            )
+        ) {
+
+            errors.push(
+                "record-decision-authority-missing"
+            );
+        }
+
+
+        // ==================================
+        // DECISION AUTHORITY
+        // ==================================
+
+        if (
+            record.decisionAuthority
+        ) {
+
+            if (
+                record.decisionAuthority
+                    .decisionPermission !==
+                "allowed"
+            ) {
+
+                errors.push(
+                    "decision-permission-must-be-allowed"
+                );
+            }
+
+
+            if (
+                record.decisionAuthority
+                    .regionDecision !==
+                "allowed"
+            ) {
+
+                errors.push(
+                    "regional-decision-must-be-allowed"
+                );
+            }
+
+
+            if (
+                record.decisionAuthority
+                    .processingPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "decision-processing-permission-must-remain-none"
+                );
+            }
+
+
+            if (
+                record.decisionAuthority
+                    .audioProcessing !==
+                false
+            ) {
+
+                errors.push(
+                    "decision-audio-processing-must-remain-false"
+                );
+            }
+        }
+
+
         // ==================================
         // HARD LOCKS
         // ==================================
@@ -1346,6 +1547,10 @@ class TreatmentDecisionRecord {
                 );
 
                 Object.freeze(
+                    copy.decisionAuthority
+                );
+
+                Object.freeze(
                     copy.authority
                 );
 
@@ -1437,9 +1642,14 @@ class TreatmentDecisionRecord {
                 record.decision.action,
 
             decisionPermission:
-                record.authority &&
-                record.authority
+                record.decisionAuthority &&
+                record.decisionAuthority
                     .decisionPermission,
+
+            regionDecision:
+                record.decisionAuthority &&
+                record.decisionAuthority
+                    .regionDecision,
 
             processingPermission:
                 "none",
@@ -1489,5 +1699,11 @@ class TreatmentDecisionRecord {
 // DISPONIBILIZAÇÃO GLOBAL
 // ==========================================
 
-window.TreatmentDecisionRecord =
-    TreatmentDecisionRecord;
+if (
+    typeof window !==
+    "undefined"
+) {
+
+    window.TreatmentDecisionRecord =
+        TreatmentDecisionRecord;
+}
