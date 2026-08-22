@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V1.1
+// V1.2
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -23,8 +23,9 @@
 // - VocalSibilance
 // - VocalTreatmentPlan
 // - TreatmentDecisionPipeline
+// - TreatmentContractAudit
 //
-// V1.1:
+// V1.2:
 //
 // - integração segura da medição espectral
 //   regional;
@@ -35,9 +36,13 @@
 // - plano adaptativo continua isolado do DSP;
 // - TreatmentDecisionPipeline integrado em
 //   modo observacional;
+// - TreatmentContractAudit integrado em
+//   modo observacional;
+// - comparação observacional entre
+//   Treatment Plan e DSP Snapshot;
 // - caminho DSP anterior preservado;
-// - falhas na camada espectral não interrompem
-//   o processamento principal;
+// - falhas nas camadas de observação não
+//   interrompem o processamento principal;
 // - snapshot observacional dos parâmetros DSP
 //   efetivamente calculados.
 //
@@ -48,6 +53,9 @@
 //
 // O TreatmentDecisionPipeline também atua
 // somente como camada de decisão/validação.
+//
+// O TreatmentContractAudit atua somente
+// como camada de auditoria observacional.
 //
 // O DSP Snapshot também atua somente como
 // camada de observação.
@@ -68,7 +76,7 @@ class VocalSmoother {
 
 
         this.version =
-            "1.1";
+            "1.2";
 
 
         // ==================================
@@ -235,6 +243,33 @@ class VocalSmoother {
 
 
         // ==================================
+        // TREATMENT CONTRACT AUDIT
+        // ==================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // O Auditor compara:
+        //
+        // Treatment Plan
+        //       ↓
+        //      Audit
+        //       ↑
+        // DSP Snapshot
+        //
+        // Nenhuma autoridade DSP é concedida.
+        //
+        // ==================================
+
+        this.treatmentContractAudit =
+            options.treatmentContractAudit ||
+            (
+                window.TreatmentContractAudit
+                    ? new TreatmentContractAudit()
+                    : null
+            );
+
+
+        // ==================================
         // ESTADO
         // ==================================
 
@@ -267,6 +302,10 @@ class VocalSmoother {
 
 
         this.lastTreatmentDecisionPipeline =
+            null;
+
+
+        this.lastTreatmentContractAudit =
             null;
 
 
@@ -860,6 +899,141 @@ class VocalSmoother {
 
 
     // ======================================
+    // AUDITAR TREATMENT PLAN ↔ DSP
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // Compara o plano de tratamento com
+    // os parâmetros DSP efetivamente
+    // armazenados durante esta execução.
+    //
+    // Não altera áudio.
+    // Não altera parâmetros.
+    // Não concede autoridade DSP.
+    //
+    // ======================================
+
+    createTreatmentContractAudit(
+        treatmentPlan = this.lastTreatmentPlan,
+        dspSnapshot = null
+    ) {
+
+        if (
+            !treatmentPlan
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            !dspSnapshot
+        ) {
+
+            dspSnapshot =
+                this.createDspSnapshot();
+        }
+
+
+        if (
+            !this.treatmentContractAudit
+        ) {
+
+            if (
+                typeof window !==
+                "undefined" &&
+                typeof window.TreatmentContractAudit ===
+                "function"
+            ) {
+
+                try {
+
+                    this.treatmentContractAudit =
+                        new TreatmentContractAudit();
+
+                } catch (
+                    error
+                ) {
+
+                    console.warn(
+                        "TreatmentContractAudit indisponível nesta etapa:",
+                        error
+                    );
+
+
+                    return null;
+                }
+
+            } else {
+
+                return null;
+            }
+        }
+
+
+        if (
+            typeof this.treatmentContractAudit
+                .auditTreatmentDspReconciliation !==
+            "function"
+        ) {
+
+            console.warn(
+                "TreatmentContractAudit não possui auditTreatmentDspReconciliation()."
+            );
+
+
+            return null;
+        }
+
+
+        try {
+
+            const reconciliation =
+                this.treatmentContractAudit
+                    .auditTreatmentDspReconciliation(
+                        treatmentPlan,
+                        dspSnapshot
+                    );
+
+
+            return {
+
+                version:
+                    this.treatmentContractAudit.version ||
+                    "0.3",
+
+                reconciliation,
+
+                processingPermission:
+                    "none",
+
+                audioProcessing:
+                    false,
+
+                reconstructionPermission:
+                    "none",
+
+                executorPermission:
+                    "none"
+            };
+
+        } catch (
+            error
+        ) {
+
+            console.warn(
+                "TreatmentContractAudit indisponível nesta execução:",
+                error
+            );
+
+
+            return null;
+        }
+    }
+
+
+    // ======================================
     // PROCESSAR
     // ======================================
 
@@ -1257,7 +1431,39 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. CONEXÃO BODY → TONE
+        // 15. AUDITORIA OBSERVACIONAL
+        // ==================================
+        //
+        // Neste ponto:
+        //
+        // - o Treatment Plan já existe;
+        // - a decisão já foi avaliada;
+        // - Body já calculou seus parâmetros;
+        // - Tone já calculou seus parâmetros;
+        // - Dynamics já calculou seus parâmetros;
+        // - Sibilance já calculou seus parâmetros.
+        //
+        // Portanto o Auditor pode comparar
+        // o plano com o snapshot desta mesma
+        // execução.
+        //
+        // IMPORTANTE:
+        //
+        // A auditoria não modifica nenhum
+        // parâmetro e não recebe autoridade
+        // sobre o áudio.
+        //
+        // ==================================
+
+        this.lastTreatmentContractAudit =
+            this.createTreatmentContractAudit(
+                this.lastTreatmentPlan,
+                this.createDspSnapshot()
+            );
+
+
+        // ==================================
+        // 16. CONEXÃO BODY → TONE
         // ==================================
 
         bodyOutput.connect(
@@ -1266,7 +1472,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. CONEXÃO TONE → DYNAMICS
+        // 17. CONEXÃO TONE → DYNAMICS
         // ==================================
 
         toneOutput.connect(
@@ -1275,7 +1481,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 17. CONEXÃO FINAL
+        // 18. CONEXÃO FINAL
         // ==================================
 
         if (
@@ -1295,7 +1501,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 18. SOURCE → BODY
+        // 19. SOURCE → BODY
         // ==================================
 
         source.connect(
@@ -1304,7 +1510,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 19. INICIAR
+        // 20. INICIAR
         // ==================================
 
         source.start(
@@ -1313,7 +1519,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 20. RENDER
+        // 21. RENDER
         // ==================================
 
         const result =
@@ -1401,6 +1607,23 @@ class VocalSmoother {
     getLastTreatmentDecisionPipeline() {
 
         return this.lastTreatmentDecisionPipeline;
+    }
+
+
+    // ======================================
+    // ÚLTIMA AUDITORIA DO CONTRATO
+    // ======================================
+    //
+    // SOMENTE OBSERVAÇÃO.
+    //
+    // Retorna a comparação entre o plano
+    // e o snapshot DSP da última execução.
+    //
+    // ======================================
+
+    getLastTreatmentContractAudit() {
+
+        return this.lastTreatmentContractAudit;
     }
 
 
