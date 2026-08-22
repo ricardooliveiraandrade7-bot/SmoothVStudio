@@ -337,31 +337,548 @@ class TreatmentDecisionPipeline {
 
 
     // ======================================
-    // RESOLVER AUTORIDADE DO DECISION RECORD
+    // CRIAR INTENÇÃO REGIONAL
     // ======================================
 
-    resolveDecisionAuthority(
-        record,
-        fallbackAuthority
+    createRegionalInterventionIntent(
+        options = {}
+    ) {
+
+        const state =
+            this.safeString(
+                options.state,
+                "preserve"
+            );
+
+
+        const normalizedState =
+            (
+                state === "candidate" ||
+                state === "blocked" ||
+                state === "preserve"
+            )
+                ? state
+                : "blocked";
+
+
+        return {
+
+            state:
+                normalizedState,
+
+            executionPermission:
+                "none",
+
+            processingPermission:
+                "none",
+
+            audioProcessing:
+                false,
+
+            decisionAuthority:
+                this.cloneAuthority(
+                    options.decisionAuthority ||
+                    this.authorityProfile
+                ),
+
+            region:
+                options.region || null,
+
+            treatmentType:
+                this.safeString(
+                    options.treatmentType,
+                    "none"
+                ),
+
+            confidence:
+                this.safeString(
+                    options.confidence,
+                    "indeterminate"
+                ),
+
+            evidence:
+                this.isArray(
+                    options.evidence
+                )
+                    ? [
+                        ...options.evidence
+                    ]
+                    : [],
+
+            rationale:
+                this.safeString(
+                    options.rationale,
+                    ""
+                ),
+
+            requestedGainDb:
+                this.isFiniteNumber(
+                    options.requestedGainDb
+                )
+                    ? options.requestedGainDb
+                    : 0,
+
+            boundedGainDb:
+                this.isFiniteNumber(
+                    options.boundedGainDb
+                )
+                    ? options.boundedGainDb
+                    : 0,
+
+            fallback:
+                "preserve"
+        };
+    }
+
+
+    // ======================================
+    // NORMALIZAR REGIÃO
+    // ======================================
+
+    normalizeRegion(
+        value
     ) {
 
         if (
-            this.isObject(
-                record
-            ) &&
-            this.isObject(
-                record.authority
-            )
+            typeof value ===
+            "string"
         ) {
 
-            return this.cloneAuthority(
-                record.authority
-            );
+            const name =
+                this.safeString(
+                    value
+                );
+
+
+            if (
+                !name
+            ) {
+
+                return null;
+            }
+
+
+            return {
+
+                id:
+                    name,
+
+                name:
+                    name
+            };
         }
 
 
-        return this.cloneAuthority(
-            fallbackAuthority
+        if (
+            this.isObject(
+                value
+            )
+        ) {
+
+            const id =
+                this.safeString(
+                    value.id ||
+                    value.key ||
+                    value.name,
+                    "unknown"
+                );
+
+
+            const name =
+                this.safeString(
+                    value.name ||
+                    value.label ||
+                    id,
+                    id
+                );
+
+
+            return {
+
+                id,
+
+                name
+            };
+        }
+
+
+        return null;
+    }
+
+
+    // ======================================
+    // EXTRAIR REGIÃO DO REGISTRO
+    // ======================================
+
+    extractRegionFromRecord(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return null;
+        }
+
+
+        return this.normalizeRegion(
+            record.region ||
+            record.regionResult ||
+            record.regionData ||
+            record.targetRegion ||
+            record.area ||
+            record.frequencyRegion ||
+            null
+        );
+    }
+
+
+    // ======================================
+    // EXTRAIR TIPO DE TRATAMENTO
+    // ======================================
+
+    extractTreatmentType(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return "none";
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        return this.safeString(
+            record.treatmentType ||
+            record.treatment ||
+            record.actionType ||
+            decision.treatmentType ||
+            decision.treatment ||
+            decision.type ||
+            decision.actionType ||
+            "none",
+            "none"
+        );
+    }
+
+
+    // ======================================
+    // EXTRAIR CONFIANÇA
+    // ======================================
+
+    extractConfidence(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return "indeterminate";
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const value =
+            record.confidence ||
+            record.decisionConfidence ||
+            decision.confidence ||
+            record.evidenceConfidence ||
+            null;
+
+
+        if (
+            typeof value ===
+            "number"
+        ) {
+
+            if (
+                value >= 0.8
+            ) {
+
+                return "strong";
+            }
+
+
+            if (
+                value >= 0.5
+            ) {
+
+                return "moderate";
+            }
+
+
+            if (
+                value > 0
+            ) {
+
+                return "weak";
+            }
+
+
+            return "indeterminate";
+        }
+
+
+        const text =
+            this.safeString(
+                value,
+                "indeterminate"
+            )
+                .toLowerCase();
+
+
+        if (
+            text === "strong" ||
+            text === "forte"
+        ) {
+
+            return "strong";
+        }
+
+
+        if (
+            text === "moderate" ||
+            text === "moderada"
+        ) {
+
+            return "moderate";
+        }
+
+
+        if (
+            text === "weak" ||
+            text === "fraca"
+        ) {
+
+            return "weak";
+        }
+
+
+        return "indeterminate";
+    }
+
+
+    // ======================================
+    // EXTRAIR EVIDÊNCIAS
+    // ======================================
+
+    extractEvidence(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return [];
+        }
+
+
+        const sources = [
+
+            record.evidence,
+
+            record.evidenceList,
+
+            record.supportingEvidence,
+
+            record.observations,
+
+            record.diagnostics,
+
+            record.measurements,
+
+            record.decision &&
+            record.decision.evidence
+        ];
+
+
+        for (
+            let i = 0;
+            i < sources.length;
+            i++
+        ) {
+
+            if (
+                this.isArray(
+                    sources[i]
+                )
+            ) {
+
+                return [
+                    ...sources[i]
+                ];
+            }
+        }
+
+
+        return [];
+    }
+
+
+    // ======================================
+    // EXTRAIR GANHO SOLICITADO
+    // ======================================
+
+    extractRequestedGainDb(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return 0;
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const candidates = [
+
+            record.requestedGainDb,
+
+            record.gainDb,
+
+            record.recommendedGainDb,
+
+            record.amountDb,
+
+            decision.requestedGainDb,
+
+            decision.gainDb,
+
+            decision.recommendedGainDb,
+
+            decision.amountDb
+        ];
+
+
+        for (
+            let i = 0;
+            i < candidates.length;
+            i++
+        ) {
+
+            if (
+                this.isFiniteNumber(
+                    candidates[i]
+                )
+            ) {
+
+                return candidates[i];
+            }
+        }
+
+
+        return 0;
+    }
+
+
+    // ======================================
+    // IDENTIFICAR PRESERVAÇÃO
+    // ======================================
+
+    isPreserveRecord(
+        record
+    ) {
+
+        if (
+            !this.isObject(
+                record
+            )
+        ) {
+
+            return true;
+        }
+
+
+        const decision =
+            this.isObject(
+                record.decision
+            )
+                ? record.decision
+                : {};
+
+
+        const actions = [
+
+            record.action,
+
+            record.decisionAction,
+
+            record.recommendation,
+
+            decision.action,
+
+            decision.recommendation
+        ];
+
+
+        for (
+            let i = 0;
+            i < actions.length;
+            i++
+        ) {
+
+            const action =
+                this.safeString(
+                    actions[i],
+                    ""
+                )
+                    .toLowerCase();
+
+
+            if (
+                action ===
+                    "preserve" ||
+                action ===
+                    "preservar"
+            ) {
+
+                return true;
+            }
+        }
+
+
+        return false;
+    }
+
+
     // ======================================
     // CRIAR INTENÇÃO A PARTIR DE REGISTRO
     // ======================================
@@ -370,13 +887,6 @@ class TreatmentDecisionPipeline {
         record,
         authority
     ) {
-
-        const decisionAuthority =
-            this.resolveDecisionAuthority(
-                record,
-                authority
-            );
-
 
         if (
             !this.isObject(
@@ -389,12 +899,17 @@ class TreatmentDecisionPipeline {
                 state:
                     "blocked",
 
-                decisionAuthority,
-
                 rationale:
                     "Registro de decisão inválido."
             });
         }
+
+
+        const decisionAuthority =
+            this.cloneAuthority(
+                record.authority ||
+                authority
+            );
 
 
         if (
@@ -462,9 +977,7 @@ class TreatmentDecisionPipeline {
             this.extractRequestedGainDb(
                 record
             );
-
-
-        // ==================================
+                    // ==================================
         // SEM REGIÃO
         // ==================================
 
@@ -564,22 +1077,22 @@ class TreatmentDecisionPipeline {
         // ==================================
 
         const maxGain =
-            decisionAuthority &&
-            decisionAuthority.limits &&
+            authority &&
+            authority.limits &&
             this.isFiniteNumber(
-                decisionAuthority.limits.maxGainDb
+                authority.limits.maxGainDb
             )
-                ? decisionAuthority.limits.maxGainDb
+                ? authority.limits.maxGainDb
                 : 2;
 
 
         const maxCut =
-            decisionAuthority &&
-            decisionAuthority.limits &&
+            authority &&
+            authority.limits &&
             this.isFiniteNumber(
-                decisionAuthority.limits.maxCutDb
+                authority.limits.maxCutDb
             )
-                ? decisionAuthority.limits.maxCutDb
+                ? authority.limits.maxCutDb
                 : -2;
 
 
@@ -754,74 +1267,6 @@ class TreatmentDecisionPipeline {
 
 
         if (
-            !this.isObject(
-                intent.decisionAuthority
-            )
-        ) {
-
-            errors.push(
-                "Intenção regional sem decisionAuthority."
-            );
-
-        } else {
-
-            if (
-                intent.decisionAuthority.level !==
-                "bounded"
-            ) {
-
-                errors.push(
-                    "decisionAuthority deve possuir level bounded."
-                );
-            }
-
-
-            if (
-                intent.decisionAuthority.processingPermission !==
-                "none"
-            ) {
-
-                errors.push(
-                    "decisionAuthority não pode liberar processamento."
-                );
-            }
-
-
-            if (
-                intent.decisionAuthority.audioProcessing !==
-                false
-            ) {
-
-                errors.push(
-                    "decisionAuthority não pode liberar processamento de áudio."
-                );
-            }
-
-
-            if (
-                intent.decisionAuthority.reconstructionPermission !==
-                "none"
-            ) {
-
-                errors.push(
-                    "decisionAuthority não pode liberar reconstrução."
-                );
-            }
-
-
-            if (
-                intent.decisionAuthority.executorPermission !==
-                "none"
-            ) {
-
-                errors.push(
-                    "decisionAuthority não pode liberar executor."
-                );
-            }
-        }
-
-
-        if (
             intent.executionPermission !==
             "none"
         ) {
@@ -851,6 +1296,35 @@ class TreatmentDecisionPipeline {
             errors.push(
                 "Intenção regional não pode executar processamento de áudio."
             );
+        }
+
+
+        if (
+            !this.isObject(
+                intent.decisionAuthority
+            )
+        ) {
+
+            errors.push(
+                "Intenção regional sem autoridade de decisão."
+            );
+
+        } else {
+
+            const authorityValidation =
+                this.validateBoundedAuthority(
+                    intent.decisionAuthority
+                );
+
+
+            if (
+                !authorityValidation.valid
+            ) {
+
+                errors.push(
+                    ...authorityValidation.errors
+                );
+            }
         }
 
 
@@ -1380,9 +1854,7 @@ class TreatmentDecisionPipeline {
 
         return result;
     }
-
-
-    // ======================================
+        // ======================================
     // EXECUTAR VALIDATOR
     // ======================================
 
@@ -2286,9 +2758,7 @@ class TreatmentDecisionPipeline {
                 authority
         };
     }
-
-
-    // ======================================
+        // ======================================
     // RESUMIR REGISTROS
     // ======================================
 
@@ -2798,9 +3268,7 @@ class TreatmentDecisionPipeline {
 
         result.regionalInterventionIntent =
             regionalIntents;
-
-
-        // ==================================
+                    // ==================================
         // RESUMO
         // ==================================
 
@@ -2883,19 +3351,6 @@ class TreatmentDecisionPipeline {
 
                         ...intent,
 
-                        decisionAuthority:
-                            {
-                                ...intent.decisionAuthority,
-                                processingPermission:
-                                    "none",
-                                audioProcessing:
-                                    false,
-                                reconstructionPermission:
-                                    "none",
-                                executorPermission:
-                                    "none"
-                            },
-
                         executionPermission:
                             "none",
 
@@ -2904,6 +3359,12 @@ class TreatmentDecisionPipeline {
 
                         audioProcessing:
                             false,
+
+                        decisionAuthority:
+                            this.cloneAuthority(
+                                intent.decisionAuthority ||
+                                result.authority
+                            ),
 
                         fallback:
                             "preserve"
