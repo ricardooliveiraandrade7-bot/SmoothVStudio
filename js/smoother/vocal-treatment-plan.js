@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL TREATMENT PLAN
-// V0.2
+// V0.3
 // ==========================================
 //
 // Camada de decisão espectral.
@@ -38,7 +38,7 @@ class VocalTreatmentPlan {
 
 
         this.version =
-            "0.2";
+            "0.3";
 
 
         // ==================================
@@ -226,6 +226,18 @@ class VocalTreatmentPlan {
                         true,
 
                     regionSpecificEvidenceRequired:
+                        true,
+
+                    processingRequiresIndependentEvidence:
+                        true,
+
+                    diagnosticConfidenceRequired:
+                        true,
+
+                    conflictingEvidenceFallsBackToUncertain:
+                        true,
+
+                    tonalReferenceIsNotEqPreset:
                         true
                 },
 
@@ -1213,7 +1225,9 @@ class VocalTreatmentPlan {
          * não aumentamos a decisão.
          *
          * A análise original continua registrada,
-         * mas a autoridade permanece observacional.
+         * mas a evidência regional NÃO foi aplicada.
+         *
+         * Portanto contextApplied permanece false.
          */
 
         if (
@@ -1225,7 +1239,7 @@ class VocalTreatmentPlan {
                 ...decision,
 
                 contextApplied:
-                    true,
+                    false,
 
                 regionalState:
                     regional.state,
@@ -2404,5 +2418,11 @@ class VocalTreatmentPlan {
 // DISPONIBILIZAR
 // ==========================================
 
-window.VocalTreatmentPlan =
-    VocalTreatmentPlan;
+if (
+    typeof window !==
+    "undefined"
+) {
+
+    window.VocalTreatmentPlan =
+        VocalTreatmentPlan;
+}
