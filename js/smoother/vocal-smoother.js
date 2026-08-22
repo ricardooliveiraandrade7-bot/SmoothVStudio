@@ -623,9 +623,7 @@ class VocalSmoother {
             return null;
         }
     }
-
-
-    // ======================================
+        // ======================================
     // GERAR PLANO DE TRATAMENTO
     // ======================================
 
@@ -1263,9 +1261,7 @@ class VocalSmoother {
                 "VocalBody não retornou uma cadeia de áudio válida."
             );
         }
-
-
-        // ==================================
+                // ==================================
         // 12. VOCAL TONE
         // ==================================
 
@@ -1275,6 +1271,10 @@ class VocalSmoother {
 
         let toneOutput =
             bodyOutput;
+
+
+        let toneActive =
+            false;
 
 
         if (
@@ -1297,7 +1297,11 @@ class VocalSmoother {
 
             if (
                 toneResult.input &&
-                toneResult.output
+                toneResult.output &&
+                toneResult.input !==
+                bodyOutput &&
+                toneResult.output !==
+                bodyOutput
             ) {
 
                 toneInput =
@@ -1306,6 +1310,10 @@ class VocalSmoother {
 
                 toneOutput =
                     toneResult.output;
+
+
+                toneActive =
+                    true;
 
             } else {
 
@@ -1316,7 +1324,9 @@ class VocalSmoother {
 
 
                 if (
-                    resolvedTone
+                    resolvedTone &&
+                    resolvedTone !==
+                    bodyOutput
                 ) {
 
                     toneInput =
@@ -1325,6 +1335,10 @@ class VocalSmoother {
 
                     toneOutput =
                         resolvedTone;
+
+
+                    toneActive =
+                        true;
                 }
             }
         }
@@ -1463,21 +1477,40 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. CONEXÃO BODY → TONE
+        // 16. CONEXÃO BODY → TONE / DYNAMICS
+        // ==================================
+        //
+        // Se houver Tone válido, o sinal passa
+        // por ele antes da dinâmica.
+        //
+        // Se não houver Tone válido, o Body
+        // segue diretamente para a dinâmica.
+        //
+        // Isso evita conectar um AudioNode
+        // a ele mesmo.
+        //
         // ==================================
 
-        bodyOutput.connect(
-            toneInput
-        );
+        if (
+            toneActive
+        ) {
+
+            bodyOutput.connect(
+                toneInput
+            );
 
 
-        // ==================================
-        // 17. CONEXÃO TONE → DYNAMICS
-        // ==================================
+            toneOutput.connect(
+                compressor
 
-        toneOutput.connect(
-            compressor
-        );
+            );
+
+        } else {
+
+            bodyOutput.connect(
+                compressor
+            );
+        }
 
 
         // ==================================
@@ -1598,18 +1631,16 @@ class VocalSmoother {
 
         return this.lastTreatmentPlan;
     }
-
-
-    // ======================================
+        // ======================================
     // ÚLTIMA DECISÃO DO PIPELINE
     // ======================================
-
+    
     getLastTreatmentDecisionPipeline() {
-
+        
         return this.lastTreatmentDecisionPipeline;
     }
-
-
+    
+    
     // ======================================
     // ÚLTIMA AUDITORIA DO CONTRATO
     // ======================================
@@ -1620,53 +1651,53 @@ class VocalSmoother {
     // e o snapshot DSP da última execução.
     //
     // ======================================
-
+    
     getLastTreatmentContractAudit() {
-
+        
         return this.lastTreatmentContractAudit;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DINÂMICA
     // ======================================
-
+    
     getLastSettings() {
-
+        
         return this.lastSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DO BODY
     // ======================================
-
+    
     getLastBodySettings() {
-
+        
         return this.lastBodySettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DO TONE
     // ======================================
-
+    
     getLastToneSettings() {
-
+        
         return this.lastToneSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DA SIBILÂNCIA
     // ======================================
-
+    
     getLastSibilanceSettings() {
-
+        
         return this.lastSibilanceSettings;
     }
-
-
+    
+    
     // ======================================
     // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
     // ======================================
@@ -1678,17 +1709,17 @@ class VocalSmoother {
     // pelos módulos DSP.
     //
     // ======================================
-
+    
     getLastDspSnapshot() {
-
+        
         return this.createDspSnapshot();
     }
-}
-
-
-// ==========================================
-// DISPONIBILIZAR GLOBALMENTE
-// ==========================================
-
-window.VocalSmoother =
-    VocalSmoother;
+    }
+    
+    
+    // ==========================================
+    // DISPONIBILIZAR GLOBALMENTE
+    // ==========================================
+    
+    window.VocalSmoother =
+        VocalSmoother;
