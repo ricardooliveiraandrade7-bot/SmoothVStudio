@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT CONTRACT AUDIT
-// V0.2
+// V0.3
 // ==========================================
 //
 // Auditoria observacional dos contratos entre:
@@ -22,7 +22,7 @@
 //        ↓
 // DSP Snapshot
 //        ↓
-// Reconciliation
+// Semantic Reconciliation
 //
 // ==========================================
 //
@@ -39,11 +39,13 @@
 // - corrige automaticamente contratos;
 // - autoriza processamento.
 //
-// Sua responsabilidade é OBSERVAR
-// compatibilidade estrutural e,
-// quando explicitamente fornecidos,
-// compatibilidade entre intenção de tratamento
-// e snapshot de intenção/configuração DSP.
+// Sua responsabilidade é OBSERVAR:
+//
+// - compatibilidade estrutural;
+// - autoridade;
+// - intenção de tratamento;
+// - relação semântica entre plano e DSP;
+// - correspondências diretas quando comprovadas.
 //
 // ==========================================
 //
@@ -61,8 +63,9 @@ class TreatmentContractAudit {
         options = {}
     ) {
 
+
         this.version =
-            "0.2";
+            "0.3";
 
 
         this.validator =
@@ -85,23 +88,19 @@ class TreatmentContractAudit {
             null;
 
 
-        // Snapshot opcional de Treatment Plan.
-        //
-        // Não é criado automaticamente.
-        // Não é executado.
-        //
+        // ==================================
+        // SNAPSHOT OPCIONAL DO TREATMENT PLAN
+        // ==================================
+
         this.treatmentPlan =
             options.treatmentPlan ||
             null;
 
 
-        // Snapshot opcional dos módulos DSP.
-        //
-        // Deve representar somente intenção,
-        // parâmetros ou configuração observável.
-        //
-        // Nunca recebe AudioBuffer.
-        //
+        // ==================================
+        // SNAPSHOT OPCIONAL DO DSP
+        // ==================================
+
         this.dspSnapshot =
             options.dspSnapshot ||
             null;
@@ -997,7 +996,7 @@ class TreatmentContractAudit {
 
 
     // ======================================
-    // NORMALIZAR DSP SNAPSHOT
+    // NORMALIZAR DSP REGION
     // ======================================
 
     getDspRegion(
@@ -1017,11 +1016,15 @@ class TreatmentContractAudit {
 
         if (
             this.isObject(
-                dspSnapshot[region]
+                dspSnapshot[
+                    region
+                ]
             )
         ) {
 
-            return dspSnapshot[region];
+            return dspSnapshot[
+                region
+            ];
         }
 
 
@@ -1047,13 +1050,182 @@ class TreatmentContractAudit {
 
 
     // ======================================
-    // CLASSIFICAR RECONCILIAÇÃO
+    // DEFINIR MAPEAMENTO SEMÂNTICO
+    // ======================================
+    //
+    // IMPORTANTE:
+    //
+    // Este método NÃO afirma equivalência
+    // numérica.
+    //
+    // Ele apenas registra relações que
+    // possuem evidência arquitetural.
+    //
     // ======================================
 
-    classifyReconciliation(
+    getSemanticMapping(
+        region
+    ) {
+
+        const mappings = {
+
+            bass: {
+
+                relation:
+                    "SEMANTICALLY_RELATED",
+
+                dspRegions: [
+
+                    "body",
+
+                    "tone"
+                ],
+
+                reason:
+                    "Bass do plano se relaciona a tratamento de grave/corpo, mas os parâmetros DSP não representam diretamente targetDb de bass."
+            },
+
+
+            body: {
+
+                relation:
+                    "SEMANTICALLY_RELATED",
+
+                dspRegions: [
+
+                    "body",
+
+                    "tone"
+                ],
+
+                reason:
+                    "Body do plano se relaciona aos módulos Body/Tone, porém os parâmetros possuem modelos e bandas próprias."
+            },
+
+
+            mid: {
+
+                relation:
+                    "SEMANTICALLY_RELATED",
+
+                dspRegions: [
+
+                    "tone"
+                ],
+
+                reason:
+                    "Mid do plano possui relação com o tratamento tonal, mas não há equivalência direta demonstrada entre targetDb e os ganhos internos do Tone."
+            },
+
+
+            presence: {
+
+                relation:
+                    "NO_MAPPING",
+
+                dspRegions:
+                    [],
+
+                reason:
+                    "Não existe atualmente um parâmetro DSP inequívoco no snapshot que represente diretamente presence."
+            },
+
+
+            harshness: {
+
+                relation:
+                    "SEMANTICALLY_RELATED",
+
+                dspRegions: [
+
+                    "dynamics"
+                ],
+
+                reason:
+                    "Harshness influencia o cálculo de intensidade dinâmica, mas intensity, threshold e ratio não são equivalentes a targetDb de harshness."
+            },
+
+
+            sibilance: {
+
+                relation:
+                    "SEMANTICALLY_RELATED",
+
+                dspRegions: [
+
+                    "sibilance"
+                ],
+
+                reason:
+                    "Treatment Plan e VocalSibilance utilizam evidência de sibilância e controlam tratamento relacionado, porém usam modelos matemáticos diferentes."
+            },
+
+
+            air: {
+
+                relation:
+                    "NO_MAPPING",
+
+                dspRegions:
+                    [],
+
+                reason:
+                    "Não existe atualmente correspondência DSP inequívoca para air no snapshot."
+            }
+        };
+
+
+        return (
+            mappings[
+                region
+            ] || {
+
+                relation:
+                    "NO_MAPPING",
+
+                dspRegions:
+                    [],
+
+                reason:
+                    "Nenhum mapeamento semântico registrado."
+            }
+        );
+    }
+
+
+    // ======================================
+    // CLASSIFICAR RELAÇÃO SEMÂNTICA
+    // ======================================
+
+    classifySemanticRelation(
+        region,
         decision,
         dspRegion
     ) {
+
+        const mapping =
+            this.getSemanticMapping(
+                region
+            );
+
+
+        if (
+            mapping.relation ===
+            "NO_MAPPING"
+        ) {
+
+            return {
+
+                classification:
+                    "NO_MAPPING",
+
+                reason:
+                    mapping.reason,
+
+                mapping
+            };
+        }
+
 
         if (
             !this.isObject(
@@ -1061,17 +1233,16 @@ class TreatmentContractAudit {
             )
         ) {
 
-            return "UNSUPPORTED";
-        }
+            return {
 
+                classification:
+                    "UNSUPPORTED",
 
-        if (
-            !this.isObject(
-                dspRegion
-            )
-        ) {
+                reason:
+                    "Decisão de tratamento não disponível.",
 
-            return "UNSUPPORTED";
+                mapping
+            };
         }
 
 
@@ -1104,120 +1275,83 @@ class TreatmentContractAudit {
             -1
         ) {
 
-            return "BLOCKED";
+            return {
+
+                classification:
+                    "BLOCKED",
+
+                reason:
+                    "Estado da decisão não autoriza interpretação de tratamento.",
+
+                mapping
+            };
         }
 
 
-        const treatment =
-            this.safeString(
-                decision.treatment ||
-                decision.action ||
-                decision.type ||
-                "",
-                ""
-            ).toLowerCase();
+        if (
+            !this.isObject(
+                dspRegion
+            )
+        ) {
+
+            return {
+
+                classification:
+                    "SEMANTICALLY_RELATED",
+
+                reason:
+                    mapping.reason +
+                    " Nenhum snapshot DSP correspondente foi fornecido para confirmar execução.",
+
+                mapping
+            };
+        }
 
 
         const dspEnabled =
-            dspRegion.enabled;
+            dspRegion.enabled ===
+            true;
 
 
         const dspActive =
-            dspRegion.active;
+            dspRegion.active ===
+            true;
 
 
         const hasDspIntent =
-            (
-                dspEnabled === true ||
-                dspActive === true
-            );
-
-
-        const targetDb =
-            this.getTargetDb(
-                decision
-            );
-
-
-        const dspGainDb =
-            this.isFiniteNumber(
-                dspRegion.gainDb
-            )
-            ? dspRegion.gainDb
-            : null;
-
-
-        const plannedTreatment =
-            (
-                state === "correct" ||
-                state === "improve" ||
-                state === "reduce" ||
-                state === "cut" ||
-                state === "boost" ||
-                state === "treat" ||
-                treatment !== ""
-            );
-
-
-        if (
-            !plannedTreatment
-        ) {
-
-            if (
-                hasDspIntent
-            ) {
-
-                return "DIVERGENT";
-            }
-
-
-            return "ALIGNED";
-        }
-
-
-        if (
-            targetDb === null &&
-            !hasDspIntent
-        ) {
-
-            return "UNSUPPORTED";
-        }
-
-
-        if (
-            targetDb !== null &&
-            dspGainDb !== null
-        ) {
-
-            const difference =
-                Math.abs(
-                    targetDb -
-                    dspGainDb
-                );
-
-
-            if (
-                difference <=
-                0.25
-            ) {
-
-                return "ALIGNED";
-            }
-
-
-            return "PARTIALLY_ALIGNED";
-        }
+            dspEnabled ||
+            dspActive;
 
 
         if (
             hasDspIntent
         ) {
 
-            return "PARTIALLY_ALIGNED";
+            return {
+
+                classification:
+                    "SEMANTICALLY_RELATED",
+
+                reason:
+                    mapping.reason +
+                    " Existe intenção/configuração DSP observável, mas não há equivalência numérica direta comprovada.",
+
+                mapping
+            };
         }
 
 
-        return "UNSUPPORTED";
+        return {
+
+            classification:
+                "SEMANTICALLY_RELATED",
+
+            reason:
+                mapping.reason +
+                " A relação semântica existe, porém não foi demonstrada uma intenção DSP ativa equivalente.",
+
+            mapping
+        };
     }
 
 
@@ -1231,8 +1365,9 @@ class TreatmentContractAudit {
         dspRegion
     ) {
 
-        const classification =
-            this.classifyReconciliation(
+        const semantic =
+            this.classifySemanticRelation(
+                region,
                 decision,
                 dspRegion
             );
@@ -1255,26 +1390,21 @@ class TreatmentContractAudit {
             : null;
 
 
-        let differenceDb =
-            null;
-
-
-        if (
-            targetDb !== null &&
-            dspGainDb !== null
-        ) {
-
-            differenceDb =
-                dspGainDb -
-                targetDb;
-        }
-
-
         return {
 
             region,
 
-            classification,
+            classification:
+                semantic.classification,
+
+            semanticRelation:
+                semantic.mapping.relation,
+
+            semanticReason:
+                semantic.reason,
+
+            mappedDspRegions:
+                semantic.mapping.dspRegions,
 
             decisionState:
                 this.getDecisionState(
@@ -1296,7 +1426,11 @@ class TreatmentContractAudit {
 
             dspGainDb,
 
-            differenceDb,
+            differenceDb:
+                null,
+
+            differenceStatus:
+                "NOT_COMPARABLE",
 
             evidence:
 
@@ -1325,9 +1459,6 @@ class TreatmentContractAudit {
     // Não cria filtros.
     // Não recebe AudioBuffer.
     //
-    // O DSP snapshot deve ser fornecido
-    // explicitamente pelo chamador.
-    //
     // ======================================
 
     auditTreatmentDspReconciliation(
@@ -1351,19 +1482,19 @@ class TreatmentContractAudit {
 
             summary: {
 
-                aligned:
+                directMapping:
                     0,
 
-                partiallyAligned:
+                semanticallyRelated:
                     0,
 
-                divergent:
-                    0,
-
-                unsupported:
+                noMapping:
                     0,
 
                 blocked:
+                    0,
+
+                unsupported:
                     0
             },
 
@@ -1457,13 +1588,19 @@ class TreatmentContractAudit {
         ];
 
 
-        let hasDivergence =
+        let hasNoMapping =
             false;
 
-        let hasPartial =
+
+        let hasBlocked =
             false;
+
 
         let hasUnsupported =
+            false;
+
+
+        let hasSemantic =
             false;
 
 
@@ -1508,28 +1645,38 @@ class TreatmentContractAudit {
                 audit.classification
             ) {
 
-                case "ALIGNED":
+                case "DIRECT_MAPPING":
 
-                    result.summary.aligned++;
+                    result.summary.directMapping++;
 
                     break;
 
 
-                case "PARTIALLY_ALIGNED":
+                case "SEMANTICALLY_RELATED":
 
-                    result.summary.partiallyAligned++;
+                    result.summary.semanticallyRelated++;
 
-                    hasPartial =
+                    hasSemantic =
                         true;
 
                     break;
 
 
-                case "DIVERGENT":
+                case "NO_MAPPING":
 
-                    result.summary.divergent++;
+                    result.summary.noMapping++;
 
-                    hasDivergence =
+                    hasNoMapping =
+                        true;
+
+                    break;
+
+
+                case "BLOCKED":
+
+                    result.summary.blocked++;
+
+                    hasBlocked =
                         true;
 
                     break;
@@ -1543,42 +1690,48 @@ class TreatmentContractAudit {
                         true;
 
                     break;
-
-
-                case "BLOCKED":
-
-                    result.summary.blocked++;
-
-                    break;
             }
         }
 
 
+        /*
+         * A classificação geral não deve fingir
+         * que uma relação semântica é alinhamento
+         * direto.
+         */
+
         if (
-            hasDivergence
-        ) {
-
-            result.classification =
-                "DIVERGENT";
-
-        } else if (
-            hasPartial
-        ) {
-
-            result.classification =
-                "PARTIALLY_ALIGNED";
-
-        } else if (
             hasUnsupported
         ) {
 
             result.classification =
                 "UNSUPPORTED";
 
+        } else if (
+            hasBlocked
+        ) {
+
+            result.classification =
+                "BLOCKED";
+
+        } else if (
+            hasNoMapping
+        ) {
+
+            result.classification =
+                "PARTIALLY_MAPPED";
+
+        } else if (
+            hasSemantic
+        ) {
+
+            result.classification =
+                "SEMANTICALLY_RELATED";
+
         } else {
 
             result.classification =
-                "ALIGNED";
+                "NOT_EVALUATED";
         }
 
 
@@ -1587,7 +1740,7 @@ class TreatmentContractAudit {
 
 
     // ======================================
-    // CLASSIFICAR RESULTADO
+    // CLASSIFICAR RESULTADO ESTRUTURAL
     // ======================================
 
     classify(
