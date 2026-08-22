@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT EXECUTION VALIDATOR
-// V0.1
+// V0.2
 // ==========================================
 //
 // RESPONSABILIDADE:
@@ -42,7 +42,7 @@ class TreatmentExecutionValidator {
 
 
         this.version =
-            "0.1";
+            "0.2";
 
 
         this.limits = {
@@ -380,6 +380,64 @@ class TreatmentExecutionValidator {
         }
 
 
+        // ----------------------------------
+        // HARD LOCK DO CONTRATO
+        // ----------------------------------
+        //
+        // Mesmo antes de qualquer outra
+        // validação, a intenção precisa
+        // continuar sem autoridade de
+        // execução.
+        //
+
+        if (
+            intent.executionPermission !==
+            "none"
+        ) {
+
+            baseResult.reasons.push(
+                "execution-permission-violation"
+            );
+        }
+
+
+        if (
+            intent.processingPermission !==
+            "none"
+        ) {
+
+            baseResult.reasons.push(
+                "processing-permission-violation"
+            );
+        }
+
+
+        if (
+            intent.audioProcessing !==
+            false
+        ) {
+
+            baseResult.reasons.push(
+                "audio-processing-violation"
+            );
+        }
+
+
+        if (
+            intent.reconstructionPermission !==
+            "none"
+        ) {
+
+            baseResult.reasons.push(
+                "reconstruction-permission-violation"
+            );
+        }
+
+
+        // ----------------------------------
+        // ESTADO
+        // ----------------------------------
+
         const state =
             this.normalizeState(
                 intent.state
@@ -440,11 +498,13 @@ class TreatmentExecutionValidator {
         // ----------------------------------
 
         if (
-            state === "preserve"
+            state ===
+            "preserve"
         ) {
 
             baseResult.valid =
-                true;
+                baseResult.reasons.length ===
+                0;
 
 
             baseResult.reasons.push(
@@ -461,7 +521,8 @@ class TreatmentExecutionValidator {
         // ----------------------------------
 
         if (
-            state === "blocked"
+            state ===
+            "blocked"
         ) {
 
             baseResult.reasons.push(
@@ -492,7 +553,8 @@ class TreatmentExecutionValidator {
         // ----------------------------------
 
         if (
-            treatmentType === "none"
+            treatmentType ===
+            "none"
         ) {
 
             baseResult.reasons.push(
@@ -538,20 +600,22 @@ class TreatmentExecutionValidator {
         // ----------------------------------
 
         baseResult.valid =
-            baseResult.reasons.length === 0;
+            baseResult.reasons.length ===
+            0;
 
 
         /*
          * IMPORTANTE:
          *
          * Mesmo quando a intenção é válida,
-         * a V0.1 continua sem autorização DSP.
+         * a V0.2 continua sem autorização DSP.
          *
          * Portanto:
          *
          * valid !== executable
          *
          */
+
 
         baseResult.executable =
             false;
@@ -563,6 +627,10 @@ class TreatmentExecutionValidator {
 
         baseResult.audioProcessing =
             false;
+
+
+        baseResult.reconstructionPermission =
+            "none";
 
 
         return baseResult;
