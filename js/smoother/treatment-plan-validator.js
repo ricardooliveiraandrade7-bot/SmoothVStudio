@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT PLAN VALIDATOR
-// V0.1
+// V0.2
 // ==========================================
 //
 // Responsabilidade:
@@ -45,8 +45,9 @@ class TreatmentPlanValidator {
 
     constructor(options = {}) {
 
+
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
@@ -333,7 +334,7 @@ class TreatmentPlanValidator {
                 this.rule(
                     "spectral-context-exists",
                     false,
-                    "warning",
+                    "error",
                     "Contexto espectral não disponível."
                 )
             ];
@@ -398,7 +399,7 @@ class TreatmentPlanValidator {
                 "diagnostic-conflicts",
                 diagnostic.conflicts !==
                     true,
-                "warning",
+                "error",
                 "Existem conflitos diagnósticos."
             )
         );
@@ -500,6 +501,13 @@ class TreatmentPlanValidator {
             context &&
             context.diagnostic
                 ? context.diagnostic
+                : null;
+
+
+        const policy =
+            context &&
+            context.decisionPolicy
+                ? context.decisionPolicy
                 : null;
 
 
@@ -736,7 +744,7 @@ class TreatmentPlanValidator {
         // REGRA 10
         // ==================================
         //
-        // Se existe contexto regional real,
+        // Quando existe contexto regional,
         // a confiança também precisa ser
         // suficiente.
         //
@@ -767,6 +775,36 @@ class TreatmentPlanValidator {
         // REGRA 11
         // ==================================
         //
+        // Política exige evidência regional.
+        // Sem contexto regional realmente
+        // aplicado, o tratamento não é
+        // considerado coerente.
+        //
+
+        if (
+            policy &&
+            policy.regionSpecificEvidenceRequired ===
+                true &&
+            state !==
+                "preserve"
+        ) {
+
+            rules.push(
+                this.rule(
+                    `${regionName}-regional-context-applied`,
+                    decision.contextApplied ===
+                        true,
+                    "error",
+                    `A região ${regionName} não possui evidência regional aplicada.`
+                )
+            );
+        }
+
+
+        // ==================================
+        // REGRA 12
+        // ==================================
+        //
         // Conflito global invalida tratamento.
         //
 
@@ -790,7 +828,7 @@ class TreatmentPlanValidator {
 
 
         // ==================================
-        // REGRA 12
+        // REGRA 13
         // ==================================
         //
         // Cobertura regional insuficiente
@@ -924,7 +962,7 @@ class TreatmentPlanValidator {
                 this.rule(
                     "decision-policy-exists",
                     false,
-                    "warning",
+                    "error",
                     "Política de decisão não encontrada."
                 )
             ];
@@ -1258,5 +1296,11 @@ class TreatmentPlanValidator {
 // DISPONIBILIZAR GLOBALMENTE
 // ==========================================
 
-window.TreatmentPlanValidator =
-    TreatmentPlanValidator;
+if (
+    typeof window !==
+    "undefined"
+) {
+
+    window.TreatmentPlanValidator =
+        TreatmentPlanValidator;
+}
