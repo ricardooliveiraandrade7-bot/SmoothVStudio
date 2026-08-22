@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // TREATMENT EXECUTION VALIDATOR
-// V0.2
+// V0.3
 // ==========================================
 //
 // RESPONSABILIDADE:
@@ -42,7 +42,7 @@ class TreatmentExecutionValidator {
 
 
         this.version =
-            "0.2";
+            "0.3";
 
 
         this.limits = {
@@ -313,6 +313,124 @@ class TreatmentExecutionValidator {
 
 
     // ======================================
+    // VERIFICAR ORIGEM DA DECISÃO
+    // ======================================
+    //
+    // A intenção não pode ser considerada
+    // confiável apenas porque possui bons
+    // campos internos.
+    //
+    // Ela precisa informar que veio de uma
+    // decisão regional autorizada.
+    //
+    // IMPORTANTE:
+    //
+    // Isto ainda NÃO libera DSP.
+    //
+    // ======================================
+
+    validateDecisionAuthority(
+        intent
+    ) {
+
+        const result = {
+
+            valid:
+                true,
+
+            reasons:
+                []
+        };
+
+
+        const authority =
+            intent.decisionAuthority;
+
+
+        if (
+            !this.isObject(
+                authority
+            )
+        ) {
+
+            result.valid =
+                false;
+
+
+            result.reasons.push(
+                "decision-authority-missing"
+            );
+
+
+            return result;
+        }
+
+
+        if (
+            authority.decisionPermission !==
+            "allowed"
+        ) {
+
+            result.valid =
+                false;
+
+
+            result.reasons.push(
+                "decision-permission-not-allowed"
+            );
+        }
+
+
+        if (
+            authority.regionDecision !==
+            "allowed"
+        ) {
+
+            result.valid =
+                false;
+
+
+            result.reasons.push(
+                "regional-decision-not-allowed"
+            );
+        }
+
+
+        if (
+            authority.processingPermission !==
+            "none"
+        ) {
+
+            result.valid =
+                false;
+
+
+            result.reasons.push(
+                "processing-permission-violation"
+            );
+        }
+
+
+        if (
+            authority.audioProcessing !==
+            false
+        ) {
+
+            result.valid =
+                false;
+
+
+            result.reasons.push(
+                "audio-processing-violation"
+            );
+        }
+
+
+        return result;
+    }
+
+
+    // ======================================
     // VALIDAR
     // ======================================
 
@@ -357,7 +475,10 @@ class TreatmentExecutionValidator {
                 0,
 
             boundedGainDb:
-                0
+                0,
+
+            decisionAuthority:
+                "unverified"
         };
 
 
@@ -494,6 +615,53 @@ class TreatmentExecutionValidator {
 
 
         // ----------------------------------
+        // ORIGEM DA DECISÃO
+        // ----------------------------------
+        //
+        // Não basta uma intenção possuir
+        // evidências.
+        //
+        // Ela precisa informar que passou
+        // pelo Decision Gate.
+        //
+
+        const decisionAuthority =
+            this.validateDecisionAuthority(
+                intent
+            );
+
+
+        if (
+            decisionAuthority.valid
+        ) {
+
+            baseResult.decisionAuthority =
+                "verified";
+
+        } else {
+
+            baseResult.decisionAuthority =
+                "unverified";
+
+
+            for (
+                let i = 0;
+                i <
+                decisionAuthority
+                    .reasons
+                    .length;
+                i++
+            ) {
+
+                baseResult.reasons.push(
+                    decisionAuthority
+                        .reasons[i]
+                );
+            }
+        }
+
+
+        // ----------------------------------
         // PRESERVAÇÃO
         // ----------------------------------
 
@@ -608,12 +776,15 @@ class TreatmentExecutionValidator {
          * IMPORTANTE:
          *
          * Mesmo quando a intenção é válida,
-         * a V0.2 continua sem autorização DSP.
+         * a V0.3 continua sem autorização DSP.
          *
          * Portanto:
          *
          * valid !== executable
          *
+         * e:
+         *
+         * decisão válida !== DSP permitido
          */
 
 
