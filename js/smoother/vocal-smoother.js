@@ -1223,10 +1223,11 @@ class VocalSmoother {
         // ==================================
 
         const bodyResult =
-            this.body.createProcessor(
-                context,
-                analysis
-            );
+    this.body.createProcessor(
+        context,
+        analysis,
+        this.lastTreatmentDecisionPipeline
+    );
 
 
         this.lastBodySettings =
