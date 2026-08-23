@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL TONE
-// V0.1
+// V0.2
 // ==========================================
 //
 // Correção tonal adaptativa.
@@ -16,6 +16,18 @@
 // A intensidade da correção é calculada
 // a partir da análise do vocal.
 //
+// V0.2:
+//
+// - correção tonal mais complementar
+//   ao VocalBody;
+// - limites de redução suavizados;
+// - referências de equilíbrio ligeiramente
+//   elevadas para evitar atuação precoce;
+// - preservação da estrutura adaptativa;
+// - nenhuma alteração em inteligência;
+// - nenhuma reconstrução;
+// - nenhuma atuação em médio-agudos/agudos.
+//
 // ==========================================
 
 
@@ -24,27 +36,37 @@ class VocalTone {
 
     constructor(options = {}) {
 
+
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
         // LIMITES DE CORREÇÃO
         // ==================================
+        //
+        // O VocalBody já realiza o tratamento
+        // principal de corpo e médio-grave.
+        //
+        // Portanto o VocalTone atua como
+        // complemento tonal e não como uma
+        // segunda camada forte de limpeza.
+        //
+        // ==================================
 
         this.maxLowReductionDb =
             options.maxLowReductionDb ??
-            2.5;
+            1.5;
 
 
         this.maxLowMidReductionDb =
             options.maxLowMidReductionDb ??
-            4.0;
+            2.5;
 
 
         this.maxMidReductionDb =
             options.maxMidReductionDb ??
-            2.0;
+            1.5;
 
 
         this.lastSettings =
@@ -226,18 +248,22 @@ class VocalTone {
         //
         // O resultado depende do vocal.
         //
+        // As referências foram elevadas
+        // levemente para reduzir a ativação
+        // excessiva após o trabalho do Body.
+        //
         // ==================================
 
         const lowReference =
-            0.115;
+            0.125;
 
 
         const lowMidReference =
-            0.145;
+            0.155;
 
 
         const midReference =
-            0.175;
+            0.185;
 
 
         // ==================================
@@ -349,9 +375,7 @@ class VocalTone {
 
         return settings;
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -418,7 +442,9 @@ class VocalTone {
 
         lowMidFilter.gain.value =
             settings.lowMidReductionDb;
-                    // ==================================
+
+
+        // ==================================
         // MÉDIOS
         // ==================================
 
@@ -486,3 +512,4 @@ class VocalTone {
 
 window.VocalTone =
     VocalTone;
+    
