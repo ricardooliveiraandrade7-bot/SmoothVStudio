@@ -39,7 +39,7 @@ class VocalTone {
 
         this.maxLowMidReductionDb =
             options.maxLowMidReductionDb ??
-            3.0;
+            4.0;
 
 
         this.maxMidReductionDb =
@@ -418,9 +418,7 @@ class VocalTone {
 
         lowMidFilter.gain.value =
             settings.lowMidReductionDb;
-
-
-        // ==================================
+                    // ==================================
         // MÉDIOS
         // ==================================
 
