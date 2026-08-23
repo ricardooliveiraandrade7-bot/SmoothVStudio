@@ -2184,34 +2184,8 @@ class VocalTreatmentPlan {
             // ==================================
 
             spectralContext: {
-
-                available:
-                    context.available,
-
-                reference:
-                    context.spectral.reference,
-
-                tonalDirection:
-                    context.spectral.tonalDirection,
-
-                confidence:
-                    context.spectral.confidence,
-
-                diagnosticState:
-                    context.diagnostic.state,
-
-                diagnosticConfidence:
-                    context.diagnostic.confidence,
-
-                regionalCoverage:
-                    context.diagnostic.regionalCoverage,
-
-                conflicts:
-                    context.diagnostic.conflicts,
-
-                safety:
-                    context.diagnostic.safety
-            },
+    ...context
+},
 
 
             // ==================================

@@ -66,1655 +66,1625 @@
 //
 // ==========================================
 
-
 class VocalSmoother {
 
+constructor(  
+    options = {}  
+) {  
 
-    constructor(
-        options = {}
-    ) {
 
+    this.version =  
+        "1.2";  
 
-        this.version =
-            "1.2";
 
+    // ==================================  
+    // ANALYZER  
+    // ==================================  
 
-        // ==================================
-        // ANALYZER
-        // ==================================
+    this.analyzer =  
+        options.analyzer ||  
+        new VocalAnalyzer();  
 
-        this.analyzer =
-            options.analyzer ||
-            new VocalAnalyzer();
 
+    // ==================================  
+    // MEDIÇÃO ESPECTRAL REGIONAL  
+    // ==================================  
 
-        // ==================================
-        // MEDIÇÃO ESPECTRAL REGIONAL
-        // ==================================
+    this.spectralRegionalMeasurement =  
+        options.spectralRegionalMeasurement ||  
+        (  
+            window.SpectralRegionalMeasurement  
+                ? new SpectralRegionalMeasurement()  
+                : null  
+        );  
 
-        this.spectralRegionalMeasurement =
-            options.spectralRegionalMeasurement ||
-            (
-                window.SpectralRegionalMeasurement
-                    ? new SpectralRegionalMeasurement()
-                    : null
-            );
 
+    // ==================================  
+    // RUNTIME ESPECTRAL REGIONAL  
+    // ==================================  
 
-        // ==================================
-        // RUNTIME ESPECTRAL REGIONAL
-        // ==================================
+    this.spectralRegionalRuntime =  
+        options.spectralRegionalRuntime ||  
+        (  
+            window.SpectralRegionalRuntime  
+                ? new SpectralRegionalRuntime({  
+                    measurement:  
+                        this.spectralRegionalMeasurement  
+                })  
+                : null  
+        );  
 
-        this.spectralRegionalRuntime =
-            options.spectralRegionalRuntime ||
-            (
-                window.SpectralRegionalRuntime
-                    ? new SpectralRegionalRuntime({
-                        measurement:
-                            this.spectralRegionalMeasurement
-                    })
-                    : null
-            );
 
+    // ==================================  
+    // SPECTRAL PROFILE  
+    // ==================================  
+
+    this.spectralProfile =  
+        options.spectralProfile ||  
+        (  
+            window.SpectralProfile  
+                ? new SpectralProfile()  
+                : null  
+        );  
+
+
+    // ==================================  
+    // SPECTRAL TREATMENT BRIDGE  
+    // ==================================  
+
+    this.spectralTreatmentBridge =  
+        options.spectralTreatmentBridge ||  
+        (  
+            window.SpectralTreatmentBridge  
+                ? new SpectralTreatmentBridge()  
+                : null  
+        );  
+
+
+    // ==================================  
+    // SPECTRAL DIAGNOSTIC OBSERVER  
+    // ==================================  
+
+    this.spectralDiagnosticObserver =  
+        options.spectralDiagnosticObserver ||  
+        (  
+            window.SpectralDiagnosticObserver  
+                ? new SpectralDiagnosticObserver()  
+                : null  
+        );  
+
+
+    // ==================================  
+    // BODY  
+    // ==================================  
+
+    this.body =  
+        options.body ||  
+        new VocalBody();  
+
+
+    // ==================================  
+    // TONE  
+    // ==================================  
+
+    this.tone =  
+        options.tone ||  
+        (  
+            window.VocalTone  
+                ? new VocalTone()  
+                : null  
+        );  
+
+
+    // ==================================  
+    // DYNAMICS  
+    // ==================================  
+
+    this.dynamics =  
+        options.dynamics ||  
+        new VocalDynamics();  
+
+
+    // ==================================  
+    // SIBILANCE  
+    // ==================================  
+
+    this.sibilance =  
+        options.sibilance ||  
+        (  
+            window.VocalSibilance  
+                ? new VocalSibilance()  
+                : null  
+        );  
+
+
+    // ==================================  
+    // PLANO DE TRATAMENTO  
+    // ==================================  
+
+    this.treatmentPlan =  
+        options.treatmentPlan ||  
+        (  
+            window.VocalTreatmentPlan  
+                ? new VocalTreatmentPlan()  
+                : null  
+        );  
 
-        // ==================================
-        // SPECTRAL PROFILE
-        // ==================================
 
-        this.spectralProfile =
-            options.spectralProfile ||
-            (
-                window.SpectralProfile
-                    ? new SpectralProfile()
-                    : null
-            );
-
-
-        // ==================================
-        // SPECTRAL TREATMENT BRIDGE
-        // ==================================
-
-        this.spectralTreatmentBridge =
-            options.spectralTreatmentBridge ||
-            (
-                window.SpectralTreatmentBridge
-                    ? new SpectralTreatmentBridge()
-                    : null
-            );
-
-
-        // ==================================
-        // SPECTRAL DIAGNOSTIC OBSERVER
-        // ==================================
-
-        this.spectralDiagnosticObserver =
-            options.spectralDiagnosticObserver ||
-            (
-                window.SpectralDiagnosticObserver
-                    ? new SpectralDiagnosticObserver()
-                    : null
-            );
-
-
-        // ==================================
-        // BODY
-        // ==================================
-
-        this.body =
-            options.body ||
-            new VocalBody();
-
-
-        // ==================================
-        // TONE
-        // ==================================
-
-        this.tone =
-            options.tone ||
-            (
-                window.VocalTone
-                    ? new VocalTone()
-                    : null
-            );
-
-
-        // ==================================
-        // DYNAMICS
-        // ==================================
-
-        this.dynamics =
-            options.dynamics ||
-            new VocalDynamics();
-
-
-        // ==================================
-        // SIBILANCE
-        // ==================================
-
-        this.sibilance =
-            options.sibilance ||
-            (
-                window.VocalSibilance
-                    ? new VocalSibilance()
-                    : null
-            );
-
-
-        // ==================================
-        // PLANO DE TRATAMENTO
-        // ==================================
-
-        this.treatmentPlan =
-            options.treatmentPlan ||
-            (
-                window.VocalTreatmentPlan
-                    ? new VocalTreatmentPlan()
-                    : null
-            );
+    // ==================================  
+    // DECISION PIPELINE  
+    // ==================================  
+    //  
+    // SOMENTE OBSERVAÇÃO.  
+    //  
+    // O Pipeline valida:  
+    //  
+    // Treatment Plan  
+    //       ↓  
+    // Validator  
+    //       ↓  
+    // Decision Gate  
+    //       ↓  
+    // Decision Record  
+    //  
+    // Nenhuma autoridade DSP é concedida.  
+    //  
+    // ==================================  
 
+    this.treatmentDecisionPipeline =  
+        options.treatmentDecisionPipeline ||  
+        (  
+            window.TreatmentDecisionPipeline  
+                ? new TreatmentDecisionPipeline()  
+                : null  
+        );  
 
-        // ==================================
-        // DECISION PIPELINE
-        // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // O Pipeline valida:
-        //
-        // Treatment Plan
-        //       ↓
-        // Validator
-        //       ↓
-        // Decision Gate
-        //       ↓
-        // Decision Record
-        //
-        // Nenhuma autoridade DSP é concedida.
-        //
-        // ==================================
 
-        this.treatmentDecisionPipeline =
-            options.treatmentDecisionPipeline ||
-            (
-                window.TreatmentDecisionPipeline
-                    ? new TreatmentDecisionPipeline()
-                    : null
-            );
+    // ==================================  
+    // TREATMENT CONTRACT AUDIT  
+    // ==================================  
+    //  
+    // SOMENTE OBSERVAÇÃO.  
+    //  
+    // O Auditor compara:  
+    //  
+    // Treatment Plan  
+    //       ↓  
+    //      Audit  
+    //       ↑  
+    // DSP Snapshot  
+    //  
+    // Nenhuma autoridade DSP é concedida.  
+    //  
+    // ==================================  
 
+    this.treatmentContractAudit =  
+        options.treatmentContractAudit ||  
+        (  
+            window.TreatmentContractAudit  
+                ? new TreatmentContractAudit()  
+                : null  
+        );  
 
-        // ==================================
-        // TREATMENT CONTRACT AUDIT
-        // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // O Auditor compara:
-        //
-        // Treatment Plan
-        //       ↓
-        //      Audit
-        //       ↑
-        // DSP Snapshot
-        //
-        // Nenhuma autoridade DSP é concedida.
-        //
-        // ==================================
 
-        this.treatmentContractAudit =
-            options.treatmentContractAudit ||
-            (
-                window.TreatmentContractAudit
-                    ? new TreatmentContractAudit()
-                    : null
-            );
+    // ==================================  
+    // ESTADO  
+    // ==================================  
 
+    this.lastAnalysis =  
+        null;  
 
-        // ==================================
-        // ESTADO
-        // ==================================
 
-        this.lastAnalysis =
-            null;
+    this.lastSpectralRegionalMeasurement =  
+        null;  
 
 
-        this.lastSpectralRegionalMeasurement =
-            null;
+    this.lastSpectralRegionalSummary =  
+        null;  
 
 
-        this.lastSpectralRegionalSummary =
-            null;
+    this.lastSpectralProfile =  
+        null;  
 
 
-        this.lastSpectralProfile =
-            null;
+    this.lastSpectralContext =  
+        null;  
 
 
-        this.lastSpectralContext =
-            null;
+    this.lastSpectralDiagnostic =  
+        null;  
 
 
-        this.lastSpectralDiagnostic =
-            null;
+    this.lastTreatmentPlan =  
+        null;  
 
 
-        this.lastTreatmentPlan =
-            null;
+    this.lastTreatmentDecisionPipeline =  
+        null;  
 
 
-        this.lastTreatmentDecisionPipeline =
-            null;
+    this.lastTreatmentContractAudit =  
+        null;  
 
 
-        this.lastTreatmentContractAudit =
-            null;
+    this.lastSettings =  
+        null;  
 
 
-        this.lastSettings =
-            null;
+    this.lastBodySettings =  
+        null;  
 
 
-        this.lastBodySettings =
-            null;
+    this.lastToneSettings =  
+        null;  
 
 
-        this.lastToneSettings =
-            null;
+    this.lastSibilanceSettings =  
+        null;  
+}  
 
 
-        this.lastSibilanceSettings =
-            null;
-    }
+// ======================================  
+// CLAMP  
+// ======================================  
 
+clamp(  
+    value,  
+    min,  
+    max  
+) {  
 
-    // ======================================
-    // CLAMP
-    // ======================================
+    return Math.min(  
+        max,  
+        Math.max(  
+            min,  
+            value  
+        )  
+    );  
+}  
 
-    clamp(
-        value,
-        min,
-        max
-    ) {
 
-        return Math.min(
-            max,
-            Math.max(
-                min,
-                value
-            )
-        );
-    }
+// ======================================  
+// OBTER AUDIO NODE  
+// ======================================  
 
+resolveNode(  
+    result  
+) {  
 
-    // ======================================
-    // OBTER AUDIO NODE
-    // ======================================
+    if (  
+        !result  
+    ) {  
 
-    resolveNode(
-        result
-    ) {
+        return null;  
+    }  
 
-        if (
-            !result
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof result.connect ===  
+        "function"  
+    ) {  
 
+        return result;  
+    }  
 
-        if (
-            typeof result.connect ===
-            "function"
-        ) {
 
-            return result;
-        }
+    if (  
+        result.output &&  
+        typeof result.output.connect ===  
+        "function"  
+    ) {  
 
+        return result.output;  
+    }  
 
-        if (
-            result.output &&
-            typeof result.output.connect ===
-            "function"
-        ) {
 
-            return result.output;
-        }
+    if (  
+        result.processor &&  
+        typeof result.processor.connect ===  
+        "function"  
+    ) {  
 
+        return result.processor;  
+    }  
 
-        if (
-            result.processor &&
-            typeof result.processor.connect ===
-            "function"
-        ) {
 
-            return result.processor;
-        }
+    return null;  
+}  
 
 
-        return null;
-    }
+// ======================================  
+// MEDIÇÃO ESPECTRAL REGIONAL  
+// ======================================  
+//  
+// SOMENTE OBSERVAÇÃO.  
+//  
+// Nenhum parâmetro DSP é alterado.  
+//  
+// ======================================  
 
+createSpectralRegionalMeasurement(  
+    analysis  
+) {  
 
-    // ======================================
-    // MEDIÇÃO ESPECTRAL REGIONAL
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Nenhum parâmetro DSP é alterado.
-    //
-    // ======================================
+    if (  
+        !this.spectralRegionalRuntime  
+    ) {  
 
-    createSpectralRegionalMeasurement(
-        analysis
-    ) {
+        return null;  
+    }  
 
-        if (
-            !this.spectralRegionalRuntime
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.spectralRegionalRuntime.analyze !==  
+        "function"  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            typeof this.spectralRegionalRuntime.analyze !==
-            "function"
-        ) {
 
-            return null;
-        }
+    try {  
 
+        const result =  
+            this.spectralRegionalRuntime.analyze(  
+                analysis  
+            );  
 
-        try {
 
-            const result =
-                this.spectralRegionalRuntime.analyze(
-                    analysis
-                );
+        this.lastSpectralRegionalSummary =  
+            typeof this.spectralRegionalRuntime  
+                .getLastSummary ===  
+            "function"  
 
+                ? this.spectralRegionalRuntime  
+                    .getLastSummary()  
 
-            this.lastSpectralRegionalSummary =
-                typeof this.spectralRegionalRuntime
-                    .getLastSummary ===
-                "function"
+                : null;  
 
-                    ? this.spectralRegionalRuntime
-                        .getLastSummary()
 
-                    : null;
+        return result;  
 
+    } catch (error) {  
 
-            return result;
+        console.warn(  
+            "SpectralRegionalRuntime indisponível nesta etapa:",  
+            error  
+        );  
 
-        } catch (error) {
 
-            console.warn(
-                "SpectralRegionalRuntime indisponível nesta etapa:",
-                error
-            );
+        this.lastSpectralRegionalSummary =  
+            null;  
 
 
-            this.lastSpectralRegionalSummary =
-                null;
+        return null;  
+    }  
+}  
+    // ======================================  
+// GERAR PERFIL ESPECTRAL  
+// ======================================  
 
+createSpectralProfile(  
+    analysis  
+) {  
 
-            return null;
-        }
-    }
-        // ======================================
-    // GERAR PERFIL ESPECTRAL
-    // ======================================
+    if (  
+        !this.spectralProfile  
+    ) {  
 
-    createSpectralProfile(
-        analysis
-    ) {
+        return null;  
+    }  
 
-        if (
-            !this.spectralProfile
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.spectralProfile.analyze !==  
+        "function"  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            typeof this.spectralProfile.analyze !==
-            "function"
-        ) {
 
-            return null;
-        }
+    try {  
 
+        return this.spectralProfile.analyze(  
+            analysis  
+        );  
 
-        try {
+    } catch (error) {  
 
-            return this.spectralProfile.analyze(
-                analysis
-            );
+        console.warn(  
+            "SpectralProfile indisponível nesta etapa:",  
+            error  
+        );  
 
-        } catch (error) {
 
-            console.warn(
-                "SpectralProfile indisponível nesta etapa:",
-                error
-            );
+        return null;  
+    }  
+}  
 
 
-            return null;
-        }
-    }
+// ======================================  
+// GERAR CONTEXTO ESPECTRAL  
+// ======================================  
+//  
+// O diagnóstico é opcional para manter  
+// compatibilidade com a criação inicial  
+// do contexto.  
+//  
+// Quando fornecido, o Bridge passa a  
+// incorporar a interpretação regional  
+// ao contexto de planejamento.  
+//  
+// ======================================  
 
+createSpectralContext(  
+    spectralProfile,  
+    spectralDiagnostic = null  
+) {  
 
-    // ======================================
-    // GERAR CONTEXTO ESPECTRAL
-    // ======================================
-    //
-    // O diagnóstico é opcional para manter
-    // compatibilidade com a criação inicial
-    // do contexto.
-    //
-    // Quando fornecido, o Bridge passa a
-    // incorporar a interpretação regional
-    // ao contexto de planejamento.
-    //
-    // ======================================
+    if (  
+        !spectralProfile  
+    ) {  
 
-    createSpectralContext(
-        spectralProfile,
-        spectralDiagnostic = null
-    ) {
+        return null;  
+    }  
 
-        if (
-            !spectralProfile
-        ) {
 
-            return null;
-        }
+    if (  
+        !this.spectralTreatmentBridge  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            !this.spectralTreatmentBridge
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.spectralTreatmentBridge  
+            .createPlanningContext !==  
+        "function"  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            typeof this.spectralTreatmentBridge
-                .createPlanningContext !==
-            "function"
-        ) {
 
-            return null;
-        }
+    try {  
 
+        return this.spectralTreatmentBridge  
+            .createPlanningContext(  
+                spectralProfile,  
+                spectralDiagnostic  
+            );  
 
-        try {
+    } catch (error) {  
 
-            return this.spectralTreatmentBridge
-                .createPlanningContext(
-                    spectralProfile,
-                    spectralDiagnostic
-                );
+        console.warn(  
+            "SpectralTreatmentBridge indisponível nesta etapa:",  
+            error  
+        );  
 
-        } catch (error) {
 
-            console.warn(
-                "SpectralTreatmentBridge indisponível nesta etapa:",
-                error
-            );
+        return null;  
+    }  
+}  
 
 
-            return null;
-        }
-    }
+// ======================================  
+// GERAR DIAGNÓSTICO ESPECTRAL  
+// ======================================  
+//  
+// SOMENTE OBSERVAÇÃO.  
+//  
+// ======================================  
 
+createSpectralDiagnostic(  
+    spectralContext  
+) {  
 
-    // ======================================
-    // GERAR DIAGNÓSTICO ESPECTRAL
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // ======================================
+    if (  
+        !this.spectralDiagnosticObserver  
+    ) {  
 
-    createSpectralDiagnostic(
-        spectralContext
-    ) {
+        return null;  
+    }  
 
-        if (
-            !this.spectralDiagnosticObserver
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.spectralDiagnosticObserver  
+            .observe !==  
+        "function"  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            typeof this.spectralDiagnosticObserver
-                .observe !==
-            "function"
-        ) {
 
-            return null;
-        }
+    try {  
 
+        return this.spectralDiagnosticObserver  
+            .observe(  
+                spectralContext,  
+                this.lastSpectralRegionalMeasurement  
+            );  
 
-        try {
+    } catch (error) {  
 
-            return this.spectralDiagnosticObserver
-                .observe(
-                    spectralContext,
-                    this.lastSpectralRegionalMeasurement
-                );
+        console.warn(  
+            "SpectralDiagnosticObserver indisponível nesta etapa:",  
+            error  
+        );  
 
-        } catch (error) {
 
-            console.warn(
-                "SpectralDiagnosticObserver indisponível nesta etapa:",
-                error
-            );
+        return null;  
+    }  
+}  
+        // ======================================  
+// GERAR PLANO DE TRATAMENTO  
+// ======================================  
 
+createTreatmentPlan(  
+    analysis,  
+    spectralContext = null  
+) {  
 
-            return null;
-        }
-    }
-        // ======================================
-    // GERAR PLANO DE TRATAMENTO
-    // ======================================
+    if (  
+        !this.treatmentPlan  
+    ) {  
 
-    createTreatmentPlan(
-        analysis,
-        spectralContext = null
-    ) {
+        return null;  
+    }  
 
-        if (
-            !this.treatmentPlan
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.treatmentPlan.createPlan !==  
+        "function"  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            typeof this.treatmentPlan.createPlan !==
-            "function"
-        ) {
 
-            return null;
-        }
+    try {  
 
+        const plan =  
+            this.treatmentPlan.createPlan(  
+                analysis,  
+                spectralContext  
+            );  
 
-        try {
 
-            const plan =
-                this.treatmentPlan.createPlan(
-                    analysis,
-                    spectralContext
-                );
+        /*  
+         * O plano agora recebe o contexto  
+         * DURANTE sua construção.  
+         *  
+         * Isso permite que o  
+         * VocalTreatmentPlan execute  
+         * sua própria reconciliação regional  
+         * com as evidências fornecidas pelo  
+         * SpectralTreatmentBridge.  
+         *  
+         * Nenhum parâmetro DSP é alterado.  
+         */  
 
 
-            /*
-             * O plano agora recebe o contexto
-             * DURANTE sua construção.
-             *
-             * Isso permite que o
-             * VocalTreatmentPlan execute
-             * sua própria reconciliação regional
-             * com as evidências fornecidas pelo
-             * SpectralTreatmentBridge.
-             *
-             * Nenhum parâmetro DSP é alterado.
-             */
+        /*  
+         * A medição regional continua  
+         * anexada apenas como evidência  
+         * observacional adicional.  
+         *  
+         * Ela não recebe autoridade para  
+         * controlar o processamento.  
+         */  
 
+        if (  
+            plan &&  
+            this.lastSpectralRegionalMeasurement  
+        ) {  
 
-            /*
-             * A medição regional continua
-             * anexada apenas como evidência
-             * observacional adicional.
-             *
-             * Ela não recebe autoridade para
-             * controlar o processamento.
-             */
+            plan.spectralRegionalMeasurement =  
+                this.lastSpectralRegionalMeasurement;  
+        }  
 
-            if (
-                plan &&
-                this.lastSpectralRegionalMeasurement
-            ) {
 
-                plan.spectralRegionalMeasurement =
-                    this.lastSpectralRegionalMeasurement;
-            }
+        return plan;  
 
+    } catch (error) {  
 
-            return plan;
+        console.warn(  
+            "VocalTreatmentPlan indisponível nesta etapa:",  
+            error  
+        );  
 
-        } catch (error) {
 
-            console.warn(
-                "VocalTreatmentPlan indisponível nesta etapa:",
-                error
-            );
+        return null;  
+    }  
+}  
 
 
-            return null;
-        }
-    }
+// ======================================  
+// EXECUTAR TREATMENT DECISION PIPELINE  
+// ======================================  
+//  
+// SOMENTE OBSERVAÇÃO.  
+//  
+// O resultado é armazenado para auditoria  
+// e validação.  
+//  
+// Esta função NÃO interfere no caminho  
+// de processamento de áudio.  
+//  
+// ======================================  
 
+createTreatmentDecisionPipeline(  
+    treatmentPlan  
+) {  
 
-    // ======================================
-    // EXECUTAR TREATMENT DECISION PIPELINE
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // O resultado é armazenado para auditoria
-    // e validação.
-    //
-    // Esta função NÃO interfere no caminho
-    // de processamento de áudio.
-    //
-    // ======================================
+    if (  
+        !this.treatmentDecisionPipeline  
+    ) {  
 
-    createTreatmentDecisionPipeline(
-        treatmentPlan
-    ) {
+        return null;  
+    }  
 
-        if (
-            !this.treatmentDecisionPipeline
-        ) {
 
-            return null;
-        }
+    if (  
+        !treatmentPlan  
+    ) {  
 
+        return null;  
+    }  
 
-        if (
-            !treatmentPlan
-        ) {
 
-            return null;
-        }
+    if (  
+        typeof this.treatmentDecisionPipeline.evaluate !==  
+        "function"  
+    ) {  
 
+        console.warn(  
+            "TreatmentDecisionPipeline não possui evaluate()."  
+        );  
 
-        if (
-            typeof this.treatmentDecisionPipeline.evaluate !==
-            "function"
-        ) {
 
-            console.warn(
-                "TreatmentDecisionPipeline não possui evaluate()."
-            );
+        return null;  
+    }  
 
 
-            return null;
-        }
+    try {  
 
+        const result =  
+            this.treatmentDecisionPipeline.evaluate(  
+                treatmentPlan  
+            );  
 
-        try {
 
-            const result =
-                this.treatmentDecisionPipeline.evaluate(
-                    treatmentPlan
-                );
+        return result;  
 
+    } catch (error) {  
 
-            /*
-             * HARD LOCK LOCAL.
-             *
-             * Mesmo que uma camada futura
-             * retorne propriedades inesperadas,
-             * o VocalSmoother não converte
-             * este resultado em autoridade DSP.
-             */
+        console.warn(  
+            "TreatmentDecisionPipeline indisponível nesta etapa:",  
+            error  
+        );  
 
-            if (
-                result &&
-                typeof result ===
-                "object"
-            ) {
 
-                result.processingPermission =
-                    "none";
+        return null;  
+    }  
+}  
 
 
-                result.audioProcessing =
-                    false;
+// ======================================  
+// CRIAR SNAPSHOT DSP  
+// ======================================  
+//  
+// SOMENTE OBSERVAÇÃO.  
+//  
+// Este método consolida os parâmetros  
+// efetivamente retornados pelos módulos  
+// DSP durante a última execução.  
+//  
+// Não recalcula parâmetros.  
+// Não altera parâmetros.  
+// Não cria AudioNode.  
+// Não recebe AudioBuffer.  
+// Não executa processamento.  
+//  
+// O snapshot usa cópias rasas dos objetos  
+// para evitar expor diretamente os objetos  
+// internos de configuração.  
+//  
+// ======================================  
 
+createDspSnapshot() {  
 
-                result.reconstructionPermission =
-                    "none";
-            }
+    const copySettings =  
+        settings => {  
 
+            if (  
+                !settings ||  
+                typeof settings !==  
+                "object"  
+            ) {  
 
-            return result;
+                return null;  
+            }  
 
-        } catch (error) {
 
-            console.warn(
-                "TreatmentDecisionPipeline indisponível nesta etapa:",
-                error
-            );
+            return {  
+                ...settings  
+            };  
+        };  
 
 
-            return null;
-        }
-    }
+    return {  
 
+        version:  
+            "1.0",  
 
-    // ======================================
-    // CRIAR SNAPSHOT DSP
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Este método consolida os parâmetros
-    // efetivamente retornados pelos módulos
-    // DSP durante a última execução.
-    //
-    // Não recalcula parâmetros.
-    // Não altera parâmetros.
-    // Não cria AudioNode.
-    // Não recebe AudioBuffer.
-    // Não executa processamento.
-    //
-    // O snapshot usa cópias rasas dos objetos
-    // para evitar expor diretamente os objetos
-    // internos de configuração.
-    //
-    // ======================================
 
-    createDspSnapshot() {
+        body:  
+            copySettings(  
+                this.lastBodySettings  
+            ),  
 
-        const copySettings =
-            settings => {
 
-                if (
-                    !settings ||
-                    typeof settings !==
-                    "object"
-                ) {
+        tone:  
+            copySettings(  
+                this.lastToneSettings  
+            ),  
 
-                    return null;
-                }
 
+        dynamics:  
+            copySettings(  
+                this.lastSettings  
+            ),  
 
-                return {
-                    ...settings
-                };
-            };
 
+        sibilance:  
+            copySettings(  
+                this.lastSibilanceSettings  
+            ),  
 
-        return {
 
-            version:
-                "1.0",
+        processingPermission:  
+            "none",  
 
 
-            body:
-                copySettings(
-                    this.lastBodySettings
-                ),
+        audioProcessing:  
+            false,  
 
 
-            tone:
-                copySettings(
-                    this.lastToneSettings
-                ),
+        reconstructionPermission:  
+            "none",  
 
 
-            dynamics:
-                copySettings(
-                    this.lastSettings
-                ),
+        executorPermission:  
+            "none"  
+    };  
+}  
+    // ======================================  
+// AUDITAR TREATMENT PLAN ↔ DSP  
+// ======================================  
+//  
+// SOMENTE OBSERVAÇÃO.  
+//  
+// Compara o plano de tratamento com  
+// os parâmetros DSP efetivamente  
+// armazenados durante esta execução.  
+//  
+// Não altera áudio.  
+// Não altera parâmetros.  
+// Não concede autoridade DSP.  
+//  
+// ======================================
 
+createTreatmentContractAudit(
+treatmentPlan = this.lastTreatmentPlan,
+dspSnapshot = null
+) {
 
-            sibilance:
-                copySettings(
-                    this.lastSibilanceSettings
-                ),
+if (  
+        !treatmentPlan  
+    ) {  
 
+        return null;  
+    }  
 
-            processingPermission:
-                "none",
 
+    if (  
+        !dspSnapshot  
+    ) {  
 
-            audioProcessing:
-                false,
+        dspSnapshot =  
+            this.createDspSnapshot();  
+    }  
 
 
-            reconstructionPermission:
-                "none",
+    if (  
+        !this.treatmentContractAudit  
+    ) {  
 
+        if (  
+            typeof window !==  
+            "undefined" &&  
+            typeof window.TreatmentContractAudit ===  
+            "function"  
+        ) {  
 
-            executorPermission:
-                "none"
-        };
-    }
-        // ======================================
-    // AUDITAR TREATMENT PLAN ↔ DSP
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Compara o plano de tratamento com
-    // os parâmetros DSP efetivamente
-    // armazenados durante esta execução.
-    //
-    // Não altera áudio.
-    // Não altera parâmetros.
-    // Não concede autoridade DSP.
-    //
-    // ======================================
+            try {  
 
-    createTreatmentContractAudit(
-        treatmentPlan = this.lastTreatmentPlan,
-        dspSnapshot = null
-    ) {
+                this.treatmentContractAudit =  
+                    new TreatmentContractAudit();  
 
-        if (
-            !treatmentPlan
-        ) {
+            } catch (  
+                error  
+            ) {  
 
-            return null;
-        }
+                console.warn(  
+                    "TreatmentContractAudit indisponível nesta etapa:",  
+                    error  
+                );  
 
 
-        if (
-            !dspSnapshot
-        ) {
+                return null;  
+            }  
 
-            dspSnapshot =
-                this.createDspSnapshot();
-        }
+        } else {  
 
+            return null;  
+        }  
+    }  
 
-        if (
-            !this.treatmentContractAudit
-        ) {
 
-            if (
-                typeof window !==
-                "undefined" &&
-                typeof window.TreatmentContractAudit ===
-                "function"
-            ) {
+    if (  
+        typeof this.treatmentContractAudit  
+            .auditTreatmentDspReconciliation !==  
+        "function"  
+    ) {  
 
-                try {
+        console.warn(  
+            "TreatmentContractAudit não possui auditTreatmentDspReconciliation()."  
+        );  
 
-                    this.treatmentContractAudit =
-                        new TreatmentContractAudit();
 
-                } catch (
-                    error
-                ) {
+        return null;  
+    }  
 
-                    console.warn(
-                        "TreatmentContractAudit indisponível nesta etapa:",
-                        error
-                    );
 
+    try {  
 
-                    return null;
-                }
+        const reconciliation =  
+            this.treatmentContractAudit  
+                .auditTreatmentDspReconciliation(  
+                    treatmentPlan,  
+                    dspSnapshot  
+                );  
 
-            } else {
 
-                return null;
-            }
-        }
+        return {  
 
+            version:  
+                this.treatmentContractAudit.version ||  
+                "0.3",  
 
-        if (
-            typeof this.treatmentContractAudit
-                .auditTreatmentDspReconciliation !==
-            "function"
-        ) {
+            reconciliation,  
 
-            console.warn(
-                "TreatmentContractAudit não possui auditTreatmentDspReconciliation()."
-            );
+            processingPermission:  
+                "none",  
 
+            audioProcessing:  
+                false,  
 
-            return null;
-        }
+            reconstructionPermission:  
+                "none",  
 
+            executorPermission:  
+                "none"  
+        };  
 
-        try {
+    } catch (  
+        error  
+    ) {  
 
-            const reconciliation =
-                this.treatmentContractAudit
-                    .auditTreatmentDspReconciliation(
-                        treatmentPlan,
-                        dspSnapshot
-                    );
+        console.warn(  
+            "TreatmentContractAudit indisponível nesta execução:",  
+            error  
+        );  
 
 
-            return {
+        return null;  
+    }  
+}  
 
-                version:
-                    this.treatmentContractAudit.version ||
-                    "0.3",
 
-                reconciliation,
+// ======================================  
+// PROCESSAR  
+// ======================================  
 
-                processingPermission:
-                    "none",
+async process(  
+    audioBuffer  
+) {  
 
-                audioProcessing:
-                    false,
+    if (  
+        !audioBuffer  
+    ) {  
 
-                reconstructionPermission:
-                    "none",
+        throw new Error(  
+            "AudioBuffer inválido."  
+        );  
+    }  
 
-                executorPermission:
-                    "none"
-            };
 
-        } catch (
-            error
-        ) {
+    // ==================================  
+    // 1. ANALISAR  
+    // ==================================  
 
-            console.warn(
-                "TreatmentContractAudit indisponível nesta execução:",
-                error
-            );
+    const analysis =  
+        this.analyzer.analyzeBuffer(  
+            audioBuffer  
+        );  
 
 
-            return null;
-        }
-    }
+    this.lastAnalysis =  
+        analysis;  
 
 
-    // ======================================
-    // PROCESSAR
-    // ======================================
+    // ==================================  
+    // 2. MEDIÇÃO ESPECTRAL REGIONAL  
+    // ==================================  
+    //  
+    // SOMENTE OBSERVAÇÃO.  
+    //  
+    // ==================================  
 
-    async process(
-        audioBuffer
-    ) {
+    this.lastSpectralRegionalMeasurement =  
+        this.createSpectralRegionalMeasurement(  
+            analysis  
+        );  
 
-        if (
-            !audioBuffer
-        ) {
 
-            throw new Error(
-                "AudioBuffer inválido."
-            );
-        }
+    // ==================================  
+    // 3. PERFIL ESPECTRAL  
+    // ==================================  
 
+    this.lastSpectralProfile =  
+        this.createSpectralProfile(  
+            analysis  
+        );  
 
-        // ==================================
-        // 1. ANALISAR
-        // ==================================
 
-        const analysis =
-            this.analyzer.analyzeBuffer(
-                audioBuffer
-            );
+    // ==================================  
+    // 4. CONTEXTO ESPECTRAL INICIAL  
+    // ==================================  
+    //  
+    // Nesta primeira passagem o Bridge  
+    // recebe somente o perfil.  
+    //  
+    // O objetivo é produzir a base  
+    // espectral necessária para que o  
+    // Observer possa interpretar o áudio.  
+    //  
+    // ==================================  
 
+    const initialSpectralContext =  
+        this.createSpectralContext(  
+            this.lastSpectralProfile  
+        );  
 
-        this.lastAnalysis =
-            analysis;
 
+    // ==================================  
+    // 5. DIAGNÓSTICO ESPECTRAL  
+    // ==================================  
+    //  
+    // O Observer recebe:  
+    //  
+    // - contexto espectral;  
+    // - medição regional.  
+    //  
+    // Ele continua sendo exclusivamente  
+    // observacional.  
+    //  
+    // ==================================  
 
-        // ==================================
-        // 2. MEDIÇÃO ESPECTRAL REGIONAL
-        // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // ==================================
+    this.lastSpectralDiagnostic =  
+        this.createSpectralDiagnostic(  
+            initialSpectralContext  
+        );  
 
-        this.lastSpectralRegionalMeasurement =
-            this.createSpectralRegionalMeasurement(
-                analysis
-            );
 
+    // ==================================  
+    // 6. CONTEXTO ESPECTRAL ENRIQUECIDO  
+    // ==================================  
+    //  
+    // Agora o diagnóstico volta para o  
+    // Bridge.  
+    //  
+    // Isso fecha o fluxo:  
+    //  
+    // Profile  
+    //    ↓  
+    // Bridge inicial  
+    //    ↓  
+    // Observer  
+    //    ↓  
+    // Bridge + diagnóstico  
+    //    ↓  
+    // Contexto de planejamento  
+    //  
+    // Nenhum DSP é executado aqui.  
+    //  
+    // ==================================  
 
-        // ==================================
-        // 3. PERFIL ESPECTRAL
-        // ==================================
+    this.lastSpectralContext =  
+        this.createSpectralContext(  
+            this.lastSpectralProfile,  
+            this.lastSpectralDiagnostic  
+        );  
 
-        this.lastSpectralProfile =
-            this.createSpectralProfile(
-                analysis
-            );
 
+    // ==================================  
+    // 7. GERAR PLANO ADAPTATIVO  
+    // ==================================  
+    //  
+    // O contexto espectral enriquecido  
+    // agora participa da construção do  
+    // Treatment Plan.  
+    //  
+    // O próprio Treatment Plan decide  
+    // quando a evidência regional pode  
+    // confirmar ou reduzir uma decisão.  
+    //  
+    // A autoridade DSP continua bloqueada.  
+    //  
+    // ==================================  
 
-        // ==================================
-        // 4. CONTEXTO ESPECTRAL INICIAL
-        // ==================================
-        //
-        // Nesta primeira passagem o Bridge
-        // recebe somente o perfil.
-        //
-        // O objetivo é produzir a base
-        // espectral necessária para que o
-        // Observer possa interpretar o áudio.
-        //
-        // ==================================
+    this.lastTreatmentPlan =  
+        this.createTreatmentPlan(  
+            analysis,  
+            this.lastSpectralContext  
+        );  
 
-        const initialSpectralContext =
-            this.createSpectralContext(
-                this.lastSpectralProfile
-            );
 
+    // ==================================  
+    // 8. VALIDAR DECISÃO  
+    // ==================================  
+    //  
+    // O Treatment Decision Pipeline  
+    // passa a receber o plano completo.  
+    //  
+    // IMPORTANTE:  
+    //  
+    // O resultado NÃO altera o caminho DSP.  
+    //  
+    // ==================================  
 
-        // ==================================
-        // 5. DIAGNÓSTICO ESPECTRAL
-        // ==================================
-        //
-        // O Observer recebe:
-        //
-        // - contexto espectral;
-        // - medição regional.
-        //
-        // Ele continua sendo exclusivamente
-        // observacional.
-        //
-        // ==================================
+    this.lastTreatmentDecisionPipeline =  
+        this.createTreatmentDecisionPipeline(  
+            this.lastTreatmentPlan  
+        );  
 
-        this.lastSpectralDiagnostic =
-            this.createSpectralDiagnostic(
-                initialSpectralContext
-            );
 
+    // ==================================  
+    // 9. CONTEXTO OFFLINE  
+    // ==================================  
 
-        // ==================================
-        // 6. CONTEXTO ESPECTRAL ENRIQUECIDO
-        // ==================================
-        //
-        // Agora o diagnóstico volta para o
-        // Bridge.
-        //
-        // Isso fecha o fluxo:
-        //
-        // Profile
-        //    ↓
-        // Bridge inicial
-        //    ↓
-        // Observer
-        //    ↓
-        // Bridge + diagnóstico
-        //    ↓
-        // Contexto de planejamento
-        //
-        // Nenhum DSP é executado aqui.
-        //
-        // ==================================
+    const context =  
+        new OfflineAudioContext(  
+            audioBuffer.numberOfChannels,  
+            audioBuffer.length,  
+            audioBuffer.sampleRate  
+        );  
 
-        this.lastSpectralContext =
-            this.createSpectralContext(
-                this.lastSpectralProfile,
-                this.lastSpectralDiagnostic
-            );
 
+    // ==================================  
+    // 10. SOURCE  
+    // ==================================  
 
-        // ==================================
-        // 7. GERAR PLANO ADAPTATIVO
-        // ==================================
-        //
-        // O contexto espectral enriquecido
-        // agora participa da construção do
-        // Treatment Plan.
-        //
-        // O próprio Treatment Plan decide
-        // quando a evidência regional pode
-        // confirmar ou reduzir uma decisão.
-        //
-        // A autoridade DSP continua bloqueada.
-        //
-        // ==================================
+    const source =  
+        context.createBufferSource();  
 
-        this.lastTreatmentPlan =
-            this.createTreatmentPlan(
-                analysis,
-                this.lastSpectralContext
-            );
 
+    source.buffer =  
+        audioBuffer;  
 
-        // ==================================
-        // 8. VALIDAR DECISÃO
-        // ==================================
-        //
-        // O Treatment Decision Pipeline
-        // passa a receber o plano completo.
-        //
-        // IMPORTANTE:
-        //
-        // O resultado NÃO altera o caminho DSP.
-        //
-        // ==================================
 
-        this.lastTreatmentDecisionPipeline =
-            this.createTreatmentDecisionPipeline(
-                this.lastTreatmentPlan
-            );
+    // ==================================  
+    // 11. VOCAL BODY  
+    // ==================================  
 
+    const bodyResult =  
+this.body.createProcessor(  
+    context,  
+    analysis,  
+    this.lastTreatmentDecisionPipeline  
+);  
 
-        // ==================================
-        // 9. CONTEXTO OFFLINE
-        // ==================================
 
-        const context =
-            new OfflineAudioContext(
-                audioBuffer.numberOfChannels,
-                audioBuffer.length,
-                audioBuffer.sampleRate
-            );
+    this.lastBodySettings =  
+        bodyResult.settings ||  
+        null;  
 
 
-        // ==================================
-        // 10. SOURCE
-        // ==================================
+    const bodyInput =  
+        bodyResult.input ||  
+        this.resolveNode(  
+            bodyResult  
+        );  
 
-        const source =
-            context.createBufferSource();
 
+    const bodyOutput =  
+        bodyResult.output ||  
+        this.resolveNode(  
+            bodyResult  
+        );  
 
-        source.buffer =
-            audioBuffer;
 
+    if (  
+        !bodyInput ||  
+        !bodyOutput  
+    ) {  
 
-        // ==================================
-        // 11. VOCAL BODY
-        // ==================================
+        throw new Error(  
+            "VocalBody não retornou uma cadeia de áudio válida."  
+        );  
+    }  
+            // ==================================  
+    // 12. VOCAL TONE  
+    // ==================================  
 
-        const bodyResult =
-    this.body.createProcessor(
-        context,
-        analysis,
-        this.lastTreatmentDecisionPipeline
-    );
+    let toneInput =  
+        bodyOutput;  
 
 
-        this.lastBodySettings =
-            bodyResult.settings ||
-            null;
+    let toneOutput =  
+        bodyOutput;  
 
 
-        const bodyInput =
-            bodyResult.input ||
-            this.resolveNode(
-                bodyResult
-            );
+    let toneActive =  
+        false;  
 
 
-        const bodyOutput =
-            bodyResult.output ||
-            this.resolveNode(
-                bodyResult
-            );
+    if (  
+        this.tone &&  
+        typeof this.tone.createProcessor ===  
+        "function"  
+    ) {  
 
+        const toneResult =  
+            this.tone.createProcessor(  
+                context,  
+                analysis  
+            );  
 
-        if (
-            !bodyInput ||
-            !bodyOutput
-        ) {
 
-            throw new Error(
-                "VocalBody não retornou uma cadeia de áudio válida."
-            );
-        }
-                // ==================================
-        // 12. VOCAL TONE
-        // ==================================
+        this.lastToneSettings =  
+            toneResult.settings ||  
+            null;  
 
-        let toneInput =
-            bodyOutput;
 
+        if (  
+            toneResult.input &&  
+            toneResult.output &&  
+            toneResult.input !==  
+            bodyOutput &&  
+            toneResult.output !==  
+            bodyOutput  
+        ) {  
 
-        let toneOutput =
-            bodyOutput;
+            toneInput =  
+                toneResult.input;  
 
 
-        let toneActive =
-            false;
+            toneOutput =  
+                toneResult.output;  
 
 
-        if (
-            this.tone &&
-            typeof this.tone.createProcessor ===
-            "function"
-        ) {
+            toneActive =  
+                true;  
 
-            const toneResult =
-                this.tone.createProcessor(
-                    context,
-                    analysis
-                );
+        } else {  
 
+            const resolvedTone =  
+                this.resolveNode(  
+                    toneResult  
+                );  
 
-            this.lastToneSettings =
-                toneResult.settings ||
-                null;
 
+            if (  
+                resolvedTone &&  
+                resolvedTone !==  
+                bodyOutput  
+            ) {  
 
-            if (
-                toneResult.input &&
-                toneResult.output &&
-                toneResult.input !==
-                bodyOutput &&
-                toneResult.output !==
-                bodyOutput
-            ) {
+                toneInput =  
+                    resolvedTone;  
 
-                toneInput =
-                    toneResult.input;
 
+                toneOutput =  
+                    resolvedTone;  
 
-                toneOutput =
-                    toneResult.output;
 
+                toneActive =  
+                    true;  
+            }  
+        }  
+    }  
 
-                toneActive =
-                    true;
 
-            } else {
+    // ==================================  
+    // 13. DINÂMICA  
+    // ==================================  
 
-                const resolvedTone =
-                    this.resolveNode(
-                        toneResult
-                    );
+    const dynamicsResult =  
+        this.dynamics.createProcessor(  
+            context,  
+            analysis  
+        );  
 
 
-                if (
-                    resolvedTone &&
-                    resolvedTone !==
-                    bodyOutput
-                ) {
+    const compressor =  
+        this.resolveNode(  
+            dynamicsResult  
+        );  
 
-                    toneInput =
-                        resolvedTone;
 
+    if (  
+        !compressor  
+    ) {  
 
-                    toneOutput =
-                        resolvedTone;
+        throw new Error(  
+            "VocalDynamics não retornou um processador válido."  
+        );  
+    }  
 
 
-                    toneActive =
-                        true;
-                }
-            }
-        }
+    this.lastSettings =  
+        dynamicsResult.settings ||  
+        null;  
 
 
-        // ==================================
-        // 13. DINÂMICA
-        // ==================================
+    // ==================================  
+    // 14. SIBILÂNCIA  
+    // ==================================  
 
-        const dynamicsResult =
-            this.dynamics.createProcessor(
-                context,
-                analysis
-            );
+    let finalOutput =  
+        compressor;  
 
 
-        const compressor =
-            this.resolveNode(
-                dynamicsResult
-            );
+    let sibilanceInput =  
+        null;  
 
 
-        if (
-            !compressor
-        ) {
+    if (  
+        this.sibilance &&  
+        typeof this.sibilance.createProcessor ===  
+        "function"  
+    ) {  
 
-            throw new Error(
-                "VocalDynamics não retornou um processador válido."
-            );
-        }
+        const sibilanceResult =  
+            this.sibilance.createProcessor(  
+                context,  
+                analysis  
+            );  
 
 
-        this.lastSettings =
-            dynamicsResult.settings ||
-            null;
+        this.lastSibilanceSettings =  
+            sibilanceResult.settings ||  
+            null;  
 
 
-        // ==================================
-        // 14. SIBILÂNCIA
-        // ==================================
+        /*  
+         * A V0.3 do VocalSibilance  
+         * possui entrada e saída próprias.  
+         *  
+         * Isso permite manter o vocal  
+         * completo como caminho principal  
+         * e usar a banda sibilante apenas  
+         * como redução paralela.  
+         */  
 
-        let finalOutput =
-            compressor;
+        sibilanceInput =  
+            sibilanceResult.input ||  
+            null;  
 
 
-        let sibilanceInput =
-            null;
+        const resolvedSibilanceOutput =  
+            sibilanceResult.output ||  
+            this.resolveNode(  
+                sibilanceResult  
+            );  
 
 
-        if (
-            this.sibilance &&
-            typeof this.sibilance.createProcessor ===
-            "function"
-        ) {
+        if (  
+            sibilanceInput &&  
+            resolvedSibilanceOutput  
+        ) {  
 
-            const sibilanceResult =
-                this.sibilance.createProcessor(
-                    context,
-                    analysis
-                );
+            compressor.connect(  
+                sibilanceInput  
+            );  
 
 
-            this.lastSibilanceSettings =
-                sibilanceResult.settings ||
-                null;
-
-
-            /*
-             * A V0.3 do VocalSibilance
-             * possui entrada e saída próprias.
-             *
-             * Isso permite manter o vocal
-             * completo como caminho principal
-             * e usar a banda sibilante apenas
-             * como redução paralela.
-             */
-
-            sibilanceInput =
-                sibilanceResult.input ||
-                null;
-
-
-            const resolvedSibilanceOutput =
-                sibilanceResult.output ||
-                this.resolveNode(
-                    sibilanceResult
-                );
-
-
-            if (
-                sibilanceInput &&
-                resolvedSibilanceOutput
-            ) {
-
-                compressor.connect(
-                    sibilanceInput
-                );
-
-
-                finalOutput =
-                    resolvedSibilanceOutput;
-            }
-        }
-                // ==================================
-        // 15. AUDITORIA OBSERVACIONAL
-        // ==================================
-        //
-        // Neste ponto:
-        //
-        // - o Treatment Plan já existe;
-        // - a decisão já foi avaliada;
-        // - Body já calculou seus parâmetros;
-        // - Tone já calculou seus parâmetros;
-        // - Dynamics já calculou seus parâmetros;
-        // - Sibilance já calculou seus parâmetros.
-        //
-        // Portanto o Auditor pode comparar
-        // o plano com o snapshot desta mesma
-        // execução.
-        //
-        // IMPORTANTE:
-        //
-        // A auditoria não modifica nenhum
-        // parâmetro e não recebe autoridade
-        // sobre o áudio.
-        //
-        // ==================================
-        
-        this.lastTreatmentContractAudit =
-            this.createTreatmentContractAudit(
-                this.lastTreatmentPlan,
-                this.createDspSnapshot()
-            );
-        
-        
-        // ==================================
-        // 16. CONEXÃO BODY → TONE / DYNAMICS
-        // ==================================
-        //
-        // Se houver Tone válido, o sinal passa
-        // por ele antes da dinâmica.
-        //
-        // Se não houver Tone válido, o Body
-        // segue diretamente para a dinâmica.
-        //
-        // Isso evita conectar um AudioNode
-        // a ele mesmo.
-        //
-        // ==================================
-        
-        if (
-            toneActive
-        ) {
-            
-            bodyOutput.connect(
-                toneInput
-            );
-            
-            
-            toneOutput.connect(
-                compressor
-                
-            );
-            
-        } else {
-            
-            bodyOutput.connect(
-                compressor
-            );
-        }
-        
-        
-        // ==================================
-        // 18. CONEXÃO FINAL
-        // ==================================
-        
-        if (
-            !sibilanceInput
-        ) {
-            
-            compressor.connect(
-                context.destination
-            );
-            
-        } else {
-            
-            finalOutput.connect(
-                context.destination
-            );
-        }
-        
-        
-        // ==================================
-        // 19. SOURCE → BODY
-        // ==================================
-        
-        source.connect(
-            bodyInput
-        );
-        
-        
-        // ==================================
-        // 20. INICIAR
-        // ==================================
-        
-        source.start(
-            0
-        );
-        
-        
-        // ==================================
-        // 21. RENDER
-        // ==================================
-        
-        const result =
-            await context.startRendering();
-        
-        
-        return result;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA ANÁLISE
-        // ======================================
-        
-        getLastAnalysis() {
-            
-            return this.lastAnalysis;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
-        // ======================================
-        
-        getLastSpectralRegionalMeasurement() {
-            
-            return this.lastSpectralRegionalMeasurement;
-        }
-        
-        
-        // ======================================
-        // RESUMO DA MEDIÇÃO REGIONAL
-        // ======================================
-        
-        getLastSpectralRegionalSummary() {
-            
-            return this.lastSpectralRegionalSummary;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO PERFIL ESPECTRAL
-        // ======================================
-        
-        getLastSpectralProfile() {
-            
-            return this.lastSpectralProfile;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO CONTEXTO ESPECTRAL
-        // ======================================
-        
-        getLastSpectralContext() {
-            
-            return this.lastSpectralContext;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO DIAGNÓSTICO ESPECTRAL
-        // ======================================
-        
-        getLastSpectralDiagnostic() {
-            
-            return this.lastSpectralDiagnostic;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO PLANO DE TRATAMENTO
-        // ======================================
-        
-        getLastTreatmentPlan() {
-            
-            return this.lastTreatmentPlan;
-        }
-                // ======================================
-        // ÚLTIMA DECISÃO DO PIPELINE
-        // ======================================
-        
-        getLastTreatmentDecisionPipeline() {
-            
-            return this.lastTreatmentDecisionPipeline;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA AUDITORIA DO CONTRATO
-        // ======================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // Retorna a comparação entre o plano
-        // e o snapshot DSP da última execução.
-        //
-        // ======================================
-        
-        getLastTreatmentContractAudit() {
-            
-            return this.lastTreatmentContractAudit;
-        }
-        
-        
-        // ======================================
-        // CONFIGURAÇÃO DINÂMICA
-        // ======================================
-        
-        getLastSettings() {
-            
-            return this.lastSettings;
-        }
-        
-        
-        // ======================================
-        // CONFIGURAÇÃO DO BODY
-        // ======================================
-        
-        getLastBodySettings() {
-            
-            return this.lastBodySettings;
-        }
-        
-        
-        // ======================================
-        // CONFIGURAÇÃO DO TONE
-        // ======================================
-        
-        getLastToneSettings() {
-            
-            return this.lastToneSettings;
-        }
-        
-        
-        // ======================================
-        // CONFIGURAÇÃO DA SIBILÂNCIA
-        // ======================================
-        
-        getLastSibilanceSettings() {
-            
-            return this.lastSibilanceSettings;
-        }
-        
-        
-        // ======================================
-        // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
-        // ======================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // Retorna uma cópia consolidada dos
-        // parâmetros efetivamente armazenados
-        // pelos módulos DSP.
-        //
-        // ======================================
-        
-        getLastDspSnapshot() {
-            
-            return this.createDspSnapshot();
-        }
-        }
-        
-        
-        // ==========================================
-        // DISPONIBILIZAR GLOBALMENTE
-        // ==========================================
-        
-        window.VocalSmoother =
-            VocalSmoother;
+            finalOutput =  
+                resolvedSibilanceOutput;  
+        }  
+    }  
+                    // ==================================  
+            // 15. AUDITORIA OBSERVACIONAL  
+            // ==================================  
+            //  
+            // Neste ponto:  
+            //  
+            // - o Treatment Plan já existe;  
+            // - a decisão já foi avaliada;  
+            // - Body já calculou seus parâmetros;  
+            // - Tone já calculou seus parâmetros;  
+            // - Dynamics já calculou seus parâmetros;  
+            // - Sibilance já calculou seus parâmetros.  
+            //  
+            // Portanto o Auditor pode comparar  
+            // o plano com o snapshot desta mesma  
+            // execução.  
+            //  
+            // IMPORTANTE:  
+            //  
+            // A auditoria não modifica nenhum  
+            // parâmetro e não recebe autoridade  
+            // sobre o áudio.  
+            //  
+            // ==================================  
+              
+            this.lastTreatmentContractAudit =  
+                this.createTreatmentContractAudit(  
+                    this.lastTreatmentPlan,  
+                    this.createDspSnapshot()  
+                );  
+              
+              
+            // ==================================  
+            // 16. CONEXÃO BODY → TONE / DYNAMICS  
+            // ==================================  
+            //  
+            // Se houver Tone válido, o sinal passa  
+            // por ele antes da dinâmica.  
+            //  
+            // Se não houver Tone válido, o Body  
+            // segue diretamente para a dinâmica.  
+            //  
+            // Isso evita conectar um AudioNode  
+            // a ele mesmo.  
+            //  
+            // ==================================  
+              
+            if (  
+                toneActive  
+            ) {  
+                  
+                bodyOutput.connect(  
+                    toneInput  
+                );  
+                  
+                  
+                toneOutput.connect(  
+                    compressor  
+                      
+                );  
+                  
+            } else {  
+                  
+                bodyOutput.connect(  
+                    compressor  
+                );  
+            }  
+              
+              
+            // ==================================  
+            // 18. CONEXÃO FINAL  
+            // ==================================  
+              
+            if (  
+                !sibilanceInput  
+            ) {  
+                  
+                compressor.connect(  
+                    context.destination  
+                );  
+                  
+            } else {  
+                  
+                finalOutput.connect(  
+                    context.destination  
+                );  
+            }  
+              
+              
+            // ==================================  
+            // 19. SOURCE → BODY  
+            // ==================================  
+              
+            source.connect(  
+                bodyInput  
+            );  
+              
+              
+            // ==================================  
+            // 20. INICIAR  
+            // ==================================  
+              
+            source.start(  
+                0  
+            );  
+              
+              
+            // ==================================  
+            // 21. RENDER  
+            // ==================================  
+              
+            const result =  
+                await context.startRendering();  
+              
+              
+            return result;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMA ANÁLISE  
+            // ======================================  
+              
+            getLastAnalysis() {  
+                  
+                return this.lastAnalysis;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL  
+            // ======================================  
+              
+            getLastSpectralRegionalMeasurement() {  
+                  
+                return this.lastSpectralRegionalMeasurement;  
+            }  
+              
+              
+            // ======================================  
+            // RESUMO DA MEDIÇÃO REGIONAL  
+            // ======================================  
+              
+            getLastSpectralRegionalSummary() {  
+                  
+                return this.lastSpectralRegionalSummary;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMO PERFIL ESPECTRAL  
+            // ======================================  
+              
+            getLastSpectralProfile() {  
+                  
+                return this.lastSpectralProfile;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMO CONTEXTO ESPECTRAL  
+            // ======================================  
+              
+            getLastSpectralContext() {  
+                  
+                return this.lastSpectralContext;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMO DIAGNÓSTICO ESPECTRAL  
+            // ======================================  
+              
+            getLastSpectralDiagnostic() {  
+                  
+                return this.lastSpectralDiagnostic;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMO PLANO DE TRATAMENTO  
+            // ======================================  
+              
+            getLastTreatmentPlan() {  
+                  
+                return this.lastTreatmentPlan;  
+            }  
+            // ======================================  
+            // ÚLTIMA DECISÃO DO PIPELINE  
+            // ======================================  
+              
+            getLastTreatmentDecisionPipeline() {  
+                  
+                return this.lastTreatmentDecisionPipeline;  
+            }  
+              
+              
+            // ======================================  
+            // ÚLTIMA AUDITORIA DO CONTRATO  
+            // ======================================  
+            //  
+            // SOMENTE OBSERVAÇÃO.  
+            //  
+            // Retorna a comparação entre o plano  
+            // e o snapshot DSP da última execução.  
+            //  
+            // ======================================  
+              
+            getLastTreatmentContractAudit() {  
+                  
+                return this.lastTreatmentContractAudit;  
+            }  
+              
+              
+            // ======================================  
+            // CONFIGURAÇÃO DINÂMICA  
+            // ======================================  
+              
+            getLastSettings() {  
+                  
+                return this.lastSettings;  
+            }  
+              
+              
+            // ======================================  
+            // CONFIGURAÇÃO DO BODY  
+            // ======================================  
+              
+            getLastBodySettings() {  
+                  
+                return this.lastBodySettings;  
+            }  
+              
+              
+            // ======================================  
+            // CONFIGURAÇÃO DO TONE  
+            // ======================================
+
+getLastToneSettings() {
+
+return this.lastToneSettings;  
+            }  
+              
+              
+            // ======================================  
+            // CONFIGURAÇÃO DA SIBILÂNCIA  
+            // ======================================  
+              
+            getLastSibilanceSettings() {  
+                  
+                return this.lastSibilanceSettings;  
+            }  
+              
+              
+            // ======================================  
+            // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO  
+            // ======================================  
+            //  
+            // SOMENTE OBSERVAÇÃO.  
+            //  
+            // Retorna uma cópia consolidada dos  
+            // parâmetros efetivamente armazenados  
+            // pelos módulos DSP.  
+            //  
+            // ======================================  
+              
+            getLastDspSnapshot() {  
+                  
+                return this.createDspSnapshot();  
+            }  
+            }  
+              
+              
+            // ==========================================  
+            // DISPONIBILIZAR GLOBALMENTE  
+            // ==========================================  
+              
+            window.VocalSmoother =  
+                VocalSmoother;
