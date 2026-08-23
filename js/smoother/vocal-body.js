@@ -1,116 +1,151 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL BODY
-// V0.2
+// V0.3
 // ==========================================
-//
 // Controle adaptativo de grave e médio-grave.
-//
-// Responsável por:
-//
-// - excesso de grave
-// - excesso de low-mid
-// - congestão de médio-grave
-//
-// Não aplica uma curva fixa.
-//
-// Recebe a análise do VocalAnalyzer
-// e calcula a intensidade necessária.
-//
+// A integração com a decisão é opcional e conservadora.
 // ==========================================
-
 
 class VocalBody {
 
-
     constructor(options = {}) {
+        this.version = "0.3";
 
-        this.version =
-            "0.2";
+        this.maxLowCut = options.maxLowCut ?? -3.0;
+        this.maxLowMidCut = options.maxLowMidCut ?? -2.5;
+        this.maxMudCut = options.maxMudCut ?? -2.0;
 
+        // Primeira integração controlada com a inteligência.
+        // Nunca aumenta ganho e nunca libera processamento global.
+        this.decisionIntegrationEnabled =
+            options.decisionIntegrationEnabled ?? true;
 
-        // ==================================
-        // LIMITES DE SEGURANÇA
-        // ==================================
+        this.maxDecisionLowCut =
+            options.maxDecisionLowCut ?? -1.0;
 
-        this.maxLowCut =
-            options.maxLowCut ??
-            -3.0;
-
-
-        this.maxLowMidCut =
-            options.maxLowMidCut ??
-            -2.5;
-
-
-        this.maxMudCut =
-            options.maxMudCut ??
-            -2.0;
+        this.minDecisionConfidence =
+            options.minDecisionConfidence ?? "moderate";
     }
 
+    clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+    }
 
-    // ======================================
-    // CLAMP
-    // ======================================
+    confidenceRank(value) {
+        const text = String(value || "").toLowerCase();
 
-    clamp(
-        value,
-        min,
-        max
-    ) {
+        if (text === "strong" || text === "forte") return 2;
+        if (text === "moderate" || text === "moderada") return 1;
+        return 0;
+    }
 
-        return Math.min(
-            max,
-            Math.max(
-                min,
-                value
-            )
+    isLowRegion(region) {
+        if (!region) return false;
+
+        const id = String(
+            region.id ||
+            region.key ||
+            region.name ||
+            ""
+        ).toLowerCase();
+
+        return (
+            id === "body" ||
+            id === "bass" ||
+            id === "grave" ||
+            id === "low" ||
+            id === "low-body" ||
+            id === "lowbody"
         );
     }
 
+    isCorrectionTreatment(intent) {
+        const type = String(
+            intent &&
+            (
+                intent.treatmentType ||
+                intent.treatment ||
+                intent.actionType ||
+                ""
+            )
+        ).toLowerCase();
 
-    // ======================================
-    // CALCULAR CONFIGURAÇÃO
-    // ======================================
+        return (
+            type.includes("correct") ||
+            type.includes("correction") ||
+            type.includes("reduce") ||
+            type.includes("cut") ||
+            type.includes("atten") ||
+            type.includes("correção") ||
+            type.includes("redução") ||
+            type.includes("corte")
+        );
+    }
+
+    getDecisionLowCut(decision) {
+        if (
+            !this.decisionIntegrationEnabled ||
+            !decision ||
+            !Array.isArray(decision.regionalInterventionIntent)
+        ) {
+            return 0;
+        }
+
+        let requestedCut = 0;
+
+        for (const intent of decision.regionalInterventionIntent) {
+            if (!intent || intent.state !== "candidate") continue;
+            if (!this.isLowRegion(intent.region)) continue;
+            if (!this.isCorrectionTreatment(intent)) continue;
+
+            const confidence = this.confidenceRank(intent.confidence);
+
+            if (
+                confidence <
+                this.confidenceRank(this.minDecisionConfidence)
+            ) {
+                continue;
+            }
+
+            // A decisão só pode pedir redução.
+            // Nenhum boost é aceito nesta primeira integração.
+            const boundedGain = Number(intent.boundedGainDb);
+
+            if (!Number.isFinite(boundedGain)) continue;
+
+            const cut = Math.min(0, boundedGain);
+
+            requestedCut = Math.min(
+                requestedCut,
+                cut
+            );
+        }
+
+        // A decisão nunca ultrapassa o orçamento específico desta ponte.
+        return this.clamp(
+            requestedCut * 0.5,
+            this.maxDecisionLowCut,
+            0
+        );
+    }
 
     calculateSettings(
-        analysis
+        analysis,
+        treatmentDecision = null
     ) {
-
-        if (
-            !analysis
-        ) {
-
+        if (!analysis) {
             throw new Error(
                 "Análise vocal não disponível."
             );
         }
 
+        const bands = analysis.bands || {};
+        const ratios = analysis.ratios || {};
 
-        const bands =
-            analysis.bands ||
-            {};
-
-
-        const ratios =
-            analysis.ratios ||
-            {};
-
-
-        const body =
-            bands.body ||
-            0;
-
-
-        const lowMid =
-            bands.lowMid ||
-            0;
-
-
-        const mid =
-            bands.mid ||
-            0;
-
+        const body = bands.body || 0;
+        const lowMid = bands.lowMid || 0;
+        const mid = bands.mid || 0;
 
         const total =
             body +
@@ -118,288 +153,150 @@ class VocalBody {
             mid +
             0.000001;
 
-
-        // ==================================
-        // PROPORÇÕES LOCAIS
-        // ==================================
-
-        const bodyRatio =
-            body /
-            total;
-
-
-        const lowMidRatio =
-            lowMid /
-            total;
-
-
-        const midRatio =
-            mid /
-            total;
-
-
-        // ==================================
-        // REFERÊNCIA GLOBAL
-        // ==================================
+        const bodyRatio = body / total;
+        const lowMidRatio = lowMid / total;
+        const midRatio = mid / total;
 
         const globalBodyRatio =
-            ratios.body ??
-            0;
-
-
-        // ==================================
-        // EXCESSO DE GRAVE
-        // ==================================
-        //
-        // Utilizamos tanto a relação global
-        // quanto a relação local.
-        //
-        // Isso evita que um vocal com muito
-        // agudo pareça automaticamente ter
-        // pouco corpo.
-        // ==================================
+            ratios.body ?? 0;
 
         const globalLowExcess =
             this.clamp(
-                (
-                    globalBodyRatio -
-                    0.18
-                ) /
-                0.18,
+                (globalBodyRatio - 0.18) / 0.18,
                 0,
                 1
             );
-
 
         const localBodyExcess =
             this.clamp(
-                (
-                    bodyRatio -
-                    0.38
-                ) /
-                0.22,
+                (bodyRatio - 0.38) / 0.22,
                 0,
                 1
             );
-
 
         const lowExcess =
             this.clamp(
-                (
-                    globalLowExcess *
-                    0.55
-                ) +
-                (
-                    localBodyExcess *
-                    0.45
-                ),
+                (globalLowExcess * 0.55) +
+                (localBodyExcess * 0.45),
                 0,
                 1
             );
-
-
-        // ==================================
-        // EXCESSO DE LOW-MID
-        // ==================================
 
         const lowMidExcess =
             this.clamp(
-                (
-                    lowMidRatio -
-                    0.30
-                ) /
-                0.22,
+                (lowMidRatio - 0.30) / 0.22,
                 0,
                 1
             );
 
-
-        // ==================================
-        // CONGESTÃO
-        // ==================================
-        //
-        // Aqui observamos a relação entre
-        // low-mid e médio.
-        //
-        // Se os dois dominarem juntos,
-        // existe maior possibilidade de
-        // congestionamento.
-        // ==================================
-
         const lowMidMidBalance =
-            (
-                lowMidRatio *
-                0.62
-            ) +
-            (
-                midRatio *
-                0.38
-            );
-
+            (lowMidRatio * 0.62) +
+            (midRatio * 0.38);
 
         const congestion =
             this.clamp(
-                (
-                    lowMidMidBalance -
-                    0.37
-                ) /
-                0.28,
+                (lowMidMidBalance - 0.37) / 0.28,
                 0,
                 1
             );
-
-
-        // ==================================
-        // PROTEÇÃO CONTRA CORTE DESNECESSÁRIO
-        // ==================================
-        //
-        // Se a energia de grave e low-mid
-        // não estiver claramente acima da
-        // região média, reduzimos a confiança
-        // da intervenção.
-        // ==================================
 
         const lowMidDominance =
             this.clamp(
                 (
-                    (
-                        body +
-                        lowMid
-                    ) /
+                    (body + lowMid) /
                     (
                         mid +
                         body +
                         lowMid +
                         0.000001
                     )
-                ) -
-                0.48,
+                ) - 0.48,
                 0,
                 0.40
-            ) /
-            0.40;
-
+            ) / 0.40;
 
         const correctionConfidence =
             this.clamp(
-                (
-                    lowMidDominance *
-                    0.60
-                ) +
-                (
-                    congestion *
-                    0.40
-                ),
+                (lowMidDominance * 0.60) +
+                (congestion * 0.40),
                 0,
                 1
             );
 
-
-        // ==================================
-        // GANHOS ADAPTATIVOS
-        // ==================================
-
-        const lowGain =
+        const automaticLowGain =
             this.clamp(
                 (
                     lowExcess *
                     correctionConfidence
-                ) *
-                this.maxLowCut,
+                ) * this.maxLowCut,
                 this.maxLowCut,
                 0
             );
 
+        const decisionLowCut =
+            this.getDecisionLowCut(
+                treatmentDecision
+            );
+
+        const lowGain =
+            this.clamp(
+                automaticLowGain +
+                decisionLowCut,
+                this.maxLowCut,
+                0
+            );
 
         const lowMidGain =
             this.clamp(
                 (
                     lowMidExcess *
                     correctionConfidence
-                ) *
-                this.maxLowMidCut,
+                ) * this.maxLowMidCut,
                 this.maxLowMidCut,
                 0
             );
-
 
         const mudGain =
             this.clamp(
                 (
                     congestion *
                     correctionConfidence
-                ) *
-                this.maxMudCut,
+                ) * this.maxMudCut,
                 this.maxMudCut,
                 0
             );
 
-
-        // ==================================
-        // FREQUÊNCIAS ADAPTATIVAS
-        // ==================================
-
         const lowFrequency =
             this.clamp(
-                175 +
-                (
-                    lowExcess *
-                    75
-                ),
+                175 + (lowExcess * 75),
                 175,
                 250
             );
 
-
         const lowMidFrequency =
             this.clamp(
-                350 +
-                (
-                    lowMidExcess *
-                    120
-                ),
+                350 + (lowMidExcess * 120),
                 350,
                 470
             );
 
-
         const mudFrequency =
             this.clamp(
-                630 +
-                (
-                    congestion *
-                    210
-                ),
+                630 + (congestion * 210),
                 630,
                 840
             );
 
-
-        // ==================================
-        // INTENSIDADE
-        // ==================================
-
         const intensity =
             this.clamp(
-                (
-                    lowExcess *
-                    0.35
-                ) +
-                (
-                    lowMidExcess *
-                    0.40
-                ) +
-                (
-                    congestion *
-                    0.25
-                ),
+                (lowExcess * 0.35) +
+                (lowMidExcess * 0.40) +
+                (congestion * 0.25),
                 0,
                 1
             );
 
-
         return {
-
             lowGain,
 
             lowMidGain,
@@ -420,35 +317,29 @@ class VocalBody {
 
             congestion,
 
-            correctionConfidence
+            correctionConfidence,
+
+            automaticLowGain,
+
+            decisionLowCut
         };
     }
-
-
-    // ======================================
-    // CRIAR PROCESSADOR
-    // ======================================
-
-    createProcessor(
+        createProcessor(
         context,
-        analysis
+        analysis,
+        treatmentDecision = null
     ) {
-
-        if (
-            !context
-        ) {
-
+        if (!context) {
             throw new Error(
                 "AudioContext inválido."
             );
         }
 
-
         const settings =
             this.calculateSettings(
-                analysis
+                analysis,
+                treatmentDecision
             );
-
 
         // ==================================
         // LOW
@@ -457,22 +348,17 @@ class VocalBody {
         const lowFilter =
             context.createBiquadFilter();
 
-
         lowFilter.type =
             "peaking";
-
 
         lowFilter.frequency.value =
             settings.lowFrequency;
 
-
         lowFilter.Q.value =
             0.70;
 
-
         lowFilter.gain.value =
             settings.lowGain;
-
 
         // ==================================
         // LOW-MID
@@ -481,22 +367,17 @@ class VocalBody {
         const lowMidFilter =
             context.createBiquadFilter();
 
-
         lowMidFilter.type =
             "peaking";
-
 
         lowMidFilter.frequency.value =
             settings.lowMidFrequency;
 
-
         lowMidFilter.Q.value =
             0.85;
 
-
         lowMidFilter.gain.value =
             settings.lowMidGain;
-
 
         // ==================================
         // MUD
@@ -505,22 +386,17 @@ class VocalBody {
         const mudFilter =
             context.createBiquadFilter();
 
-
         mudFilter.type =
             "peaking";
-
 
         mudFilter.frequency.value =
             settings.mudFrequency;
 
-
         mudFilter.Q.value =
             0.90;
 
-
         mudFilter.gain.value =
             settings.mudGain;
-
 
         // ==================================
         // CADEIA
@@ -530,14 +406,11 @@ class VocalBody {
             lowMidFilter
         );
 
-
         lowMidFilter.connect(
             mudFilter
         );
 
-
         return {
-
             input:
                 lowFilter,
 
@@ -549,10 +422,6 @@ class VocalBody {
     }
 }
 
-
-// ==========================================
-// DISPONIBILIZAR GLOBALMENTE
-// ==========================================
-
 window.VocalBody =
     VocalBody;
+    
