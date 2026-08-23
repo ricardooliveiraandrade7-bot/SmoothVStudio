@@ -462,9 +462,7 @@ class VocalSmoother {
             return null;
         }
     }
-
-
-    // ======================================
+        // ======================================
     // GERAR PERFIL ESPECTRAL
     // ======================================
 
@@ -894,9 +892,7 @@ class VocalSmoother {
                 "none"
         };
     }
-
-
-    // ======================================
+        // ======================================
     // AUDITAR TREATMENT PLAN ↔ DSP
     // ======================================
     //
@@ -1442,9 +1438,7 @@ class VocalSmoother {
                     resolvedSibilanceOutput;
             }
         }
-
-
-        // ==================================
+                // ==================================
         // 15. AUDITORIA OBSERVACIONAL
         // ==================================
         //
@@ -1468,14 +1462,14 @@ class VocalSmoother {
         // sobre o áudio.
         //
         // ==================================
-
+        
         this.lastTreatmentContractAudit =
             this.createTreatmentContractAudit(
                 this.lastTreatmentPlan,
                 this.createDspSnapshot()
             );
-
-
+        
+        
         // ==================================
         // 16. CONEXÃO BODY → TONE / DYNAMICS
         // ==================================
@@ -1490,236 +1484,236 @@ class VocalSmoother {
         // a ele mesmo.
         //
         // ==================================
-
+        
         if (
             toneActive
         ) {
-
+            
             bodyOutput.connect(
                 toneInput
             );
-
-
+            
+            
             toneOutput.connect(
                 compressor
-
+                
             );
-
+            
         } else {
-
+            
             bodyOutput.connect(
                 compressor
             );
         }
-
-
+        
+        
         // ==================================
         // 18. CONEXÃO FINAL
         // ==================================
-
+        
         if (
             !sibilanceInput
         ) {
-
+            
             compressor.connect(
                 context.destination
             );
-
+            
         } else {
-
+            
             finalOutput.connect(
                 context.destination
             );
         }
-
-
+        
+        
         // ==================================
         // 19. SOURCE → BODY
         // ==================================
-
+        
         source.connect(
             bodyInput
         );
-
-
+        
+        
         // ==================================
         // 20. INICIAR
         // ==================================
-
+        
         source.start(
             0
         );
-
-
+        
+        
         // ==================================
         // 21. RENDER
         // ==================================
-
+        
         const result =
             await context.startRendering();
-
-
+        
+        
         return result;
-    }
-
-
-    // ======================================
-    // ÚLTIMA ANÁLISE
-    // ======================================
-
-    getLastAnalysis() {
-
-        return this.lastAnalysis;
-    }
-
-
-    // ======================================
-    // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
-    // ======================================
-
-    getLastSpectralRegionalMeasurement() {
-
-        return this.lastSpectralRegionalMeasurement;
-    }
-
-
-    // ======================================
-    // RESUMO DA MEDIÇÃO REGIONAL
-    // ======================================
-
-    getLastSpectralRegionalSummary() {
-
-        return this.lastSpectralRegionalSummary;
-    }
-
-
-    // ======================================
-    // ÚLTIMO PERFIL ESPECTRAL
-    // ======================================
-
-    getLastSpectralProfile() {
-
-        return this.lastSpectralProfile;
-    }
-
-
-    // ======================================
-    // ÚLTIMO CONTEXTO ESPECTRAL
-    // ======================================
-
-    getLastSpectralContext() {
-
-        return this.lastSpectralContext;
-    }
-
-
-    // ======================================
-    // ÚLTIMO DIAGNÓSTICO ESPECTRAL
-    // ======================================
-
-    getLastSpectralDiagnostic() {
-
-        return this.lastSpectralDiagnostic;
-    }
-
-
-    // ======================================
-    // ÚLTIMO PLANO DE TRATAMENTO
-    // ======================================
-
-    getLastTreatmentPlan() {
-
-        return this.lastTreatmentPlan;
-    }
+        }
+        
+        
         // ======================================
-    // ÚLTIMA DECISÃO DO PIPELINE
-    // ======================================
-    
-    getLastTreatmentDecisionPipeline() {
+        // ÚLTIMA ANÁLISE
+        // ======================================
         
-        return this.lastTreatmentDecisionPipeline;
-    }
-    
-    
-    // ======================================
-    // ÚLTIMA AUDITORIA DO CONTRATO
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Retorna a comparação entre o plano
-    // e o snapshot DSP da última execução.
-    //
-    // ======================================
-    
-    getLastTreatmentContractAudit() {
+        getLastAnalysis() {
+            
+            return this.lastAnalysis;
+        }
         
-        return this.lastTreatmentContractAudit;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DINÂMICA
-    // ======================================
-    
-    getLastSettings() {
         
-        return this.lastSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DO BODY
-    // ======================================
-    
-    getLastBodySettings() {
+        // ======================================
+        // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
+        // ======================================
         
-        return this.lastBodySettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DO TONE
-    // ======================================
-    
-    getLastToneSettings() {
+        getLastSpectralRegionalMeasurement() {
+            
+            return this.lastSpectralRegionalMeasurement;
+        }
         
-        return this.lastToneSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DA SIBILÂNCIA
-    // ======================================
-    
-    getLastSibilanceSettings() {
         
-        return this.lastSibilanceSettings;
-    }
-    
-    
-    // ======================================
-    // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Retorna uma cópia consolidada dos
-    // parâmetros efetivamente armazenados
-    // pelos módulos DSP.
-    //
-    // ======================================
-    
-    getLastDspSnapshot() {
+        // ======================================
+        // RESUMO DA MEDIÇÃO REGIONAL
+        // ======================================
         
-        return this.createDspSnapshot();
-    }
-    }
-    
-    
-    // ==========================================
-    // DISPONIBILIZAR GLOBALMENTE
-    // ==========================================
-    
-    window.VocalSmoother =
-        VocalSmoother;
+        getLastSpectralRegionalSummary() {
+            
+            return this.lastSpectralRegionalSummary;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO PERFIL ESPECTRAL
+        // ======================================
+        
+        getLastSpectralProfile() {
+            
+            return this.lastSpectralProfile;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO CONTEXTO ESPECTRAL
+        // ======================================
+        
+        getLastSpectralContext() {
+            
+            return this.lastSpectralContext;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO DIAGNÓSTICO ESPECTRAL
+        // ======================================
+        
+        getLastSpectralDiagnostic() {
+            
+            return this.lastSpectralDiagnostic;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO PLANO DE TRATAMENTO
+        // ======================================
+        
+        getLastTreatmentPlan() {
+            
+            return this.lastTreatmentPlan;
+        }
+                // ======================================
+        // ÚLTIMA DECISÃO DO PIPELINE
+        // ======================================
+        
+        getLastTreatmentDecisionPipeline() {
+            
+            return this.lastTreatmentDecisionPipeline;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMA AUDITORIA DO CONTRATO
+        // ======================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // Retorna a comparação entre o plano
+        // e o snapshot DSP da última execução.
+        //
+        // ======================================
+        
+        getLastTreatmentContractAudit() {
+            
+            return this.lastTreatmentContractAudit;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DINÂMICA
+        // ======================================
+        
+        getLastSettings() {
+            
+            return this.lastSettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DO BODY
+        // ======================================
+        
+        getLastBodySettings() {
+            
+            return this.lastBodySettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DO TONE
+        // ======================================
+        
+        getLastToneSettings() {
+            
+            return this.lastToneSettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DA SIBILÂNCIA
+        // ======================================
+        
+        getLastSibilanceSettings() {
+            
+            return this.lastSibilanceSettings;
+        }
+        
+        
+        // ======================================
+        // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
+        // ======================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // Retorna uma cópia consolidada dos
+        // parâmetros efetivamente armazenados
+        // pelos módulos DSP.
+        //
+        // ======================================
+        
+        getLastDspSnapshot() {
+            
+            return this.createDspSnapshot();
+        }
+        }
+        
+        
+        // ==========================================
+        // DISPONIBILIZAR GLOBALMENTE
+        // ==========================================
+        
+        window.VocalSmoother =
+            VocalSmoother;
