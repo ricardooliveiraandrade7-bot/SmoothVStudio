@@ -29,15 +29,16 @@
 //
 // 2.5 kHz → 5.0 kHz
 //
-// O módulo utiliza processamento diferencial:
+// O módulo utiliza processamento espectral serial:
 //
 // sinal original
-//      +
-// diferença entre a banda original e a banda
-// dinamicamente controlada
+//      ↓
+// filtro peaking adaptativo
+//      ↓
+// sinal processado
 //
-// Dessa maneira a região fora do problema permanece
-// essencialmente intacta.
+// Dessa maneira não existe soma/subtração de duas
+// bandas filtradas paralelas.
 //
 // ==========================================
 
@@ -151,6 +152,8 @@ class VocalHarshness {
         //
         // Valores deliberadamente naturais.
         //
+        // Mantidos no contrato do módulo.
+        //
         // ==================================
 
         this.attack =
@@ -242,13 +245,12 @@ class VocalHarshness {
         // INTENSIDADE DA CORREÇÃO
         // ==================================
         //
-        // Controla quanto da diferença entre
-        // banda original e banda comprimida
-        // será aplicada.
+        // Mantido como parâmetro compatível
+        // com a versão anterior.
         //
-        // 1.0 = substituição completa da banda
-        //
-        // O valor máximo é deliberadamente menor.
+        // Nesta versão a intensidade efetiva
+        // é aplicada através de um filtro
+        // peaking serial.
         //
         // ==================================
 
@@ -645,9 +647,7 @@ class VocalHarshness {
                 "none"
         };
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -695,6 +695,18 @@ class VocalHarshness {
         // ==================================
         // CAMINHO DIRETO
         // ==================================
+        //
+        // O sinal passa por um único caminho.
+        //
+        // Não existe mais:
+        //
+        // originalBand
+        // +
+        // processedBand
+        // -
+        // reconstrução paralela.
+        //
+        // ==================================
 
         input.connect(
             output
@@ -705,8 +717,7 @@ class VocalHarshness {
         // SE NÃO HOUVER EVIDÊNCIA
         // ==================================
         //
-        // O módulo permanece praticamente
-        // transparente.
+        // O módulo permanece transparente.
         //
         // ==================================
 
@@ -726,155 +737,63 @@ class VocalHarshness {
 
 
         // ==================================
-        // BANDA ORIGINAL
+        // FILTRO PEAKING
         // ==================================
         //
-        // Essa banda será subtraída parcialmente
-        // do sinal final.
+        // Esta é a principal alteração desta
+        // tentativa.
+        //
+        // O tratamento é aplicado diretamente
+        // em série no sinal.
+        //
+        // Isso evita a soma/subtração de duas
+        // bandas filtradas paralelas.
         //
         // ==================================
 
-        const originalBand =
+        const harshnessFilter =
             context.createBiquadFilter();
 
 
-        originalBand.type =
-            "bandpass";
+        harshnessFilter.type =
+            "peaking";
 
 
-        originalBand.frequency.value =
+        harshnessFilter.frequency.value =
             settings.frequency;
 
 
-        originalBand.Q.value =
+        harshnessFilter.Q.value =
             settings.bandQ;
 
 
         // ==================================
-        // BANDA PROCESSADA
-        // ==================================
-
-        const processedBand =
-            context.createBiquadFilter();
-
-
-        processedBand.type =
-            "bandpass";
-
-
-        processedBand.frequency.value =
-            settings.frequency;
-
-
-        processedBand.Q.value =
-            settings.bandQ;
-
-
-        // ==================================
-        // COMPRESSOR
-        // ==================================
-
-        const compressor =
-            context.createDynamicsCompressor();
-
-
-        compressor.threshold.value =
-            settings.threshold;
-
-
-        compressor.ratio.value =
-            settings.ratio;
-
-
-        compressor.attack.value =
-            settings.attack;
-
-
-        compressor.release.value =
-            settings.release;
-
-
-        compressor.knee.value =
-            settings.knee;
-
-
-        // ==================================
-        // GANHO DA DIFERENÇA
+        // GANHO ADAPTATIVO
         // ==================================
         //
-        // O objetivo é:
+        // A redução efetiva vem da evidência
+        // calculada previamente.
         //
-        // original
+        // O limite continua conservador:
         //
-        // +
-        //
-        // blend ×
-        // (
-        // compressedBand
-        // -
-        // originalBand
-        // )
-        //
-        // Assim somente uma fração da banda
-        // é modificada.
+        // máximo = 2 dB.
         //
         // ==================================
 
-        const originalReductionGain =
-            context.createGain();
-
-
-        originalReductionGain.gain.value =
-            -settings.blend;
-
-
-        const processedBlendGain =
-            context.createGain();
-
-
-        processedBlendGain.gain.value =
-            settings.blend;
+        harshnessFilter.gain.value =
+            -settings.reductionDb;
 
 
         // ==================================
-        // CAMINHO ORIGINAL DA BANDA
+        // CONEXÃO SERIAL
         // ==================================
 
         input.connect(
-            originalBand
+            harshnessFilter
         );
 
 
-        originalBand.connect(
-            originalReductionGain
-        );
-
-
-        originalReductionGain.connect(
-            output
-        );
-
-
-        // ==================================
-        // CAMINHO PROCESSADO
-        // ==================================
-
-        input.connect(
-            processedBand
-        );
-
-
-        processedBand.connect(
-            compressor
-        );
-
-
-        compressor.connect(
-            processedBlendGain
-        );
-
-
-        processedBlendGain.connect(
+        harshnessFilter.connect(
             output
         );
 
@@ -891,11 +810,7 @@ class VocalHarshness {
 
             settings,
 
-            originalBand,
-
-            processedBand,
-
-            compressor
+            harshnessFilter
         };
     }
 
