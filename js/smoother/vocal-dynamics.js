@@ -30,27 +30,27 @@ class VocalDynamics {
 
         this.threshold =
             options.threshold ??
-            -24;
+            -14;
 
 
         this.ratio =
             options.ratio ??
-            2.2;
+            1.6;
 
 
         this.attack =
             options.attack ??
-            0.004;
+            0.025;
 
 
         this.release =
             options.release ??
-            0.090;
+            0.135;
 
 
         this.knee =
             options.knee ??
-            18;
+            22;
     }
 
 
@@ -109,10 +109,15 @@ class VocalDynamics {
 
         /*
          * Quanto mais agressivo o vocal,
-         * mais baixo fica o threshold.
+         * maior a intensidade de controle
+         * dinâmico.
          *
-         * Porém existe um limite para evitar
-         * esmagamento excessivo.
+         * A adaptação permanece baseada
+         * exclusivamente na análise existente.
+         *
+         * Os limites foram reduzidos para
+         * preservar melhor a dinâmica natural
+         * e evitar compressão excessiva.
          */
 
         const intensity =
@@ -131,49 +136,108 @@ class VocalDynamics {
             );
 
 
+        /*
+         * Threshold adaptativo:
+         *
+         * intensidade baixa  = -8 dB
+         * intensidade alta  = -20 dB
+         *
+         * O compressor pode atuar mais cedo
+         * quando existe maior evidência de
+         * agressividade, mas sem retornar aos
+         * limites anteriores de até -30 dB.
+         */
+
         const threshold =
-            -18 -
+            -8 -
             (
                 intensity *
                 12
             );
 
 
+        /*
+         * Ratio adaptativo:
+         *
+         * intensidade baixa  = 1.2:1
+         * intensidade alta  = 2.0:1
+         *
+         * Mantém o controle progressivo sem
+         * chegar à compressão mais agressiva
+         * da versão anterior.
+         */
+
         const ratio =
-            1.6 +
+            1.2 +
             (
                 intensity *
-                1.8
+                0.8
             );
 
+
+        /*
+         * Attack adaptativo:
+         *
+         * intensidade baixa  = 35 ms
+         * intensidade alta  = 15 ms
+         *
+         * Ataques mais lentos preservam melhor
+         * o início natural das palavras quando
+         * o controle dinâmico necessário é baixo.
+         *
+         * Quando a agressividade aumenta,
+         * o ataque pode responder mais rapidamente.
+         */
 
         const attack =
-            0.003 +
+            0.015 +
             (
                 (
                     1 -
                     intensity
                 ) *
-                0.004
+                0.020
             );
 
+
+        /*
+         * Release adaptativo:
+         *
+         * intensidade baixa  = 180 ms
+         * intensidade alta  = 90 ms
+         *
+         * Releases mais longos em situações
+         * leves ajudam a evitar bombeamento
+         * perceptível.
+         */
 
         const release =
-            0.060 +
+            0.090 +
             (
                 (
                     1 -
                     intensity
                 ) *
-                0.060
+                0.090
             );
 
 
+        /*
+         * Knee suave:
+         *
+         * intensidade baixa  = 18 dB
+         * intensidade alta  = 26 dB
+         *
+         * Mantém uma transição gradual para
+         * evitar uma entrada abrupta na
+         * compressão.
+         */
+
         const knee =
-            16 +
+            18 +
             (
                 intensity *
-                10
+                8
             );
 
 
