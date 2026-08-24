@@ -1,21 +1,22 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SATURATION
-// V1.0
+// V1.1
 // ==========================================
 //
 // Executor DSP dedicado à reconstrução
 // harmônica vocal moderada.
 //
-// OBJETIVO:
+// V1.1:
 //
-// - adicionar reconstrução harmônica sutil;
-// - preservar identidade vocal;
-// - preservar dinâmica;
-// - evitar distorção audível;
-// - evitar brilho artificial;
-// - trabalhar de forma regional;
-// - adaptar a intensidade ao material analisado.
+// - preserva caminho DRY integral;
+// - adiciona saturação em paralelo;
+// - utiliza cinco regiões espectrais;
+// - mantém reconstrução harmônica sutil;
+// - evita substituir o vocal original;
+// - mantém dinâmica original como base;
+// - não consulta inteligência;
+// - não altera decisões do projeto.
 //
 // REGIÕES:
 //
@@ -27,9 +28,10 @@
 //
 // IMPORTANTE:
 //
-// Este módulo NÃO contém inteligência.
+// Este módulo é exclusivamente DSP.
 //
-// Ele não:
+// Ele NÃO:
+//
 // - cria decisões;
 // - consulta TreatmentPlan;
 // - consulta DecisionPipeline;
@@ -37,9 +39,11 @@
 // - altera Tone;
 // - altera Dynamics;
 // - altera Harshness;
-// - altera Sibilance.
+// - altera Sibilance;
+// - altera a inteligência.
 //
 // Ele recebe somente:
+//
 // - OfflineAudioContext;
 // - análise já existente.
 //
@@ -55,7 +59,7 @@ class VocalSaturation {
 
 
         this.version =
-            "1.0";
+            "1.1";
 
 
         // ==================================
@@ -84,6 +88,34 @@ class VocalSaturation {
             )
                 ? options.outputTrim
                 : 0.985;
+
+
+        // ==================================
+        // DRY / WET
+        // ==================================
+        //
+        // O vocal original permanece como
+        // fundamento do processamento.
+        //
+        // A saturação somente acrescenta
+        // conteúdo harmônico.
+        //
+        // ==================================
+
+        this.dryGain =
+            Number.isFinite(
+                options.dryGain
+            )
+                ? options.dryGain
+                : 1.0;
+
+
+        this.wetGain =
+            Number.isFinite(
+                options.wetGain
+            )
+                ? options.wetGain
+                : 1.0;
 
 
         // ==================================
@@ -263,6 +295,7 @@ class VocalSaturation {
             sampleRate *
             0.5;
 
+
         return this.clamp(
             frequency,
             20,
@@ -305,7 +338,8 @@ class VocalSaturation {
 
 
         for (
-            const candidate of candidates
+            const candidate
+            of candidates
         ) {
 
             if (
@@ -363,17 +397,6 @@ class VocalSaturation {
             );
 
 
-        /*
-         * A saturação aumenta apenas
-         * moderadamente quando o material
-         * apresenta nível muito baixo.
-         *
-         * Isso evita que sinais muito baixos
-         * recebam uma quantidade excessiva
-         * de reconstrução.
-         */
-
-
         const normalized =
             this.clamp(
                 level,
@@ -381,6 +404,14 @@ class VocalSaturation {
                 0.85
             );
 
+
+        /*
+         * A adaptação permanece limitada.
+         *
+         * O objetivo não é aumentar
+         * agressivamente a saturação em
+         * vocais de baixo nível.
+         */
 
         const adaptation =
             1 -
@@ -425,11 +456,10 @@ class VocalSaturation {
 
 
         /*
-         * Curva arctan normalizada.
+         * Curva arctan suave.
          *
-         * A função cresce de maneira suave
-         * e evita o comportamento agressivo
-         * de um hard clip.
+         * Evita hard clipping e mantém
+         * a geração harmônica progressiva.
          */
 
         const amount =
@@ -471,16 +501,6 @@ class VocalSaturation {
                 ) /
                 normalization;
 
-
-            /*
-             * Mistura parcial entre o sinal
-             * original e a curva.
-             *
-             * A função Waveshaper recebe
-             * posteriormente um mix regional,
-             * portanto a curva permanece
-             * relativamente suave.
-             */
 
             curve[i] =
                 shaped;
@@ -675,6 +695,10 @@ class VocalSaturation {
             context.createGain();
 
 
+        input.gain.value =
+            1;
+
+
         const bandpass =
             this.createBandpass(
                 context,
@@ -698,7 +722,7 @@ class VocalSaturation {
 
 
         /*
-         * Caminho saturado:
+         * Caminho regional:
          *
          * input
          *   ↓
@@ -707,6 +731,10 @@ class VocalSaturation {
          * shaper
          *   ↓
          * saturatedGain
+         *
+         * O ganho regional é baixo.
+         * O sinal original permanece
+         * separado no caminho DRY.
          */
 
 
@@ -781,15 +809,12 @@ class VocalSaturation {
 
 
         /*
-         * Como o processamento é paralelo,
-         * o ganho adicional precisa permanecer
-         * extremamente pequeno.
+         * O caminho DRY é preservado em
+         * ganho unitário.
          *
-         * A compensação aqui não pretende
-         * igualar loudness automaticamente.
-         *
-         * Ela apenas evita uma elevação
-         * desnecessária do nível médio.
+         * A compensação atua somente no
+         * barramento WET, mantendo a
+         * reconstrução pequena.
          */
 
         const compensation =
@@ -847,6 +872,12 @@ class VocalSaturation {
             adaptation,
 
             compensation,
+
+            dryGain:
+                this.dryGain,
+
+            wetGain:
+                this.wetGain,
 
             maxDrive:
                 this.maxDrive,
@@ -911,7 +942,45 @@ class VocalSaturation {
 
 
         // ==================================
-        // SAÍDA PRINCIPAL
+        // CAMINHO DRY
+        // ==================================
+        //
+        // O vocal original permanece
+        // integralmente presente.
+        //
+        // ==================================
+
+        const dryGain =
+            this.createGain(
+                context,
+                settings.dryGain
+            );
+
+
+        // ==================================
+        // BARRAMENTO WET
+        // ==================================
+        //
+        // Recebe somente o conteúdo
+        // harmônico adicional.
+        //
+        // ==================================
+
+        const wetBus =
+            context.createGain();
+
+
+        wetBus.gain.value =
+            this.clamp(
+                settings.wetGain *
+                settings.compensation,
+                0,
+                1
+            );
+
+
+        // ==================================
+        // SOMA FINAL
         // ==================================
 
         const output =
@@ -920,7 +989,6 @@ class VocalSaturation {
 
         output.gain.value =
             this.clamp(
-                settings.compensation *
                 this.outputTrim,
                 0,
                 1
@@ -928,15 +996,17 @@ class VocalSaturation {
 
 
         // ==================================
-        // SOMA REGIONAL
+        // CONEXÃO DRY
         // ==================================
 
-        const regionalBus =
-            context.createGain();
+        input.connect(
+            dryGain
+        );
 
 
-        regionalBus.gain.value =
-            1;
+        dryGain.connect(
+            output
+        );
 
 
         // ==================================
@@ -966,8 +1036,11 @@ class VocalSaturation {
 
 
             /*
-             * A entrada principal alimenta
-             * cada região em paralelo.
+             * A entrada original alimenta
+             * cada banda em paralelo.
+             *
+             * Essas bandas NÃO substituem
+             * o caminho DRY.
              */
 
             input.connect(
@@ -976,16 +1049,16 @@ class VocalSaturation {
 
 
             processor.output.connect(
-                regionalBus
+                wetBus
             );
         }
 
 
         // ==================================
-        // SAÍDA
+        // CONEXÃO WET
         // ==================================
 
-        regionalBus.connect(
+        wetBus.connect(
             output
         );
 
@@ -1049,11 +1122,8 @@ class VocalSaturation {
     //
     // Este método não processa áudio.
     //
-    // Ele apenas permite que uma configuração
-    // externa autorizada altere os limites
-    // locais do executor.
-    //
-    // Não é utilizado pela inteligência.
+    // Ele apenas permite alteração
+    // controlada dos parâmetros locais.
     //
     // ======================================
 
@@ -1292,6 +1362,14 @@ class VocalSaturation {
             0.99;
 
 
+        this.dryGain =
+            1.0;
+
+
+        this.wetGain =
+            1.0;
+
+
         this.regions.low.drive =
             0.035;
 
@@ -1349,6 +1427,14 @@ class VocalSaturation {
             0.985;
 
 
+        this.dryGain =
+            1.0;
+
+
+        this.wetGain =
+            1.0;
+
+
         this.resetRegions();
     }
 
@@ -1357,7 +1443,7 @@ class VocalSaturation {
     // DIAGNÓSTICO LOCAL
     // ======================================
     //
-    // Apenas retorna os parâmetros atuais.
+    // Somente retorna os parâmetros atuais.
     //
     // Não processa áudio.
     // Não altera análise.
@@ -1380,6 +1466,12 @@ class VocalSaturation {
 
             outputTrim:
                 this.outputTrim,
+
+            dryGain:
+                this.dryGain,
+
+            wetGain:
+                this.wetGain,
 
             regions: {
 
