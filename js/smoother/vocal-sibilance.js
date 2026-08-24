@@ -41,12 +41,12 @@ class VocalSibilance {
 
         this.lowFrequency =
             options.lowFrequency ??
-            5000;
+            5500;
 
 
         this.highFrequency =
             options.highFrequency ??
-            9500;
+            8500;
 
 
         // ==================================
@@ -55,7 +55,7 @@ class VocalSibilance {
 
         this.maxReductionDb =
             options.maxReductionDb ??
-            6.0;
+            3.0;
 
 
         // ==================================
@@ -64,12 +64,12 @@ class VocalSibilance {
 
         this.attack =
             options.attack ??
-            0.0025;
+            0.0035;
 
 
         this.release =
             options.release ??
-            0.075;
+            0.085;
 
 
         // ==================================
@@ -215,7 +215,7 @@ class VocalSibilance {
 
         const reductionDb =
             this.lerp(
-                0.75,
+                0.50,
                 this.maxReductionDb,
                 intensity
             );
@@ -229,7 +229,7 @@ class VocalSibilance {
 
         const attack =
             this.lerp(
-                0.005,
+                0.006,
                 this.attack,
                 intensity
             );
@@ -275,9 +275,7 @@ class VocalSibilance {
 
         return settings;
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR FILTRO DE BANDA
     // ======================================
 
@@ -436,24 +434,24 @@ class VocalSibilance {
 
         const threshold =
             this.lerp(
-                -8,
-                -28,
+                -10,
+                -22,
                 settings.intensity
             );
 
 
         const ratio =
             this.lerp(
-                2.0,
-                5.5,
+                1.8,
+                3.0,
                 settings.intensity
             );
 
 
         const knee =
             this.lerp(
-                12,
-                22,
+                10,
+                18,
                 settings.intensity
             );
 
