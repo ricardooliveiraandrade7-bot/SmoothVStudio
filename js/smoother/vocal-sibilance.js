@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SIBILANCE
-// V0.3
+// V0.4
 // ==========================================
 //
 // De-esser adaptativo paralelo.
@@ -23,6 +23,18 @@
 // Ela é utilizada para reduzir suavemente
 // somente a energia sibilante.
 //
+// V0.4:
+//
+// - remove redução mínima obrigatória;
+// - sibilância zero produz redução zero;
+// - corrige a conversão de reductionDb
+//   para ganho negativo;
+// - mantém atuação proporcional à intensidade;
+// - preserva arquitetura DRY/WET paralela;
+// - preserva faixa espectral atual;
+// - preserva compressor atual;
+// - mantém processamento conservador.
+//
 // ==========================================
 
 
@@ -32,7 +44,7 @@ class VocalSibilance {
     constructor(options = {}) {
 
         this.version =
-            "0.3";
+            "0.4";
 
 
         // ==================================
@@ -209,13 +221,22 @@ class VocalSibilance {
         /*
          * Redução máxima adaptativa.
          *
-         * Vocais com pouca sibilância recebem
-         * apenas uma intervenção muito leve.
+         * A redução agora parte de zero.
+         *
+         * Isso garante que uma análise sem
+         * evidência de sibilância não produza
+         * redução obrigatória.
+         *
+         * Intensidade baixa:
+         * intervenção muito pequena.
+         *
+         * Intensidade alta:
+         * aproxima-se do limite máximo.
          */
 
         const reductionDb =
             this.lerp(
-                0.50,
+                0,
                 this.maxReductionDb,
                 intensity
             );
@@ -275,7 +296,9 @@ class VocalSibilance {
 
         return settings;
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR FILTRO DE BANDA
     // ======================================
 
@@ -319,7 +342,7 @@ class VocalSibilance {
     // CRIAR PROCESSADOR
     // ======================================
     //
-    // A V0.3 passa a possuir duas rotas:
+    // A V0.4 mantém duas rotas:
     //
     // DRY:
     //
@@ -488,8 +511,23 @@ class VocalSibilance {
         // O sinal comprimido é subtraído
         // suavemente do sinal original.
         //
-        // Isso transforma a cadeia em um
-        // de-esser paralelo simples.
+        // A redução é calculada como a
+        // diferença entre ganho unitário
+        // e o ganho linear correspondente
+        // ao valor de redução solicitado.
+        //
+        // Dessa forma:
+        //
+        // reductionDb = 0
+        //     ↓
+        // ganho negativo = 0
+        //
+        // reductionDb aumenta
+        //     ↓
+        // subtração aumenta
+        //
+        // O fator 0.70 permanece como
+        // margem conservadora.
         //
         // ==================================
 
@@ -498,6 +536,7 @@ class VocalSibilance {
 
 
         const reductionAmount =
+            1 -
             this.dbToLinear(
                 -settings.reductionDb
             );
@@ -506,6 +545,17 @@ class VocalSibilance {
         /*
          * Usamos uma fração da redução calculada
          * para manter a atuação natural.
+         *
+         * Diferentemente da versão anterior,
+         * a relação agora é monotônica:
+         *
+         * maior reductionDb
+         * =
+         * maior redução.
+         *
+         * reductionDb = 0
+         * =
+         * nenhuma redução.
          */
 
         reductionGain.gain.value =
