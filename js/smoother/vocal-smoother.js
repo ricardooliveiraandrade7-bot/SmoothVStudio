@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SMOOTHER
-// V1.4
+// V1.5
 // ==========================================
 //
 // Orquestrador principal do processamento.
@@ -21,13 +21,13 @@
 // - VocalTone
 // - VocalDynamics
 // - VocalHarshness
-// - VocalSaturation
 // - VocalSibilance
+// - VocalSaturation
 // - VocalTreatmentPlan
 // - TreatmentDecisionPipeline
 // - TreatmentContractAudit
 //
-// V1.4:
+// V1.5:
 //
 // - integração segura da medição espectral
 //   regional;
@@ -49,8 +49,32 @@
 //   efetivamente calculados;
 // - VocalHarshness integrado como etapa DSP
 //   entre Dynamics e Sibilance;
-// - VocalSaturation integrado como etapa DSP
-//   entre Harshness e Sibilance.
+// - VocalSibilance integrado como etapa DSP
+//   entre Harshness e Saturation;
+// - VocalSaturation integrado como ÚLTIMA
+//   etapa DSP da cadeia;
+// - Saturation recebe somente o sinal
+//   proveniente da etapa Sibilance;
+// - nenhum módulo posterior à Saturation
+//   é executado antes da saída.
+//
+// CADEIA DSP:
+//
+// Source
+//   ↓
+// VocalBody
+//   ↓
+// VocalTone
+//   ↓
+// VocalDynamics
+//   ↓
+// VocalHarshness
+//   ↓
+// VocalSibilance
+//   ↓
+// VocalSaturation
+//   ↓
+// Output
 //
 // IMPORTANTE:
 //
@@ -67,6 +91,7 @@
 // camada de observação.
 //
 // VocalHarshness é um módulo DSP executor.
+// VocalSibilance é um módulo DSP executor.
 // VocalSaturation é um módulo DSP executor.
 //
 // Nenhum ganho, corte, compressão,
@@ -85,7 +110,7 @@ class VocalSmoother {
 
 
         this.version =
-            "1.4";
+            "1.5";
 
 
         // ==================================
@@ -220,20 +245,48 @@ class VocalSmoother {
 
 
         // ==================================
-        // SATURAÇÃO / HARMÔNICOS
+        // SIBILANCE
         // ==================================
         //
         // ETAPA DSP.
         //
-        // O VocalSaturation recebe somente
-        // informações já disponíveis na análise.
+        // O VocalSibilance atua depois de
+        // Dynamics e Harshness.
         //
-        // O módulo trabalha em paralelo com
-        // o sinal DRY e acrescenta reconstrução
-        // harmônica moderada.
+        // Sua saída alimenta diretamente
+        // o estágio final de Saturation.
         //
-        // Nenhuma decisão da inteligência
-        // é criada ou modificada aqui.
+        // ==================================
+
+        this.sibilance =
+            options.sibilance ||
+            (
+                window.VocalSibilance
+                    ? new VocalSibilance()
+                    : null
+            );
+
+
+        // ==================================
+        // SATURAÇÃO / HARMÔNICOS
+        // ==================================
+        //
+        // ETAPA DSP FINAL.
+        //
+        // O VocalSaturation é o último
+        // executor DSP da cadeia.
+        //
+        // Ele recebe somente:
+        //
+        // - OfflineAudioContext;
+        // - análise já existente.
+        //
+        // O módulo possui seu próprio
+        // caminho DRY/WET e acrescenta
+        // reconstrução harmônica moderada
+        // sem substituir o sinal recebido.
+        //
+        // Nenhuma etapa DSP ocorre depois dele.
         //
         // ==================================
 
@@ -242,19 +295,6 @@ class VocalSmoother {
             (
                 window.VocalSaturation
                     ? new VocalSaturation()
-                    : null
-            );
-
-
-        // ==================================
-        // SIBILANCE
-        // ==================================
-
-        this.sibilance =
-            options.sibilance ||
-            (
-                window.VocalSibilance
-                    ? new VocalSibilance()
                     : null
             );
 
@@ -384,11 +424,11 @@ class VocalSmoother {
             null;
 
 
-        this.lastSaturationSettings =
+        this.lastSibilanceSettings =
             null;
 
 
-        this.lastSibilanceSettings =
+        this.lastSaturationSettings =
             null;
     }
 
@@ -727,40 +767,31 @@ class VocalSmoother {
                 );
 
 
-        /*
-         * O plano agora recebe o contexto
-         * DURANTE sua construção.
-         *
-         * Isso permite que o
-         * VocalTreatmentPlan execute
-         * sua própria reconciliação regional
-         * com as evidências fornecidas pelo
-         * SpectralTreatmentBridge.
-         *
-         * Nenhum parâmetro DSP é alterado.
-         */
+            /*
+             * O plano recebe o contexto
+             * durante sua construção.
+             *
+             * Nenhum parâmetro DSP é alterado.
+             */
 
 
-        /*
-         * A medição regional continua
-         * anexada apenas como evidência
-         * observacional adicional.
-         *
-         * Ela não recebe autoridade para
-         * controlar o processamento.
-         */
+            /*
+             * A medição regional continua
+             * anexada apenas como evidência
+             * observacional adicional.
+             */
 
-        if (
-            plan &&
-            this.lastSpectralRegionalMeasurement
-        ) {
+            if (
+                plan &&
+                this.lastSpectralRegionalMeasurement
+            ) {
 
-            plan.spectralRegionalMeasurement =
-                this.lastSpectralRegionalMeasurement;
-        }
+                plan.spectralRegionalMeasurement =
+                    this.lastSpectralRegionalMeasurement;
+            }
 
 
-        return plan;
+            return plan;
 
         } catch (error) {
 
@@ -780,12 +811,6 @@ class VocalSmoother {
     // ======================================
     //
     // SOMENTE OBSERVAÇÃO.
-    //
-    // O resultado é armazenado para auditoria
-    // e validação.
-    //
-    // Esta função NÃO interfere no caminho
-    // de processamento de áudio.
     //
     // ======================================
 
@@ -851,16 +876,6 @@ class VocalSmoother {
     // ======================================
     //
     // SOMENTE OBSERVAÇÃO.
-    //
-    // Este método consolida os parâmetros
-    // efetivamente retornados pelos módulos
-    // DSP durante a última execução.
-    //
-    // Não recalcula parâmetros.
-    // Não altera parâmetros.
-    // Não cria AudioNode.
-    // Não recebe AudioBuffer.
-    // Não executa processamento.
     //
     // ======================================
 
@@ -947,18 +962,6 @@ class VocalSmoother {
 
     // ======================================
     // AUDITAR TREATMENT PLAN ↔ DSP
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Compara o plano de tratamento com
-    // os parâmetros DSP efetivamente
-    // armazenados durante esta execução.
-    //
-    // Não altera áudio.
-    // Não altera parâmetros.
-    // Não concede autoridade DSP.
-    //
     // ======================================
 
     createTreatmentContractAudit(
@@ -1139,15 +1142,6 @@ class VocalSmoother {
         // ==================================
         // 4. CONTEXTO ESPECTRAL INICIAL
         // ==================================
-        //
-        // Nesta primeira passagem o Bridge
-        // recebe somente o perfil.
-        //
-        // O objetivo é produzir a base
-        // espectral necessária para que o
-        // Observer possa interpretar o áudio.
-        //
-        // ==================================
 
         const initialSpectralContext =
             this.createSpectralContext(
@@ -1158,16 +1152,6 @@ class VocalSmoother {
         // ==================================
         // 5. DIAGNÓSTICO ESPECTRAL
         // ==================================
-        //
-        // O Observer recebe:
-        //
-        // - contexto espectral;
-        // - medição regional.
-        //
-        // Ele continua sendo exclusivamente
-        // observacional.
-        //
-        // ==================================
 
         this.lastSpectralDiagnostic =
             this.createSpectralDiagnostic(
@@ -1177,11 +1161,6 @@ class VocalSmoother {
 
         // ==================================
         // 6. CONTEXTO ESPECTRAL ENRIQUECIDO
-        // ==================================
-        //
-        // Agora o diagnóstico volta para o
-        // Bridge.
-        //
         // ==================================
 
         this.lastSpectralContext =
@@ -1363,7 +1342,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 13. DINÂMICA
+        // 13. VOCAL DYNAMICS
         // ==================================
 
         const dynamicsResult =
@@ -1395,20 +1374,12 @@ class VocalSmoother {
 
 
         // ==================================
-        // 14. HARSHNESS
+        // 14. VOCAL HARSHNESS
         // ==================================
-        //
-        // ETAPA DSP:
         //
         // Dynamics
         //     ↓
         // Harshness
-        //
-        // O módulo recebe a análise já existente.
-        //
-        // Não consulta o Treatment Plan.
-        // Não consulta o Decision Pipeline.
-        // Não cria decisão de inteligência.
         //
         // ==================================
 
@@ -1466,19 +1437,14 @@ class VocalSmoother {
 
 
         // ==================================
-        // 15. SIBILÂNCIA
+        // 15. VOCAL SIBILANCE
         // ==================================
-        //
-        // ETAPA DSP:
         //
         // Dynamics
         //     ↓
         // Harshness
         //     ↓
         // Sibilance
-        //
-        // O VocalSibilance atua antes da
-        // reconstrução harmônica final.
         //
         // ==================================
 
@@ -1512,16 +1478,6 @@ class VocalSmoother {
                 null;
 
 
-            /*
-             * A V0.3 do VocalSibilance
-             * possui entrada e saída próprias.
-             *
-             * Isso permite manter o vocal
-             * completo como caminho principal
-             * e usar a banda sibilante apenas
-             * como redução paralela.
-             */
-
             sibilanceInput =
                 sibilanceResult.input ||
                 null;
@@ -1551,10 +1507,10 @@ class VocalSmoother {
 
 
         // ==================================
-        // 16. SATURAÇÃO / HARMÔNICOS
+        // 16. VOCAL SATURATION
         // ==================================
         //
-        // ETAPA DSP FINAL.
+        // ÚLTIMA ETAPA DSP.
         //
         // Dynamics
         //     ↓
@@ -1562,23 +1518,15 @@ class VocalSmoother {
         //     ↓
         // Sibilance
         //     ↓
-        // VocalSaturation
+        // Saturation
         //     ↓
-        // Saída
+        // Output
         //
-        // O VocalSaturation permanece como
-        // último estágio DSP.
+        // O VocalSaturation possui internamente
+        // seu próprio caminho DRY/WET.
         //
-        // O módulo recebe somente:
-        //
-        // - OfflineAudioContext
-        // - analysis
-        //
-        // O VocalSaturation possui seu próprio
-        // caminho DRY/WET.
-        //
-        // Nenhuma decisão da inteligência
-        // é consultada ou modificada.
+        // Nenhum processamento DSP ocorre
+        // depois desta etapa.
         //
         // ==================================
 
@@ -1639,15 +1587,6 @@ class VocalSmoother {
                 error
             ) {
 
-                /*
-                 * A falha do módulo de
-                 * saturação não pode silenciar
-                 * o restante do processamento.
-                 *
-                 * O caminho anterior permanece
-                 * ativo.
-                 */
-
                 console.warn(
                     "VocalSaturation indisponível nesta execução:",
                     error
@@ -1675,23 +1614,6 @@ class VocalSmoother {
         // ==================================
         // 17. AUDITORIA OBSERVACIONAL
         // ==================================
-        //
-        // Neste ponto:
-        //
-        // - Treatment Plan já existe;
-        // - decisão já foi avaliada;
-        // - Body já calculou parâmetros;
-        // - Tone já calculou parâmetros;
-        // - Dynamics já calculou parâmetros;
-        // - Harshness já calculou parâmetros;
-        // - Sibilance já calculou parâmetros;
-        // - Saturation já calculou parâmetros.
-        //
-        // Portanto o Auditor pode comparar
-        // o plano com o snapshot desta mesma
-        // execução.
-        //
-        // ==================================
 
         this.lastTreatmentContractAudit =
             this.createTreatmentContractAudit(
@@ -1701,15 +1623,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 18. CONEXÃO BODY → TONE / DYNAMICS
-        // ==================================
-        //
-        // Se houver Tone válido, o sinal passa
-        // por ele antes da dinâmica.
-        //
-        // Se não houver Tone válido, o Body
-        // segue diretamente para a dinâmica.
-        //
+        // 18. BODY → TONE / DYNAMICS
         // ==================================
 
         if (
@@ -1734,7 +1648,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 19. CONEXÃO DYNAMICS → HARSHNESS
+        // 19. DYNAMICS → HARSHNESS
         // ==================================
 
         if (
@@ -1748,7 +1662,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 20. CONEXÃO HARSHNESS → SIBILANCE
+        // 20. HARSHNESS → SIBILANCE
         // ==================================
 
         if (
@@ -1762,7 +1676,12 @@ class VocalSmoother {
 
 
         // ==================================
-        // 21. CONEXÃO SIBILANCE → SATURATION
+        // 21. SIBILANCE → SATURATION
+        // ==================================
+        //
+        // A Saturation recebe exclusivamente
+        // a saída da etapa Sibilance.
+        //
         // ==================================
 
         if (
@@ -1776,7 +1695,11 @@ class VocalSmoother {
 
 
         // ==================================
-        // 22. CONEXÃO FINAL
+        // 22. SAÍDA FINAL
+        // ==================================
+        //
+        // Saturation é o último estágio DSP.
+        //
         // ==================================
 
         saturationOutput.connect(
@@ -1897,13 +1820,6 @@ class VocalSmoother {
     // ======================================
     // ÚLTIMA AUDITORIA DO CONTRATO
     // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Retorna a comparação entre o plano
-    // e o snapshot DSP da última execução.
-    //
-    // ======================================
 
     getLastTreatmentContractAudit() {
 
@@ -1952,16 +1868,6 @@ class VocalSmoother {
 
 
     // ======================================
-    // CONFIGURAÇÃO DA SATURAÇÃO
-    // ======================================
-
-    getLastSaturationSettings() {
-
-        return this.lastSaturationSettings;
-    }
-
-
-    // ======================================
     // CONFIGURAÇÃO DA SIBILÂNCIA
     // ======================================
 
@@ -1972,14 +1878,20 @@ class VocalSmoother {
 
 
     // ======================================
+    // CONFIGURAÇÃO DA SATURAÇÃO
+    // ======================================
+
+    getLastSaturationSettings() {
+
+        return this.lastSaturationSettings;
+    }
+
+
+    // ======================================
     // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
     // ======================================
     //
     // SOMENTE OBSERVAÇÃO.
-    //
-    // Retorna uma cópia consolidada dos
-    // parâmetros efetivamente armazenados
-    // pelos módulos DSP.
     //
     // ======================================
 
