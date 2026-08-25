@@ -333,9 +333,7 @@ class VocalTone {
                 0,
                 2
             );
-
-
-        /*
+                    /*
          * Conversão dos tratamentos reais
          * do Body em fatores de sobreposição.
          *
@@ -360,14 +358,14 @@ class VocalTone {
                         effectiveLowMid /
                         2.5
                     ) *
-                    0.75
+                    0.35
                 ) +
                 (
                     (
                         effectiveMud /
                         2.0
                     ) *
-                    0.25
+                    0.65
                 ),
                 0,
                 1
@@ -527,9 +525,7 @@ class VocalTone {
         const midRatio =
             midEnergy /
             totalEnergy;
-
-
-        // ==================================
+                    // ==================================
         // REFERÊNCIAS
         // ==================================
         //
@@ -673,9 +669,7 @@ class VocalTone {
                 0,
                 1
             );
-
-
-        const settings = {
+                    const settings = {
 
             version:
                 this.version,
@@ -843,7 +837,7 @@ class VocalTone {
             settings
         };
     }
-
+    
 
     // ======================================
     // ÚLTIMA CONFIGURAÇÃO
@@ -854,8 +848,6 @@ class VocalTone {
         return this.lastSettings;
     }
 }
-
-
 // ==========================================
 // DISPONIBILIZAR GLOBALMENTE
 // ==========================================
