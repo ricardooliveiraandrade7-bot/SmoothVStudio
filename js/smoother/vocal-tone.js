@@ -69,6 +69,34 @@ class VocalTone {
             1.5;
 
 
+        // ==================================
+        // COORDENAÇÃO BODY → TONE
+        // ==================================
+        //
+        // O VocalBody continua responsável
+        // pelo seu próprio processamento.
+        //
+        // Esta camada somente reduz
+        // parcialmente a atuação do Tone
+        // quando o Body já tratou a mesma
+        // região.
+        //
+        // Nenhum novo detector é criado.
+        // Nenhuma decisão de inteligência
+        // é criada ou modificada.
+        //
+        // ==================================
+
+        this.bodyCoordinationEnabled =
+            options.bodyCoordinationEnabled ??
+            true;
+
+
+        this.maxBodyCoordination =
+            options.maxBodyCoordination ??
+            0.55;
+
+
         this.lastSettings =
             null;
     }
@@ -145,11 +173,273 @@ class VocalTone {
 
 
     // ======================================
+    // CALCULAR COORDENAÇÃO BODY → TONE
+    // ======================================
+    //
+    // O objetivo não é zerar o Tone quando
+    // o Body atua.
+    //
+    // O objetivo é reduzir parcialmente
+    // somente a parcela potencialmente
+    // redundante.
+    //
+    // A recuperação de corpo do Body é
+    // considerada para evitar tratar um
+    // corte bruto como se fosse o efeito
+    // líquido completo.
+    //
+    // ======================================
+
+    calculateBodyCoordination(
+        bodySettings
+    ) {
+
+        if (
+            !this.bodyCoordinationEnabled ||
+            !bodySettings
+        ) {
+
+            return {
+
+                lowOverlap:
+                    0,
+
+                lowMidOverlap:
+                    0,
+
+                midOverlap:
+                    0,
+
+                overall:
+                    0
+            };
+        }
+
+
+        const lowGain =
+            Number(
+                bodySettings.lowGain
+            );
+
+
+        const lowMidGain =
+            Number(
+                bodySettings.lowMidGain
+            );
+
+
+        const mudGain =
+            Number(
+                bodySettings.mudGain
+            );
+
+
+        const bodyRecoveryGain =
+            Number(
+                bodySettings.bodyRecoveryGain
+            );
+
+
+        const safeLowGain =
+            Number.isFinite(
+                lowGain
+            )
+                ? Math.abs(
+                    Math.min(
+                        0,
+                        lowGain
+                    )
+                )
+                : 0;
+
+
+        const safeLowMidGain =
+            Number.isFinite(
+                lowMidGain
+            )
+                ? Math.abs(
+                    Math.min(
+                        0,
+                        lowMidGain
+                    )
+                )
+                : 0;
+
+
+        const safeMudGain =
+            Number.isFinite(
+                mudGain
+            )
+                ? Math.abs(
+                    Math.min(
+                        0,
+                        mudGain
+                    )
+                )
+                : 0;
+
+
+        const safeRecovery =
+            Number.isFinite(
+                bodyRecoveryGain
+            )
+                ? this.clamp(
+                    bodyRecoveryGain,
+                    0,
+                    0.6
+                )
+                : 0;
+
+
+        /*
+         * A recuperação reduz somente uma
+         * pequena parcela da evidência de
+         * sobreposição.
+         *
+         * Ela não desfaz os cortes do Body.
+         */
+
+        const effectiveLow =
+            this.clamp(
+                safeLowGain -
+                (
+                    safeRecovery *
+                    0.30
+                ),
+                0,
+                3
+            );
+
+
+        const effectiveLowMid =
+            this.clamp(
+                safeLowMidGain -
+                (
+                    safeRecovery *
+                    0.20
+                ),
+                0,
+                2.5
+            );
+
+
+        const effectiveMud =
+            this.clamp(
+                safeMudGain -
+                (
+                    safeRecovery *
+                    0.15
+                ),
+                0,
+                2
+            );
+
+
+        /*
+         * Conversão dos tratamentos reais
+         * do Body em fatores de sobreposição.
+         *
+         * Os fatores são deliberadamente
+         * conservadores.
+         */
+
+        const lowOverlap =
+            this.clamp(
+                effectiveLow /
+                3.0,
+                0,
+                1
+            ) *
+            0.75;
+
+
+        const lowMidOverlap =
+            this.clamp(
+                (
+                    (
+                        effectiveLowMid /
+                        2.5
+                    ) *
+                    0.75
+                ) +
+                (
+                    (
+                        effectiveMud /
+                        2.0
+                    ) *
+                    0.25
+                ),
+                0,
+                1
+            );
+
+
+        const midOverlap =
+            this.clamp(
+                (
+                    effectiveMud /
+                    2.0
+                ) *
+                0.35,
+                0,
+                1
+            );
+
+
+        return {
+
+            lowOverlap:
+                this.clamp(
+                    lowOverlap *
+                    this.maxBodyCoordination,
+                    0,
+                    this.maxBodyCoordination
+                ),
+
+            lowMidOverlap:
+                this.clamp(
+                    lowMidOverlap *
+                    this.maxBodyCoordination,
+                    0,
+                    this.maxBodyCoordination
+                ),
+
+            midOverlap:
+                this.clamp(
+                    midOverlap *
+                    this.maxBodyCoordination,
+                    0,
+                    this.maxBodyCoordination
+                ),
+
+            overall:
+                this.clamp(
+                    (
+                        lowOverlap *
+                        0.35
+                    ) +
+                    (
+                        lowMidOverlap *
+                        0.40
+                    ) +
+                    (
+                        midOverlap *
+                        0.25
+                    ),
+                    0,
+                    this.maxBodyCoordination
+                )
+        };
+    }
+
+
+    // ======================================
     // CALCULAR CONFIGURAÇÃO
     // ======================================
 
     calculateSettings(
-        analysis
+        analysis,
+        bodySettings = null
     ) {
 
         if (
@@ -295,7 +585,7 @@ class VocalTone {
 
 
         // ==================================
-        // REDUÇÕES
+        // REDUÇÕES ORIGINAIS
         // ==================================
 
         const lowReductionDb =
@@ -316,6 +606,49 @@ class VocalTone {
             -(
                 midExcess *
                 this.maxMidReductionDb
+            );
+
+
+        // ==================================
+        // COORDENAÇÃO BODY → TONE
+        // ==================================
+
+        const bodyCoordination =
+            this.calculateBodyCoordination(
+                bodySettings
+            );
+
+
+        /*
+         * A redução é proporcional à
+         * atuação original do Tone.
+         *
+         * Portanto, quando o Tone já está
+         * próximo de zero, a coordenação
+         * praticamente não altera nada.
+         */
+
+        const coordinatedLowReductionDb =
+            lowReductionDb *
+            (
+                1 -
+                bodyCoordination.lowOverlap
+            );
+
+
+        const coordinatedLowMidReductionDb =
+            lowMidReductionDb *
+            (
+                1 -
+                bodyCoordination.lowMidOverlap
+            );
+
+
+        const coordinatedMidReductionDb =
+            midReductionDb *
+            (
+                1 -
+                bodyCoordination.midOverlap
             );
 
 
@@ -365,6 +698,19 @@ class VocalTone {
 
             midReductionDb,
 
+            coordinatedLowReductionDb,
+
+            coordinatedLowMidReductionDb,
+
+            coordinatedMidReductionDb,
+
+            bodyCoordinationEnabled:
+                this.bodyCoordinationEnabled,
+
+            bodyCoordination:
+
+                bodyCoordination,
+
             activity
         };
 
@@ -375,13 +721,16 @@ class VocalTone {
 
         return settings;
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
     createProcessor(
         context,
-        analysis
+        analysis,
+        bodySettings = null
     ) {
 
         if (
@@ -396,7 +745,8 @@ class VocalTone {
 
         const settings =
             this.calculateSettings(
-                analysis
+                analysis,
+                bodySettings
             );
 
 
@@ -417,7 +767,7 @@ class VocalTone {
 
 
         lowFilter.gain.value =
-            settings.lowReductionDb;
+            settings.coordinatedLowReductionDb;
 
 
         // ==================================
@@ -441,7 +791,7 @@ class VocalTone {
 
 
         lowMidFilter.gain.value =
-            settings.lowMidReductionDb;
+            settings.coordinatedLowMidReductionDb;
 
 
         // ==================================
@@ -465,7 +815,7 @@ class VocalTone {
 
 
         midFilter.gain.value =
-            settings.midReductionDb;
+            settings.coordinatedMidReductionDb;
 
 
         // ==================================
@@ -512,4 +862,3 @@ class VocalTone {
 
 window.VocalTone =
     VocalTone;
-    

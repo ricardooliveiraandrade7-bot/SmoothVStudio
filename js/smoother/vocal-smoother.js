@@ -1299,7 +1299,8 @@ class VocalSmoother {
             const toneResult =
                 this.tone.createProcessor(
                     context,
-                    analysis
+                    analysis,
+                    this.lastBodySettings
                 );
 
 
@@ -1664,7 +1665,9 @@ class VocalSmoother {
                 this.lastTreatmentPlan,
                 this.createDspSnapshot()
             );
-                    // ==================================
+
+
+        // ==================================
         // 18. CONEXÃO BODY → TONE / DYNAMICS
         // ==================================
         //
@@ -1695,9 +1698,7 @@ class VocalSmoother {
                 compressor
             );
         }
-        
-        
-        // ==================================
+                // ==================================
         // 19. CONEXÃO DYNAMICS → HARSHNESS
         // ==================================
         
@@ -1873,88 +1874,88 @@ class VocalSmoother {
             
             return this.lastTreatmentContractAudit;
         }
-            // ======================================
-    // CONFIGURAÇÃO DINÂMICA
-    // ======================================
-    
-    getLastSettings() {
+                // ======================================
+        // CONFIGURAÇÃO DINÂMICA
+        // ======================================
         
-        return this.lastSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DO BODY
-    // ======================================
-    
-    getLastBodySettings() {
+        getLastSettings() {
+            
+            return this.lastSettings;
+        }
         
-        return this.lastBodySettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DO TONE
-    // ======================================
-    
-    getLastToneSettings() {
         
-        return this.lastToneSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DO HARSHNESS
-    // ======================================
-    
-    getLastHarshnessSettings() {
+        // ======================================
+        // CONFIGURAÇÃO DO BODY
+        // ======================================
         
-        return this.lastHarshnessSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DA SATURAÇÃO
-    // ======================================
-    
-    getLastSaturationSettings() {
+        getLastBodySettings() {
+            
+            return this.lastBodySettings;
+        }
         
-        return this.lastSaturationSettings;
-    }
-    
-    
-    // ======================================
-    // CONFIGURAÇÃO DA SIBILÂNCIA
-    // ======================================
-    
-    getLastSibilanceSettings() {
         
-        return this.lastSibilanceSettings;
-    }
-    
-    
-    // ======================================
-    // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Retorna uma cópia consolidada dos
-    // parâmetros efetivamente armazenados
-    // pelos módulos DSP.
-    //
-    // ======================================
-    
-    getLastDspSnapshot() {
+        // ======================================
+        // CONFIGURAÇÃO DO TONE
+        // ======================================
         
-        return this.createDspSnapshot();
-    }
-    }
-    
-    
-    // ==========================================
-    // DISPONIBILIZAR GLOBALMENTE
-    // ==========================================
-    
-    window.VocalSmoother =
-        VocalSmoother;
+        getLastToneSettings() {
+            
+            return this.lastToneSettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DO HARSHNESS
+        // ======================================
+        
+        getLastHarshnessSettings() {
+            
+            return this.lastHarshnessSettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DA SATURAÇÃO
+        // ======================================
+        
+        getLastSaturationSettings() {
+            
+            return this.lastSaturationSettings;
+        }
+        
+        
+        // ======================================
+        // CONFIGURAÇÃO DA SIBILÂNCIA
+        // ======================================
+        
+        getLastSibilanceSettings() {
+            
+            return this.lastSibilanceSettings;
+        }
+        
+        
+        // ======================================
+        // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
+        // ======================================
+        //
+        // SOMENTE OBSERVAÇÃO.
+        //
+        // Retorna uma cópia consolidada dos
+        // parâmetros efetivamente armazenados
+        // pelos módulos DSP.
+        //
+        // ======================================
+        
+        getLastDspSnapshot() {
+            
+            return this.createDspSnapshot();
+        }
+        }
+        
+        
+        // ==========================================
+        // DISPONIBILIZAR GLOBALMENTE
+        // ==========================================
+        
+        window.VocalSmoother =
+            VocalSmoother;
