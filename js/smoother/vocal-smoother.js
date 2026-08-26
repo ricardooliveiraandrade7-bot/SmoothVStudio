@@ -1395,45 +1395,73 @@ class VocalSmoother {
             false;
 
 
+       if (
+    this.harshness &&
+    typeof this.harshness.createProcessor ===
+    "function"
+) {
+    
+    try {
+        
+        const harshnessResult =
+            this.harshness.createProcessor(
+                context,
+                analysis
+            );
+        
+        
+        this.lastHarshnessSettings =
+            harshnessResult &&
+            harshnessResult.settings ?
+            harshnessResult.settings :
+            null;
+        
+        
         if (
-            this.harshness &&
-            typeof this.harshness.createProcessor ===
-            "function"
+            harshnessResult &&
+            harshnessResult.input &&
+            harshnessResult.output
         ) {
-
-            const harshnessResult =
-                this.harshness.createProcessor(
-                    context,
-                    analysis
-                );
-
-
-            this.lastHarshnessSettings =
-                harshnessResult &&
-                harshnessResult.settings
-                    ? harshnessResult.settings
-                    : null;
-
-
-            if (
-                harshnessResult &&
-                harshnessResult.input &&
-                harshnessResult.output
-            ) {
-
-                harshnessInput =
-                    harshnessResult.input;
-
-
-                harshnessOutput =
-                    harshnessResult.output;
-
-
-                harshnessActive =
-                    harshnessInput !==
-                    harshnessOutput;
-            }
+            
+            harshnessInput =
+                harshnessResult.input;
+            
+            
+            harshnessOutput =
+                harshnessResult.output;
+            
+            
+            harshnessActive =
+                harshnessInput !==
+                harshnessOutput;
         }
+        
+    } catch (
+        error
+    ) {
+        
+        console.warn(
+            "VocalHarshness indisponível nesta execução:",
+            error
+        );
+        
+        
+        this.lastHarshnessSettings =
+            null;
+        
+        
+        harshnessInput =
+            null;
+        
+        
+        harshnessOutput =
+            compressor;
+        
+        
+        harshnessActive =
+            false;
+    }
+}
 
 
         // ==================================
