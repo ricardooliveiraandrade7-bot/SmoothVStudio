@@ -839,11 +839,6 @@ class VocalHarshness {
         //
         // ==================================
 
-        input.connect(
-            output
-        );
-
-
         // ==================================
         // SE NÃO HOUVER EVIDÊNCIA
         // ==================================
@@ -851,21 +846,24 @@ class VocalHarshness {
         // O módulo permanece transparente.
         //
         // ==================================
-
+        
         if (
             !settings.active
         ) {
-
+            
+            input.connect(
+                output
+            );
+            
             return {
-
+                
                 input,
-
+                
                 output,
-
+                
                 settings
             };
         }
-
 
         // ==================================
         // FILTRO PEAKING
