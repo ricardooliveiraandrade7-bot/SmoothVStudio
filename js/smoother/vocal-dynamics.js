@@ -24,6 +24,7 @@ class VocalDynamics {
 
     constructor(options = {}) {
 
+
         this.version =
             "0.1";
 
@@ -92,61 +93,234 @@ class VocalDynamics {
         }
 
 
+        // ==================================
+        // MÉTRICAS DINÂMICAS EXISTENTES
+        // ==================================
+        //
+        // O VocalAnalyzer já fornece:
+        //
+        // - rmsDb
+        // - peakDb
+        //
+        // A diferença entre pico e RMS
+        // fornece um indicador simples da
+        // dinâmica/crest factor do sinal.
+        //
+        // Não criamos uma nova infraestrutura
+        // de análise.
+        //
+        // ==================================
+
+        const rmsDb =
+            Number(
+                analysis.rmsDb
+            );
+
+
+        const peakDb =
+            Number(
+                analysis.peakDb
+            );
+
+
+        const hasValidRms =
+            Number.isFinite(
+                rmsDb
+            );
+
+
+        const hasValidPeak =
+            Number.isFinite(
+                peakDb
+            );
+
+
+        let dynamicScore =
+            0;
+
+
+        if (
+            hasValidRms &&
+            hasValidPeak
+        ) {
+
+            /*
+             * Crest factor aproximado:
+             *
+             * peakDb - rmsDb
+             *
+             * Uma faixa conservadora é
+             * utilizada para evitar que
+             * pequenos desvios de nível
+             * produzam grandes mudanças
+             * na compressão.
+             *
+             * ~6 dB  = dinâmica baixa
+             * ~18 dB = dinâmica alta
+             */
+
+            const crestDb =
+                this.clamp(
+                    peakDb -
+                    rmsDb,
+                    0,
+                    30
+                );
+
+
+            dynamicScore =
+                this.clamp(
+                    (
+                        crestDb -
+                        6
+                    ) /
+                    12,
+                    0,
+                    1
+                );
+        }
+
+
+        // ==================================
+        // CARACTERÍSTICAS AUXILIARES
+        // ==================================
+        //
+        // Hardness, roughness e sibilance
+        // deixam de ser o motor principal.
+        //
+        // Elas permanecem somente como
+        // influência secundária e limitada,
+        // preservando parte do comportamento
+        // anterior sem transformar o Dynamics
+        // em extensão dos módulos especializados.
+        //
+        // ==================================
+
+        const characteristics =
+            analysis.characteristics ||
+            {};
+
+
+        const hardnessValue =
+            Number(
+                characteristics.hardness
+            );
+
+
+        const roughnessValue =
+            Number(
+                characteristics.roughness
+            );
+
+
+        const sibilanceValue =
+            Number(
+                characteristics.sibilance
+            );
+
+
         const hardness =
-            analysis.characteristics
-                .hardness;
+            Number.isFinite(
+                hardnessValue
+            )
+                ? this.clamp(
+                    hardnessValue,
+                    0,
+                    1
+                )
+                : 0;
 
 
         const roughness =
-            analysis.characteristics
-                .roughness;
+            Number.isFinite(
+                roughnessValue
+            )
+                ? this.clamp(
+                    roughnessValue,
+                    0,
+                    1
+                )
+                : 0;
 
 
         const sibilance =
-            analysis.characteristics
-                .sibilance;
+            Number.isFinite(
+                sibilanceValue
+            )
+                ? this.clamp(
+                    sibilanceValue,
+                    0,
+                    1
+                )
+                : 0;
 
 
-        /*
-         * Quanto mais agressivo o vocal,
-         * maior a intensidade de controle
-         * dinâmico.
-         *
-         * A adaptação permanece baseada
-         * exclusivamente na análise existente.
-         *
-         * Os limites foram reduzidos para
-         * preservar melhor a dinâmica natural
-         * e evitar compressão excessiva.
-         */
+        const auxiliaryScore =
+            this.clamp(
+                (
+                    hardness *
+                    0.45
+                ) +
+                (
+                    roughness *
+                    0.30
+                ) +
+                (
+                    sibilance *
+                    0.25
+                ),
+                0,
+                1
+            );
+                    // ==================================
+        // INTENSIDADE FINAL
+        // ==================================
+        //
+        // A dinâmica real do sinal é agora
+        // o principal responsável.
+        //
+        // 90% = dinâmica observada
+        // 10% = características auxiliares
+        //
+        // Dessa forma:
+        //
+        // vocal estável
+        //     -> pouca compressão
+        //
+        // vocal moderadamente variável
+        //     -> controle suave
+        //
+        // vocal com grandes picos
+        //     -> controle progressivo
+        //
+        // ==================================
 
         const intensity =
             this.clamp(
                 (
-                    hardness * 0.45
+                    dynamicScore *
+                    0.90
                 ) +
                 (
-                    roughness * 0.30
-                ) +
-                (
-                    sibilance * 0.25
+                    auxiliaryScore *
+                    0.10
                 ),
                 0,
                 1
             );
 
 
-        /*
-         * Threshold adaptativo:
-         *
-         * intensidade baixa  = -8 dB
-         * intensidade alta  = -20 dB
-         *
-         * O compressor pode atuar mais cedo
-         * quando existe maior evidência de
-         * agressividade, mas sem retornar aos
-         * limites anteriores de até -30 dB.
-         */
+        // ==================================
+        // THRESHOLD ADAPTATIVO
+        // ==================================
+        //
+        // intensidade baixa  = -8 dB
+        // intensidade alta   = -20 dB
+        //
+        // Mantém os limites conservadores
+        // já utilizados pelo módulo.
+        //
+        // ==================================
 
         const threshold =
             -8 -
@@ -156,16 +330,14 @@ class VocalDynamics {
             );
 
 
-        /*
-         * Ratio adaptativo:
-         *
-         * intensidade baixa  = 1.2:1
-         * intensidade alta  = 2.0:1
-         *
-         * Mantém o controle progressivo sem
-         * chegar à compressão mais agressiva
-         * da versão anterior.
-         */
+        // ==================================
+        // RATIO ADAPTATIVO
+        // ==================================
+        //
+        // intensidade baixa  = 1.2:1
+        // intensidade alta   = 2.0:1
+        //
+        // ==================================
 
         const ratio =
             1.2 +
@@ -175,19 +347,18 @@ class VocalDynamics {
             );
 
 
-        /*
-         * Attack adaptativo:
-         *
-         * intensidade baixa  = 35 ms
-         * intensidade alta  = 15 ms
-         *
-         * Ataques mais lentos preservam melhor
-         * o início natural das palavras quando
-         * o controle dinâmico necessário é baixo.
-         *
-         * Quando a agressividade aumenta,
-         * o ataque pode responder mais rapidamente.
-         */
+        // ==================================
+        // ATTACK ADAPTATIVO
+        // ==================================
+        //
+        // intensidade baixa  = 35 ms
+        // intensidade alta   = 15 ms
+        //
+        // Ataques mais lentos preservam
+        // melhor o início natural das palavras
+        // quando o controle necessário é baixo.
+        //
+        // ==================================
 
         const attack =
             0.015 +
@@ -200,16 +371,14 @@ class VocalDynamics {
             );
 
 
-        /*
-         * Release adaptativo:
-         *
-         * intensidade baixa  = 180 ms
-         * intensidade alta  = 90 ms
-         *
-         * Releases mais longos em situações
-         * leves ajudam a evitar bombeamento
-         * perceptível.
-         */
+        // ==================================
+        // RELEASE ADAPTATIVO
+        // ==================================
+        //
+        // intensidade baixa  = 180 ms
+        // intensidade alta   = 90 ms
+        //
+        // ==================================
 
         const release =
             0.090 +
@@ -222,16 +391,14 @@ class VocalDynamics {
             );
 
 
-        /*
-         * Knee suave:
-         *
-         * intensidade baixa  = 18 dB
-         * intensidade alta  = 26 dB
-         *
-         * Mantém uma transição gradual para
-         * evitar uma entrada abrupta na
-         * compressão.
-         */
+        // ==================================
+        // KNEE ADAPTATIVO
+        // ==================================
+        //
+        // intensidade baixa  = 18 dB
+        // intensidade alta   = 26 dB
+        //
+        // ==================================
 
         const knee =
             18 +
@@ -253,12 +420,25 @@ class VocalDynamics {
 
             knee,
 
-            intensity
+            intensity,
+
+            dynamicScore,
+
+            auxiliaryScore,
+
+            crestDb:
+                hasValidRms &&
+                hasValidPeak
+                    ? this.clamp(
+                        peakDb -
+                        rmsDb,
+                        0,
+                        30
+                    )
+                    : null
         };
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
