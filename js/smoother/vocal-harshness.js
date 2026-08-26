@@ -263,6 +263,36 @@ class VocalHarshness {
 
 
         // ==================================
+        // Q ADAPTATIVO
+        // ==================================
+        //
+        // Mantém o Q base próximo do valor
+        // anterior.
+        //
+        // Com evidência forte, a banda fica
+        // ligeiramente mais seletiva para
+        // reduzir a possibilidade de remover
+        // presença adjacente.
+        //
+        // ==================================
+
+        this.minBandQ =
+            Number.isFinite(
+                options.minBandQ
+            )
+                ? options.minBandQ
+                : 1.05;
+
+
+        this.maxBandQ =
+            Number.isFinite(
+                options.maxBandQ
+            )
+                ? options.maxBandQ
+                : 1.30;
+
+
+        // ==================================
         // ESTADO
         // ==================================
 
@@ -394,6 +424,50 @@ class VocalHarshness {
 
 
     // ======================================
+    // CURVA DE ATIVIDADE
+    // ======================================
+    //
+    // Suaviza a transição próxima ao limiar
+    // de ativação.
+    //
+    // A resposta continua:
+    //
+    // baixa evidência → baixa atuação
+    // evidência moderada → atuação progressiva
+    // evidência forte → aproximação do máximo
+    //
+    // ======================================
+
+   shapeActivity(
+        value
+    ) {
+
+        const normalized =
+            this.clamp(
+                this.number(
+                    value,
+                    0
+                ),
+                0,
+                1
+            );
+
+
+        return (
+            normalized *
+            normalized *
+            (
+                3 -
+                (
+                    2 *
+                    normalized
+                )
+            )
+        );
+    }
+
+
+    // ======================================
     // CALCULAR EVIDÊNCIA
     // ======================================
 
@@ -476,26 +550,30 @@ class VocalHarshness {
     // O centro permanece dentro da região
     // de harshness.
     //
-    // Não tenta identificar uma frequência
-    // nova através da inteligência.
-    //
-    // É apenas adaptação do executor.
+    // A adaptação é deliberadamente limitada.
     //
     // ======================================
 
     calculateFrequency(
-        evidenceData
+        evidenceData,
+        activity = 1
     ) {
 
         const hardness =
-            evidenceData.hardness;
+            this.number(
+                evidenceData.hardness,
+                0
+            );
 
 
         const roughness =
-            evidenceData.roughness;
+            this.number(
+                evidenceData.roughness,
+                0
+            );
 
 
-        const offset =
+        const rawOffset =
             (
                 hardness -
                 roughness
@@ -503,11 +581,50 @@ class VocalHarshness {
             500;
 
 
+        const stabilizedOffset =
+            rawOffset *
+            this.clamp(
+                activity,
+                0,
+                1
+            );
+
+
         return this.clamp(
             this.defaultFrequency +
-                offset,
+                stabilizedOffset,
             this.minFrequency,
             this.maxFrequency
+        );
+    }
+
+
+    // ======================================
+    // CALCULAR Q
+    // ======================================
+
+    calculateBandQ(
+        activity
+    ) {
+
+        const normalized =
+            this.clamp(
+                this.number(
+                    activity,
+                    0
+                ),
+                0,
+                1
+            );
+
+
+        return (
+            this.minBandQ +
+            (
+                this.maxBandQ -
+                this.minBandQ
+            ) *
+            normalized
         );
     }
 
@@ -530,7 +647,7 @@ class VocalHarshness {
             evidenceData.evidence;
 
 
-        const activity =
+        const rawActivity =
             this.clamp(
                 (
                     evidence -
@@ -543,6 +660,12 @@ class VocalHarshness {
                 ),
                 0,
                 1
+            );
+
+
+        const activity =
+            this.shapeActivity(
+                rawActivity
             );
 
 
@@ -575,7 +698,14 @@ class VocalHarshness {
 
         const frequency =
             this.calculateFrequency(
-                evidenceData
+                evidenceData,
+                activity
+            );
+
+
+        const bandQ =
+            this.calculateBandQ(
+                activity
             );
 
 
@@ -611,8 +741,7 @@ class VocalHarshness {
             knee:
                 this.knee,
 
-            bandQ:
-                this.bandQ,
+            bandQ,
 
             reductionDb,
 
@@ -647,7 +776,9 @@ class VocalHarshness {
                 "none"
         };
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -739,9 +870,6 @@ class VocalHarshness {
         // ==================================
         // FILTRO PEAKING
         // ==================================
-        //
-        // Esta é a principal alteração desta
-        // tentativa.
         //
         // O tratamento é aplicado diretamente
         // em série no sinal.
