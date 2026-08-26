@@ -303,9 +303,9 @@ class VocalSaturation {
             0.92
         );
     }
+            // ======================================
+        // LER POSSÍVEL RMS DA ANÁLISE
         // ======================================
-    // LER POSSÍVEL RMS DA ANÁLISE
-    // ======================================
 
     resolveAnalysisLevel(
         analysis
@@ -320,6 +320,64 @@ class VocalSaturation {
             return 0.35;
         }
 
+
+        // ==================================
+        // RMS REAL DO VOCAL ANALYZER
+        // ==================================
+        //
+        // O Analyzer já fornece rmsDb.
+        //
+        // Utilizamos essa métrica como
+        // primeira fonte de nível.
+        //
+        // Conversão:
+        //
+        // dBFS → amplitude linear
+        //
+        // Isso evita criar uma nova
+        // infraestrutura de análise.
+        //
+        // ==================================
+
+        const rmsDb =
+            Number(
+                analysis.rmsDb
+            );
+
+
+        if (
+            Number.isFinite(
+                rmsDb
+            ) &&
+            rmsDb <= 0
+        ) {
+
+            const linearRms =
+                Math.pow(
+                    10,
+                    rmsDb /
+                    20
+                );
+
+
+            return this.clamp(
+                linearRms,
+                0,
+                1
+            );
+        }
+
+
+        // ==================================
+        // FALLBACKS COMPATÍVEIS
+        // ==================================
+        //
+        // Mantidos para preservar
+        // compatibilidade com possíveis
+        // consumidores que forneçam
+        // outra representação de nível.
+        //
+        // ==================================
 
         const candidates = [
 
@@ -536,9 +594,7 @@ class VocalSaturation {
 
         return shaper;
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR FILTRO REGIONAL
     // ======================================
 
@@ -590,7 +646,9 @@ class VocalSaturation {
 
         return filter;
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR GANHO REGIONAL
     // ======================================
 
@@ -831,9 +889,7 @@ class VocalSaturation {
             1
         );
     }
-
-
-    // ======================================
+        // ======================================
     // CONFIGURAÇÃO COMPLETA
     // ======================================
 
@@ -889,7 +945,9 @@ class VocalSaturation {
                 regionSettings
         };
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -1105,9 +1163,7 @@ class VocalSaturation {
                     : []
         };
     }
-
-
-    // ======================================
+        // ======================================
     // RESET
     // ======================================
 
@@ -1116,7 +1172,9 @@ class VocalSaturation {
         this.lastSettings =
             null;
     }
-        // ======================================
+
+
+    // ======================================
     // ATUALIZAR PARÂMETROS DE UMA REGIÃO
     // ======================================
     //
@@ -1396,9 +1454,7 @@ class VocalSaturation {
 
         this.regions.highMid.drive =
             0.035;
-
-
-        this.regions.highMid.mix =
+                    this.regions.highMid.mix =
             0.050;
 
 
@@ -1409,7 +1465,9 @@ class VocalSaturation {
         this.regions.high.mix =
             0.030;
     }
-        // ======================================
+
+
+    // ======================================
     // CONFIGURAÇÃO PADRÃO
     // ======================================
 
