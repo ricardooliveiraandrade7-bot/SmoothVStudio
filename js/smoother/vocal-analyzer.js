@@ -1724,34 +1724,115 @@ class VocalAnalyzer {
         // CARACTERÍSTICAS
         // ==================================
 
+                const spectralCore =
+            body +
+            lowMid +
+            mid +
+            presence +
+            0.000001;
+        
+        
+        const presenceCoreRatio =
+            this.clamp(
+                presence /
+                spectralCore,
+                0,
+                1
+            );
+        
+        
+        const midCore =
+            lowMid +
+            mid +
+            0.000001;
+        
+        
+        const presenceToMid =
+            this.clamp(
+                presence /
+                midCore,
+                0,
+                2
+            );
+        
+        
+        const presenceContrast =
+            this.clamp(
+                (
+                    presenceToMid -
+                    0.35
+                ) /
+                0.90,
+                0,
+                1
+            );
+        
+        
+        /*
+         * HARDNESS
+         *
+         * A presença isolada não é considerada
+         * automaticamente como dureza.
+         *
+         * O score considera:
+         *
+         * - predominância da presença dentro
+         *   do núcleo espectral;
+         * - contraste entre presença e médios;
+         * - pequena influência da proporção
+         *   global já existente.
+         *
+         * Isso evita que simples presença
+         * legítima seja interpretada como
+         * agressividade.
+         */
+        
         const hardness =
             this.clamp(
                 (
-                    presenceRatio *
-                    4.5
-                ) -
+                    presenceCoreRatio *
+                    0.45
+                ) +
                 (
-                    bodyRatio *
-                    0.8
+                    presenceContrast *
+                    0.40
+                ) +
+                (
+                    presenceRatio *
+                    0.15
                 ),
                 0,
                 1
             );
-
-
+        
+        
+        /*
+         * ROUGHNESS
+         *
+         * Roughness não utiliza mais
+         * sibilanceRatio diretamente.
+         *
+         * A sibilância possui seu próprio
+         * modelo espectral + temporal.
+         *
+         * Aqui buscamos uma indicação mais
+         * conservadora de concentração
+         * médio-aguda e contraste espectral.
+         */
+        
         const roughness =
             this.clamp(
                 (
-                    presenceRatio *
-                    2.5
+                    presenceCoreRatio *
+                    0.35
                 ) +
                 (
-                    sibilanceRatio *
-                    2.5
+                    presenceContrast *
+                    0.45
                 ) +
                 (
                     airRatio *
-                    0.8
+                    0.20
                 ),
                 0,
                 1
