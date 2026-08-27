@@ -500,9 +500,7 @@ class VocalSmoother {
 
         return null;
     }
-
-
-    // ======================================
+        // ======================================
     // MEDIÇÃO ESPECTRAL REGIONAL
     // ======================================
     //
@@ -958,9 +956,7 @@ class VocalSmoother {
                 "none"
         };
     }
-
-
-    // ======================================
+        // ======================================
     // AUDITAR TREATMENT PLAN ↔ DSP
     // ======================================
 
@@ -1140,6 +1136,84 @@ class VocalSmoother {
 
 
         // ==================================
+        // OBSERVAÇÃO DO SPECTRAL PROFILE
+        // ==================================
+        //
+        // SOMENTE DIAGNÓSTICO.
+        //
+        // Este bloco não altera:
+        //
+        // - AudioBuffer;
+        // - parâmetros DSP;
+        // - Treatment Plan;
+        // - decisões;
+        // - cadeia de processamento.
+        //
+        // Ele apenas expõe no console
+        // as evidências produzidas pelo
+        // SpectralProfile para validação.
+        //
+        // ==================================
+
+        if (
+            this.lastSpectralProfile
+        ) {
+
+            const profile =
+                this.lastSpectralProfile;
+
+
+            console.log(
+                "[SmoothVStudio][Spectral Profile] Profile observation:",
+                {
+
+                    confidence:
+                        profile.confidence ??
+                        0,
+
+                    stableBands:
+                        profile.stableBands ??
+                        0,
+
+                    closestReference:
+                        profile.closestReference ??
+                        "unknown",
+
+                    referenceSeparationDb:
+                        profile.referenceSeparationDb ??
+                        0,
+
+                    ambiguous:
+                        profile.ambiguous ??
+                        true,
+
+                    tonalTendency:
+                        profile.tonalTendency ??
+                        "unknown",
+
+                    tonalConfidence:
+                        profile.tonalConfidence ??
+                        0,
+
+                    spectralTilt:
+                        profile.spectralTilt ??
+                        null,
+
+                    upperContentEvidence:
+                        profile.upperContentEvidence ??
+                        null
+                }
+            );
+
+        } else {
+
+            console.warn(
+                "[SmoothVStudio][Spectral Profile] Profile unavailable."
+            );
+        }
+
+
+        // ==================================
         // 4. CONTEXTO ESPECTRAL INICIAL
         // ==================================
 
@@ -1255,9 +1329,7 @@ class VocalSmoother {
                 "VocalBody não retornou uma cadeia de áudio válida."
             );
         }
-
-
-        // ==================================
+                // ==================================
         // 12. VOCAL TONE
         // ==================================
 
@@ -1395,73 +1467,73 @@ class VocalSmoother {
             false;
 
 
-       if (
-    this.harshness &&
-    typeof this.harshness.createProcessor ===
-    "function"
-) {
-    
-    try {
-        
-        const harshnessResult =
-            this.harshness.createProcessor(
-                context,
-                analysis
-            );
-        
-        
-        this.lastHarshnessSettings =
-            harshnessResult &&
-            harshnessResult.settings ?
-            harshnessResult.settings :
-            null;
-        
-        
         if (
-            harshnessResult &&
-            harshnessResult.input &&
-            harshnessResult.output
+            this.harshness &&
+            typeof this.harshness.createProcessor ===
+            "function"
         ) {
-            
-            harshnessInput =
-                harshnessResult.input;
-            
-            
-            harshnessOutput =
-                harshnessResult.output;
-            
-            
-            harshnessActive =
-                harshnessInput !==
-                harshnessOutput;
+
+            try {
+
+                const harshnessResult =
+                    this.harshness.createProcessor(
+                        context,
+                        analysis
+                    );
+
+
+                this.lastHarshnessSettings =
+                    harshnessResult &&
+                    harshnessResult.settings ?
+                    harshnessResult.settings :
+                    null;
+
+
+                if (
+                    harshnessResult &&
+                    harshnessResult.input &&
+                    harshnessResult.output
+                ) {
+
+                    harshnessInput =
+                        harshnessResult.input;
+
+
+                    harshnessOutput =
+                        harshnessResult.output;
+
+
+                    harshnessActive =
+                        harshnessInput !==
+                        harshnessOutput;
+                }
+
+            } catch (
+                error
+            ) {
+
+                console.warn(
+                    "VocalHarshness indisponível nesta execução:",
+                    error
+                );
+
+
+                this.lastHarshnessSettings =
+                    null;
+
+
+                harshnessInput =
+                    null;
+
+
+                harshnessOutput =
+                    compressor;
+
+
+                harshnessActive =
+                    false;
+            }
         }
-        
-    } catch (
-        error
-    ) {
-        
-        console.warn(
-            "VocalHarshness indisponível nesta execução:",
-            error
-        );
-        
-        
-        this.lastHarshnessSettings =
-            null;
-        
-        
-        harshnessInput =
-            null;
-        
-        
-        harshnessOutput =
-            compressor;
-        
-        
-        harshnessActive =
-            false;
-    }
-}
 
 
         // ==================================
@@ -1637,72 +1709,70 @@ class VocalSmoother {
                     false;
             }
         }
-
-
-        // ==================================
+                // ==================================
         // 17. AUDITORIA OBSERVACIONAL
         // ==================================
-
+        
         this.lastTreatmentContractAudit =
             this.createTreatmentContractAudit(
                 this.lastTreatmentPlan,
                 this.createDspSnapshot()
             );
-
-
+        
+        
         // ==================================
         // 18. BODY → TONE / DYNAMICS
         // ==================================
-
+        
         if (
             toneActive
         ) {
-
+            
             bodyOutput.connect(
                 toneInput
             );
-
-
+            
+            
             toneOutput.connect(
                 compressor
             );
-
+            
         } else {
-
+            
             bodyOutput.connect(
                 compressor
             );
         }
-
-
+        
+        
         // ==================================
         // 19. DYNAMICS → HARSHNESS
         // ==================================
-
+        
         if (
             harshnessActive
         ) {
-
+            
             compressor.connect(
                 harshnessInput
             );
         }
-
-
+        
+        
         // ==================================
         // 20. HARSHNESS → SIBILANCE
         // ==================================
-
+        
         if (
             sibilanceInput
         ) {
-
+            
             harshnessOutput.connect(
                 sibilanceInput
             );
         }
-
-
+        
+        
         // ==================================
         // 21. SIBILANCE → SATURATION
         // ==================================
@@ -1711,17 +1781,17 @@ class VocalSmoother {
         // a saída da etapa Sibilance.
         //
         // ==================================
-
+        
         if (
             saturationInput
         ) {
-
+            
             sibilanceOutput.connect(
                 saturationInput
             );
         }
-
-
+        
+        
         // ==================================
         // 22. SAÍDA FINAL
         // ==================================
@@ -1729,192 +1799,190 @@ class VocalSmoother {
         // Saturation é o último estágio DSP.
         //
         // ==================================
-
+        
         saturationOutput.connect(
             context.destination
         );
-
-
+        
+        
         // ==================================
         // 23. SOURCE → BODY
         // ==================================
-
+        
         source.connect(
             bodyInput
         );
-
-
+        
+        
         // ==================================
         // 24. INICIAR
         // ==================================
-
+        
         source.start(
             0
         );
-
-
+        
+        
         // ==================================
         // 25. RENDER
         // ==================================
-
+        
         const result =
             await context.startRendering();
-
-
+        
+        
         return result;
-    }
-
-
-    // ======================================
-    // ÚLTIMA ANÁLISE
-    // ======================================
-
-    getLastAnalysis() {
-
-        return this.lastAnalysis;
-    }
-
-
-    // ======================================
-    // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
-    // ======================================
-
-    getLastSpectralRegionalMeasurement() {
-
-        return this.lastSpectralRegionalMeasurement;
-    }
-
-
-    // ======================================
-    // RESUMO DA MEDIÇÃO REGIONAL
-    // ======================================
-
-    getLastSpectralRegionalSummary() {
-
-        return this.lastSpectralRegionalSummary;
-    }
-
-
-    // ======================================
-    // ÚLTIMO PERFIL ESPECTRAL
-    // ======================================
-
-    getLastSpectralProfile() {
-
-        return this.lastSpectralProfile;
-    }
-
-
-    // ======================================
-    // ÚLTIMO CONTEXTO ESPECTRAL
-    // ======================================
-
-    getLastSpectralContext() {
-
-        return this.lastSpectralContext;
-    }
-
-
-    // ======================================
-    // ÚLTIMO DIAGNÓSTICO ESPECTRAL
-    // ======================================
-
-    getLastSpectralDiagnostic() {
-
-        return this.lastSpectralDiagnostic;
-    }
-
-
-    // ======================================
-    // ÚLTIMO PLANO DE TRATAMENTO
-    // ======================================
-
-    getLastTreatmentPlan() {
-
-        return this.lastTreatmentPlan;
-    }
-
-
-    // ======================================
-    // ÚLTIMA DECISÃO DO PIPELINE
-    // ======================================
-
-    getLastTreatmentDecisionPipeline() {
-
-        return this.lastTreatmentDecisionPipeline;
-    }
-
-
-    // ======================================
-    // ÚLTIMA AUDITORIA DO CONTRATO
-    // ======================================
-
-    getLastTreatmentContractAudit() {
-
-        return this.lastTreatmentContractAudit;
-    }
-
-
-    // ======================================
+        }
+        
+        
+        // ======================================
+        // ÚLTIMA ANÁLISE
+        // ======================================
+        
+        getLastAnalysis() {
+            
+            return this.lastAnalysis;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
+        // ======================================
+        
+        getLastSpectralRegionalMeasurement() {
+            
+            return this.lastSpectralRegionalMeasurement;
+        }
+        
+        
+        // ======================================
+        // RESUMO DA MEDIÇÃO REGIONAL
+        // ======================================
+        
+        getLastSpectralRegionalSummary() {
+            
+            return this.lastSpectralRegionalSummary;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO PERFIL ESPECTRAL
+        // ======================================
+        
+        getLastSpectralProfile() {
+            
+            return this.lastSpectralProfile;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO CONTEXTO ESPECTRAL
+        // ======================================
+        
+        getLastSpectralContext() {
+            
+            return this.lastSpectralContext;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO DIAGNÓSTICO ESPECTRAL
+        // ======================================
+        
+        getLastSpectralDiagnostic() {
+            
+            return this.lastSpectralDiagnostic;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMO PLANO DE TRATAMENTO
+        // ======================================
+        
+        getLastTreatmentPlan() {
+            
+            return this.lastTreatmentPlan;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMA DECISÃO DO PIPELINE
+        // ======================================
+        
+        getLastTreatmentDecisionPipeline() {
+            
+            return this.lastTreatmentDecisionPipeline;
+        }
+        
+        
+        // ======================================
+        // ÚLTIMA AUDITORIA DO CONTRATO
+        // ======================================
+        
+        getLastTreatmentContractAudit() {
+            
+            return this.lastTreatmentContractAudit;
+        }
+            // ======================================
     // CONFIGURAÇÃO DINÂMICA
     // ======================================
-
+    
     getLastSettings() {
-
+        
         return this.lastSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DO BODY
     // ======================================
-
+    
     getLastBodySettings() {
-
+        
         return this.lastBodySettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DO TONE
     // ======================================
-
+    
     getLastToneSettings() {
-
+        
         return this.lastToneSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DO HARSHNESS
     // ======================================
-
+    
     getLastHarshnessSettings() {
-
+        
         return this.lastHarshnessSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DA SIBILÂNCIA
     // ======================================
-
+    
     getLastSibilanceSettings() {
-
+        
         return this.lastSibilanceSettings;
     }
-
-
+    
+    
     // ======================================
     // CONFIGURAÇÃO DA SATURAÇÃO
     // ======================================
-
+    
     getLastSaturationSettings() {
-
+        
         return this.lastSaturationSettings;
     }
-
-
+    
+    
     // ======================================
     // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
     // ======================================
@@ -1922,17 +1990,17 @@ class VocalSmoother {
     // SOMENTE OBSERVAÇÃO.
     //
     // ======================================
-
+    
     getLastDspSnapshot() {
-
+        
         return this.createDspSnapshot();
     }
-}
-
-
-// ==========================================
-// DISPONIBILIZAR GLOBALMENTE
-// ==========================================
-
-window.VocalSmoother =
-    VocalSmoother;
+    }
+    
+    
+    // ==========================================
+    // DISPONIBILIZAR GLOBALMENTE
+    // ==========================================
+    
+    window.VocalSmoother =
+        VocalSmoother;
