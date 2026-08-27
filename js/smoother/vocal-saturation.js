@@ -1,13 +1,13 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL SATURATION
-// V1.1
+// V1.2
 // ==========================================
 //
 // Executor DSP dedicado à reconstrução
 // harmônica vocal moderada.
 //
-// V1.1:
+// V1.2:
 //
 // - preserva caminho DRY integral;
 // - adiciona saturação em paralelo;
@@ -16,7 +16,10 @@
 // - evita substituir o vocal original;
 // - mantém dinâmica original como base;
 // - não consulta inteligência;
-// - não altera decisões do projeto.
+// - não altera decisões do projeto;
+// - utiliza oversampling 4x;
+// - utiliza curva arctan com assimetria
+//   harmônica mínima e controlada.
 //
 // REGIÕES:
 //
@@ -59,7 +62,7 @@ class VocalSaturation {
 
 
         this.version =
-            "1.1";
+            "1.2";
 
 
         // ==================================
@@ -71,7 +74,7 @@ class VocalSaturation {
                 options.maxDrive
             )
                 ? options.maxDrive
-                : 0.16;
+                : 0.18;
 
 
         this.maxMix =
@@ -88,6 +91,41 @@ class VocalSaturation {
             )
                 ? options.outputTrim
                 : 0.985;
+
+
+        // ==================================
+        // ASSIMETRIA HARMÔNICA
+        // ==================================
+        //
+        // A curva continua baseada em arctan.
+        //
+        // A assimetria adiciona uma quantidade
+        // extremamente pequena de componente
+        // par à não-linearidade.
+        //
+        // O termo utilizado possui média
+        // teórica nula no intervalo [-1, 1],
+        // reduzindo o risco de introdução
+        // deliberada de deslocamento DC.
+        //
+        // Não representa modelagem de um
+        // microfone específico.
+        //
+        // É apenas uma coloração harmônica
+        // conservadora.
+        //
+        // ==================================
+
+        this.harmonicAsymmetry =
+            Number.isFinite(
+                options.harmonicAsymmetry
+            )
+                ? this.clamp(
+                    options.harmonicAsymmetry,
+                    0,
+                    0.08
+                )
+                : 0.025;
 
 
         // ==================================
@@ -136,7 +174,7 @@ class VocalSaturation {
                     110,
 
                 drive:
-                    0.055,
+                    0.065,
 
                 mix:
                     0.080
@@ -155,7 +193,7 @@ class VocalSaturation {
                     320,
 
                 drive:
-                    0.065,
+                    0.075,
 
                 mix:
                     0.090
@@ -174,7 +212,7 @@ class VocalSaturation {
                     1200,
 
                 drive:
-                    0.075,
+                    0.085,
 
                 mix:
                     0.100
@@ -193,7 +231,7 @@ class VocalSaturation {
                     4200,
 
                 drive:
-                    0.060,
+                    0.070,
 
                 mix:
                     0.085
@@ -212,7 +250,7 @@ class VocalSaturation {
                     12000,
 
                 drive:
-                    0.035,
+                    0.042,
 
                 mix:
                     0.050
@@ -303,9 +341,11 @@ class VocalSaturation {
             0.92
         );
     }
-            // ======================================
-        // LER POSSÍVEL RMS DA ANÁLISE
-        // ======================================
+
+
+    // ======================================
+    // LER POSSÍVEL RMS DA ANÁLISE
+    // ======================================
 
     resolveAnalysisLevel(
         analysis
@@ -485,10 +525,27 @@ class VocalSaturation {
             0.98
         );
     }
-
-
-    // ======================================
+        // ======================================
     // CURVA DE SATURAÇÃO SUAVE
+    // ======================================
+    //
+    // A base continua sendo uma curva arctan
+    // suave.
+    //
+    // A alteração V1.2 adiciona uma pequena
+    // assimetria controlada para introduzir
+    // uma contribuição harmônica par.
+    //
+    // O termo:
+    //
+    //     x² - 1/3
+    //
+    // possui média zero no intervalo [-1, 1].
+    //
+    // Isso evita utilizar uma assimetria que
+    // simplesmente introduza um deslocamento
+    // constante no sinal.
+    //
     // ======================================
 
     createSaturationCurve(
@@ -534,6 +591,14 @@ class VocalSaturation {
             );
 
 
+        const asymmetry =
+            this.clamp(
+                this.harmonicAsymmetry,
+                0,
+                0.08
+            );
+
+
         for (
             let i = 0;
             i < samples;
@@ -552,7 +617,11 @@ class VocalSaturation {
                 1;
 
 
-            const shaped =
+            // ==================================
+            // COMPONENTE BASE
+            // ==================================
+
+            const symmetric =
                 Math.atan(
                     x *
                     amount
@@ -560,8 +629,86 @@ class VocalSaturation {
                 normalization;
 
 
+            // ==================================
+            // COMPONENTE HARMÔNICA PAR
+            // ==================================
+            //
+            // O termo possui média zero no
+            // intervalo normalizado.
+            //
+            // A amplitude permanece muito
+            // pequena para evitar transformar
+            // a curva em uma distorção audível.
+            //
+            // ==================================
+
+            const evenComponent =
+                (
+                    (
+                        x *
+                        x
+                    ) -
+                    (
+                        1 /
+                        3
+                    )
+                ) *
+                asymmetry;
+
+
             curve[i] =
-                shaped;
+                symmetric +
+                evenComponent;
+        }
+
+
+        // ==================================
+        // NORMALIZAÇÃO FINAL
+        // ==================================
+        //
+        // Mantém a saída dentro do intervalo
+        // esperado pelo WaveShaper.
+        //
+        // ==================================
+
+        let peak =
+            0;
+
+
+        for (
+            let i = 0;
+            i < curve.length;
+            i++
+        ) {
+
+            peak =
+                Math.max(
+                    peak,
+                    Math.abs(
+                        curve[i]
+                    )
+                );
+        }
+
+
+        if (
+            peak > 0
+        ) {
+
+            for (
+                let i = 0;
+                i < curve.length;
+                i++
+            ) {
+
+                curve[i] =
+                    this.clamp(
+                        curve[i] /
+                        peak,
+                        -1,
+                        1
+                    );
+            }
         }
 
 
@@ -588,13 +735,23 @@ class VocalSaturation {
             );
 
 
+        /*
+         * Offline DSP:
+         *
+         * 4x reduz aliasing introduzido pela
+         * não-linearidade da saturação antes
+         * da redução da taxa efetiva.
+         */
+
         shaper.oversample =
-            "2x";
+            "4x";
 
 
         return shaper;
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR FILTRO REGIONAL
     // ======================================
 
@@ -730,9 +887,7 @@ class VocalSaturation {
             mix
         };
     }
-
-
-    // ======================================
+        // ======================================
     // CONSTRUIR REGIÃO
     // ======================================
 
@@ -889,7 +1044,9 @@ class VocalSaturation {
             1
         );
     }
-        // ======================================
+
+
+    // ======================================
     // CONFIGURAÇÃO COMPLETA
     // ======================================
 
@@ -940,6 +1097,9 @@ class VocalSaturation {
 
             maxMix:
                 this.maxMix,
+
+            harmonicAsymmetry:
+                this.harmonicAsymmetry,
 
             regions:
                 regionSettings
@@ -1133,9 +1293,7 @@ class VocalSaturation {
                 regionProcessors
         };
     }
-
-
-    // ======================================
+        // ======================================
     // ÚLTIMA CONFIGURAÇÃO
     // ======================================
 
@@ -1163,7 +1321,9 @@ class VocalSaturation {
                     : []
         };
     }
-        // ======================================
+
+
+    // ======================================
     // RESET
     // ======================================
 
@@ -1317,7 +1477,7 @@ class VocalSaturation {
                     110,
 
                 drive:
-                    0.055,
+                    0.065,
 
                 mix:
                     0.080
@@ -1336,7 +1496,7 @@ class VocalSaturation {
                     320,
 
                 drive:
-                    0.065,
+                    0.075,
 
                 mix:
                     0.090
@@ -1355,7 +1515,7 @@ class VocalSaturation {
                     1200,
 
                 drive:
-                    0.075,
+                    0.085,
 
                 mix:
                     0.100
@@ -1374,7 +1534,7 @@ class VocalSaturation {
                     4200,
 
                 drive:
-                    0.060,
+                    0.070,
 
                 mix:
                     0.085
@@ -1393,16 +1553,14 @@ class VocalSaturation {
                     12000,
 
                 drive:
-                    0.035,
+                    0.042,
 
                 mix:
                     0.050
             }
         };
     }
-
-
-    // ======================================
+        // ======================================
     // CONFIGURAÇÃO CONSERVADORA
     // ======================================
 
@@ -1454,7 +1612,9 @@ class VocalSaturation {
 
         this.regions.highMid.drive =
             0.035;
-                    this.regions.highMid.mix =
+
+
+        this.regions.highMid.mix =
             0.050;
 
 
@@ -1474,7 +1634,7 @@ class VocalSaturation {
     setDefaultMode() {
 
         this.maxDrive =
-            0.16;
+            0.18;
 
 
         this.maxMix =
@@ -1530,6 +1690,9 @@ class VocalSaturation {
 
             wetGain:
                 this.wetGain,
+
+            harmonicAsymmetry:
+                this.harmonicAsymmetry,
 
             regions: {
 

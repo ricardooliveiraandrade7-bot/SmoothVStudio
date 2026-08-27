@@ -511,9 +511,7 @@ class TreatmentContractAudit {
 
         return result;
     }
-
-
-    // ======================================
+        // ======================================
     // AUDITAR AUTORIDADE
     // ======================================
 
@@ -993,9 +991,7 @@ class TreatmentContractAudit {
 
         return null;
     }
-
-
-    // ======================================
+        // ======================================
     // NORMALIZAR DSP REGION
     // ======================================
 
@@ -1131,6 +1127,18 @@ class TreatmentContractAudit {
             },
 
 
+            // ==================================
+            // CORREÇÃO MÍNIMA
+            // ==================================
+            //
+            // Harshness possui agora um módulo
+            // DSP próprio.
+            //
+            // Não deve mais ser mapeado para
+            // Dynamics.
+            //
+            // ==================================
+
             harshness: {
 
                 relation:
@@ -1138,11 +1146,11 @@ class TreatmentContractAudit {
 
                 dspRegions: [
 
-                    "dynamics"
+                    "harshness"
                 ],
 
                 reason:
-                    "Harshness influencia o cálculo de intensidade dinâmica, mas intensity, threshold e ratio não são equivalentes a targetDb de harshness."
+                    "Harshness do plano se relaciona ao módulo VocalHarshness, porém seus parâmetros internos não são equivalentes diretamente ao targetDb de harshness."
             },
 
 
@@ -1353,9 +1361,7 @@ class TreatmentContractAudit {
             mapping
         };
     }
-
-
-    // ======================================
+        // ======================================
     // AUDITAR UMA REGIÃO
     // ======================================
 
@@ -1737,9 +1743,7 @@ class TreatmentContractAudit {
 
         return result;
     }
-
-
-    // ======================================
+        // ======================================
     // CLASSIFICAR RESULTADO ESTRUTURAL
     // ======================================
 
@@ -1996,18 +2000,16 @@ class TreatmentContractAudit {
 
         return false;
     }
-
-
-    canGenerateDSP() {
-
+        canGenerateDSP() {
+        
         return false;
     }
-}
-
-
-// ==========================================
-// DISPONIBILIZAÇÃO GLOBAL
-// ==========================================
-
-window.TreatmentContractAudit =
-    TreatmentContractAudit;
+    }
+    
+    
+    // ==========================================
+    // DISPONIBILIZAÇÃO GLOBAL
+    // ==========================================
+    
+    window.TreatmentContractAudit =
+        TreatmentContractAudit;
