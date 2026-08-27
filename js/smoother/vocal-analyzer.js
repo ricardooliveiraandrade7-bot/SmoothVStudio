@@ -1,18 +1,19 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL ANALYZER
-// V0.6
+// V0.7
 // ==========================================
 //
 // Analisa o vocal antes do processamento.
 //
 // O Analyzer NÃO modifica o áudio.
 //
-// V0.6:
+// V0.7:
 //
 // - análise geral
 // - análise por bandas
 // - análise temporal de sibilância
+// - análise temporal de roughness
 // - análise preliminar de ruído
 // - microjanelas de baixa atividade
 // - agrupamento de microjanelas
@@ -20,13 +21,21 @@
 // - estabilidade espectral
 // - repetição de ocorrências
 // - confiança adaptativa
+// - refinamento conservador de hardness
 //
 // IMPORTANTE:
 //
 // Esta versão NÃO remove ruído.
 //
 // Ela somente melhora a identificação
-// do possível perfil de ruído.
+// do possível perfil de ruído e das
+// evidências espectrais/temporais.
+//
+// A nova análise de roughness NÃO aplica
+// processamento.
+//
+// Ela somente fornece evidência para
+// camadas posteriores.
 //
 // ==========================================
 
@@ -47,6 +56,46 @@ class VocalAnalyzer {
         this.hopMs =
             options.hopMs ??
             10;
+
+
+        // ==================================
+        // CONFIGURAÇÃO ROUGHNESS
+        // ==================================
+        //
+        // A região principal de harshness/
+        // roughness permanece separada da
+        // região principal de sibilância.
+        //
+        // ==================================
+
+        this.roughnessLowCut =
+            options.roughnessLowCut ??
+            2500;
+
+        this.roughnessHighCut =
+            options.roughnessHighCut ??
+            5000;
+
+
+        this.roughnessActivityThreshold =
+            options.roughnessActivityThreshold ??
+            0.12;
+
+
+        this.roughnessVariationThreshold =
+            options.roughnessVariationThreshold ??
+            0.08;
+
+
+        this.minimumRoughnessFrames =
+            options.minimumRoughnessFrames ??
+            3;
+
+
+        this.minimumRoughnessConfidence =
+            options.minimumRoughnessConfidence ??
+            0.45;
+
 
         this.analysis =
             null;
@@ -442,9 +491,7 @@ class VocalAnalyzer {
 
         return mono;
     }
-
-
-    // ======================================
+        // ======================================
     // TIMELINE DE SIBILÂNCIA
     // ======================================
 
@@ -686,6 +733,744 @@ class VocalAnalyzer {
 
 
     // ======================================
+    // TIMELINE DE ROUGHNESS V0.7
+    // ======================================
+    //
+    // Esta análise procura comportamento
+    // temporal irregular na região de
+    // 2,5–5 kHz.
+    //
+    // Ela NÃO interpreta simplesmente
+    // energia alta como roughness.
+    //
+    // A evidência depende de:
+    //
+    // - energia relativa;
+    // - variação entre frames;
+    // - persistência;
+    // - atividade;
+    // - repetição;
+    // - estabilidade da evidência.
+    //
+    // A região é deliberadamente separada
+    // da sibilância principal (5–9,5 kHz).
+    //
+    // ======================================
+
+    analyzeRoughnessTimeline(
+        mono,
+        sampleRate,
+        totalRms
+    ) {
+
+        const roughnessSignal =
+            this.createBandSignal(
+                mono,
+                sampleRate,
+                this.roughnessLowCut,
+                this.roughnessHighCut
+            );
+
+
+        const windowSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.windowMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const hopSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.hopMs /
+                        1000
+                    )
+                )
+            );
+
+
+        if (
+            mono.length === 0 ||
+            totalRms <= 0
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                confidence:
+                    0,
+
+                amount:
+                    0,
+
+                temporalScore:
+                    0,
+
+                averageEnergy:
+                    0,
+
+                peakEnergy:
+                    0,
+
+                averageRelative:
+                    0,
+
+                peakRelative:
+                    0,
+
+                activity:
+                    0,
+
+                variation:
+                    0,
+
+                persistence:
+                    0,
+
+                repetition:
+                    0,
+
+                stability:
+                    0,
+
+                activeFrames:
+                    0,
+
+                frameCount:
+                    0,
+
+                candidateRuns:
+                    0,
+
+                candidateFrames:
+                    0,
+
+                frames:
+                    []
+            };
+        }
+
+
+        const frames = [];
+
+
+        let sumEnergy =
+            0;
+
+
+        let peakEnergy =
+            0;
+
+
+        let activeFrames =
+            0;
+
+
+        let candidateFrames =
+            0;
+
+
+        let candidateRuns =
+            0;
+
+
+        let currentRun =
+            0;
+
+
+        let persistentFrames =
+            0;
+
+
+        let totalVariation =
+            0;
+
+
+        let variationComparisons =
+            0;
+
+
+        let stabilitySum =
+            0;
+
+
+        let stabilityComparisons =
+            0;
+
+
+        let previousRelative =
+            null;
+
+
+        let previousDb =
+            null;
+
+
+        const activityThreshold =
+            Math.max(
+                totalRms *
+                this.roughnessActivityThreshold,
+                0.00001
+            );
+
+
+        const candidateThreshold =
+            Math.max(
+                totalRms *
+                this.roughnessVariationThreshold,
+                0.00001
+            );
+
+
+        const minimumRunFrames =
+            Math.max(
+                2,
+                this.minimumRoughnessFrames
+            );
+
+
+        const finishRun =
+            () => {
+
+                if (
+                    currentRun >=
+                    minimumRunFrames
+                ) {
+
+                    candidateRuns++;
+
+                    persistentFrames +=
+                        currentRun;
+                }
+
+                currentRun =
+                    0;
+            };
+
+
+        for (
+            let start = 0;
+            start < mono.length;
+            start += hopSize
+        ) {
+
+            const end =
+                Math.min(
+                    mono.length,
+                    start +
+                    windowSize
+                );
+
+
+            if (
+                end <= start
+            ) {
+
+                break;
+            }
+
+
+            const rms =
+                this.calculateRMSRange(
+                    roughnessSignal,
+                    start,
+                    end
+                );
+
+
+            const relative =
+                totalRms > 0
+                    ? rms /
+                      totalRms
+                    : 0;
+
+
+            const db =
+                this.amplitudeToDb(
+                    rms
+                );
+
+
+            const time =
+                start /
+                sampleRate;
+
+
+            let variation =
+                0;
+
+
+            let frameStability =
+                0;
+
+
+            if (
+                previousRelative !==
+                null
+            ) {
+
+                variation =
+                    Math.abs(
+                        relative -
+                        previousRelative
+                    );
+
+
+                const dbVariation =
+                    Math.abs(
+                        db -
+                        previousDb
+                    );
+
+
+                totalVariation +=
+                    variation;
+
+
+                variationComparisons++;
+
+
+                /*
+                 * Variações moderadas e
+                 * persistentes são mais úteis
+                 * que saltos isolados.
+                 */
+
+                const variationStability =
+                    this.clamp(
+                        1 -
+                        (
+                            dbVariation /
+                            12
+                        ),
+                        0,
+                        1
+                    );
+
+
+                frameStability =
+                    variationStability;
+
+
+                stabilitySum +=
+                    frameStability;
+
+
+                stabilityComparisons++;
+            }
+
+
+            const isActive =
+                rms >
+                activityThreshold;
+
+
+            const isCandidate =
+                isActive &&
+                (
+                    relative >
+                    this.roughnessVariationThreshold
+                );
+
+
+            if (
+                isActive
+            ) {
+
+                activeFrames++;
+            }
+
+
+            if (
+                isCandidate
+            ) {
+
+                candidateFrames++;
+                currentRun++;
+            }
+
+            else {
+
+                finishRun();
+            }
+
+
+            sumEnergy +=
+                rms;
+
+
+            if (
+                rms >
+                peakEnergy
+            ) {
+
+                peakEnergy =
+                    rms;
+            }
+
+
+            frames.push({
+
+                time,
+
+                rms,
+
+                db,
+
+                relative,
+
+                variation,
+
+                stability:
+                    frameStability,
+
+                active:
+                    isActive,
+
+                candidate:
+                    isCandidate
+            });
+
+
+            previousRelative =
+                relative;
+
+
+            previousDb =
+                db;
+        }
+
+
+        finishRun();
+
+
+        const frameCount =
+            frames.length;
+
+
+        if (
+            frameCount === 0
+        ) {
+
+            return {
+
+                available:
+                    false,
+
+                confidence:
+                    0,
+
+                amount:
+                    0,
+
+                temporalScore:
+                    0,
+
+                averageEnergy:
+                    0,
+
+                peakEnergy:
+                    0,
+
+                averageRelative:
+                    0,
+
+                peakRelative:
+                    0,
+
+                activity:
+                    0,
+
+                variation:
+                    0,
+
+                persistence:
+                    0,
+
+                repetition:
+                    0,
+
+                stability:
+                    0,
+
+                activeFrames:
+                    0,
+
+                frameCount:
+                    0,
+
+                candidateRuns:
+                    0,
+
+                candidateFrames:
+                    0,
+
+                frames
+            };
+        }
+
+
+        const averageEnergy =
+            sumEnergy /
+            frameCount;
+
+
+        const averageRelative =
+            totalRms > 0
+                ? averageEnergy /
+                  totalRms
+                : 0;
+
+
+        const peakRelative =
+            totalRms > 0
+                ? peakEnergy /
+                  totalRms
+                : 0;
+
+
+        const activity =
+            activeFrames /
+            frameCount;
+
+
+        const variation =
+            variationComparisons > 0
+                ? totalVariation /
+                  variationComparisons
+                : 0;
+
+
+        const persistence =
+            candidateFrames > 0
+                ? persistentFrames /
+                  candidateFrames
+                : 0;
+
+
+        const repetition =
+            this.clamp(
+                candidateRuns /
+                5,
+                0,
+                1
+            );
+
+
+        const stability =
+            stabilityComparisons > 0
+                ? stabilitySum /
+                  stabilityComparisons
+                : 0;
+
+
+        const averageScore =
+            this.clamp(
+                averageRelative *
+                4,
+                0,
+                1
+            );
+
+
+        const peakScore =
+            this.clamp(
+                peakRelative *
+                3,
+                0,
+                1
+            );
+
+
+        const variationScore =
+            this.clamp(
+                variation /
+                0.12,
+                0,
+                1
+            );
+
+
+        const persistenceScore =
+            this.clamp(
+                persistence,
+                0,
+                1
+            );
+
+
+        const activityScore =
+            this.clamp(
+                activity *
+                1.5,
+                0,
+                1
+            );
+
+
+        /*
+         * A estabilidade aqui não significa
+         * que o sinal deve ser perfeitamente
+         * estável.
+         *
+         * Ela representa confiança de que
+         * a evidência foi observada de forma
+         * consistente entre frames.
+         */
+
+        const confidence =
+            this.clamp(
+                (
+                    persistenceScore *
+                    0.30
+                ) +
+                (
+                    repetition *
+                    0.20
+                ) +
+                (
+                    stability *
+                    0.20
+                ) +
+                (
+                    activityScore *
+                    0.15
+                ) +
+                (
+                    averageScore *
+                    0.15
+                ),
+                0,
+                1
+            );
+
+
+        /*
+         * Roughness temporal.
+         *
+         * A energia sozinha recebe peso
+         * limitado.
+         *
+         * A variação também não domina
+         * sozinha.
+         */
+
+        const temporalScore =
+            this.clamp(
+                (
+                    averageScore *
+                    0.20
+                ) +
+                (
+                    peakScore *
+                    0.10
+                ) +
+                (
+                    variationScore *
+                    0.25
+                ) +
+                (
+                    persistenceScore *
+                    0.20
+                ) +
+                (
+                    repetition *
+                    0.10
+                ) +
+                (
+                    activityScore *
+                    0.10
+                ) +
+                (
+                    stability *
+                    0.05
+                ),
+                0,
+                1
+            );
+
+
+        const available =
+            candidateFrames >=
+            this.minimumRoughnessFrames &&
+            confidence >=
+            this.minimumRoughnessConfidence;
+
+
+        const amount =
+            available
+                ? this.clamp(
+                    temporalScore *
+                    (
+                        0.60 +
+                        (
+                            confidence *
+                            0.40
+                        )
+                    ),
+                    0,
+                    1
+                )
+                : this.clamp(
+                    temporalScore *
+                    confidence *
+                    0.50,
+                    0,
+                    1
+                );
+
+
+        return {
+
+            available,
+
+            confidence,
+
+            amount,
+
+            temporalScore,
+
+            averageEnergy,
+
+            peakEnergy,
+
+            averageRelative,
+
+            peakRelative,
+
+            activity,
+
+            variation,
+
+            persistence,
+
+            repetition,
+
+            stability,
+
+            activeFrames,
+
+            frameCount,
+
+            candidateRuns,
+
+            candidateFrames,
+
+            frames
+        };
+    }
+        // ======================================
     // PERFIL DE RUÍDO V0.6
     // ======================================
     //
@@ -792,10 +1577,6 @@ class VocalAnalyzer {
         }
 
 
-        // ----------------------------------
-        // LIMIAR DE BAIXA ATIVIDADE
-        // ----------------------------------
-
         const lowActivityThreshold =
             Math.max(
                 totalRms *
@@ -804,30 +1585,9 @@ class VocalAnalyzer {
             );
 
 
-        // ----------------------------------
-        // LIMITES PARA MICROINTERVALOS
-        // ----------------------------------
-
-        /*
-         * Uma ocorrência isolada de 10 ms
-         * é fraca demais para representar
-         * ruído confiável.
-         *
-         * Duas janelas já representam
-         * aproximadamente 30 ms de cobertura.
-         */
-
         const minimumRunFrames =
             2;
 
-
-        /*
-         * Não precisamos de silêncio maior
-         * que meio segundo.
-         *
-         * O limite evita que uma região
-         * muito longa domine a estatística.
-         */
 
         const maximumRunFrames =
             Math.max(
@@ -903,19 +1663,6 @@ class VocalAnalyzer {
             0;
 
 
-        /*
-         * Contagem de ocorrências separadas.
-         *
-         * Isso é importante para rap:
-         *
-         * pausa curta 1
-         * pausa curta 2
-         * pausa curta 3
-         *
-         * podem juntas fornecer uma
-         * estimativa muito melhor.
-         */
-
         const finishRun =
             () => {
 
@@ -952,10 +1699,6 @@ class VocalAnalyzer {
                     0;
             };
 
-
-        // ----------------------------------
-        // ANÁLISE DAS MICROJANELAS
-        // ----------------------------------
 
         for (
             let start = 0;
@@ -1016,14 +1759,6 @@ class VocalAnalyzer {
             currentRun++;
 
 
-            /*
-             * Para esta janela calculamos
-             * apenas três regiões amplas.
-             *
-             * Isso mantém o custo baixo
-             * no aparelho.
-             */
-
             const windowData =
                 mono.subarray(
                     start,
@@ -1079,15 +1814,6 @@ class VocalAnalyzer {
                 high;
 
 
-            /*
-             * Normalizamos as bandas pelo
-             * RMS da própria janela.
-             *
-             * Assim podemos comparar
-             * janelas de intensidades
-             * ligeiramente diferentes.
-             */
-
             const denominator =
                 Math.max(
                     rms,
@@ -1109,14 +1835,6 @@ class VocalAnalyzer {
                 high /
                 denominator;
 
-
-            /*
-             * Estabilidade espectral.
-             *
-             * Ruído contínuo tende a manter
-             * uma distribuição mais estável
-             * que eventos vocais isolados.
-             */
 
             if (
                 previousLowRelative !==
@@ -1186,10 +1904,6 @@ class VocalAnalyzer {
         finishRun();
 
 
-        // ----------------------------------
-        // SEM EVIDÊNCIA SUFICIENTE
-        // ----------------------------------
-
         if (
             candidateFrames === 0 ||
             candidateRuns === 0
@@ -1254,10 +1968,6 @@ class VocalAnalyzer {
         }
 
 
-        // ----------------------------------
-        // MÉDIAS
-        // ----------------------------------
-
         const floor =
             sumNoiseRms /
             candidateFrames;
@@ -1312,10 +2022,6 @@ class VocalAnalyzer {
                 : 0;
 
 
-        // ----------------------------------
-        // PERSISTÊNCIA
-        // ----------------------------------
-
         const candidateRatio =
             analyzedFrames > 0
                 ? candidateFrames /
@@ -1330,18 +2036,6 @@ class VocalAnalyzer {
                 : 0;
 
 
-        // ----------------------------------
-        // REPETIÇÃO
-        // ----------------------------------
-
-        /*
-         * Uma única pausa não é suficiente.
-         *
-         * Várias pausas curtas distribuídas
-         * ao longo do vocal aumentam a
-         * confiança.
-         */
-
         const repetition =
             this.clamp(
                 candidateRuns /
@@ -1351,20 +2045,12 @@ class VocalAnalyzer {
             );
 
 
-        // ----------------------------------
-        // ESTABILIDADE
-        // ----------------------------------
-
         const stability =
             stabilityComparisons > 0
                 ? stabilitySum /
                   stabilityComparisons
                 : 0;
 
-
-        // ----------------------------------
-        // DURAÇÃO MÉDIA DAS OCORRÊNCIAS
-        // ----------------------------------
 
         const averageRunFrames =
             candidateRuns > 0
@@ -1377,17 +2063,6 @@ class VocalAnalyzer {
             averageRunFrames *
             this.hopMs;
 
-
-        // ----------------------------------
-        // CONFIANÇA
-        // ----------------------------------
-
-        /*
-         * A confiança agora depende de
-         * múltiplas evidências.
-         *
-         * Nenhuma delas sozinha é suficiente.
-         */
 
         const sampleConfidence =
             this.clamp(
@@ -1414,11 +2089,6 @@ class VocalAnalyzer {
             stability;
 
 
-        /*
-         * Penalização de amostras
-         * extremamente escassas.
-         */
-
         const evidenceConfidence =
             this.clamp(
                 (
@@ -1442,22 +2112,12 @@ class VocalAnalyzer {
             );
 
 
-        /*
-         * Pequena proteção contra falsos
-         * positivos causados por uma única
-         * ocorrência.
-         */
-
         const confidence =
             candidateRuns >= 2
                 ? evidenceConfidence
                 : evidenceConfidence *
                   0.45;
 
-
-        // ----------------------------------
-        // CLASSIFICAÇÃO
-        // ----------------------------------
 
         let profile =
             "low";
@@ -1480,11 +2140,6 @@ class VocalAnalyzer {
                 "moderate";
         }
 
-
-        /*
-         * Só disponibilizamos o perfil
-         * quando existe confiança mínima.
-         */
 
         const available =
             confidence >=
@@ -1549,6 +2204,93 @@ class VocalAnalyzer {
 
 
     // ======================================
+    // CALCULAR CONFIANÇA GLOBAL
+    // ======================================
+    //
+    // Mantemos uma confiança geral simples
+    // para compatibilidade com consumidores
+    // existentes.
+    //
+    // ======================================
+
+    calculateAnalysisConfidence(
+        sibilanceTimeline,
+        roughnessTimeline,
+        noiseProfile
+    ) {
+
+        const sibilanceConfidence =
+            sibilanceTimeline &&
+            Number.isFinite(
+                sibilanceTimeline.temporalScore
+            )
+                ? this.clamp(
+                    sibilanceTimeline.temporalScore,
+                    0,
+                    1
+                )
+                : 0;
+
+
+        const roughnessConfidence =
+            roughnessTimeline &&
+            Number.isFinite(
+                roughnessTimeline.confidence
+            )
+                ? this.clamp(
+                    roughnessTimeline.confidence,
+                    0,
+                    1
+                )
+                : 0;
+
+
+        const noiseConfidence =
+            noiseProfile &&
+            Number.isFinite(
+                noiseProfile.confidence
+            )
+                ? this.clamp(
+                    noiseProfile.confidence,
+                    0,
+                    1
+                )
+                : 0;
+
+
+        /*
+         * A confiança global não deve ser
+         * dominada por roughness ou ruído.
+         *
+         * A análise espectral geral continua
+         * sendo a base principal.
+         */
+
+        const confidence =
+            this.clamp(
+                (
+                    0.55
+                ) +
+                (
+                    sibilanceConfidence *
+                    0.15
+                ) +
+                (
+                    roughnessConfidence *
+                    0.20
+                ) +
+                (
+                    noiseConfidence *
+                    0.10
+                ),
+                0,
+                1
+            );
+
+
+        return confidence;
+    }
+        // ======================================
     // ANÁLISE PRINCIPAL
     // ======================================
 
@@ -1697,11 +2439,23 @@ class VocalAnalyzer {
 
 
         // ==================================
-        // TIMELINE
+        // TIMELINE DE SIBILÂNCIA
         // ==================================
 
         const sibilanceTimeline =
             this.analyzeSibilanceTimeline(
+                mono,
+                sampleRate,
+                rms
+            );
+
+
+        // ==================================
+        // TIMELINE DE ROUGHNESS
+        // ==================================
+
+        const roughnessTimeline =
+            this.analyzeRoughnessTimeline(
                 mono,
                 sampleRate,
                 rms
@@ -1721,17 +2475,29 @@ class VocalAnalyzer {
 
 
         // ==================================
+        // CONFIANÇA GERAL
+        // ==================================
+
+        const analysisConfidence =
+            this.calculateAnalysisConfidence(
+                sibilanceTimeline,
+                roughnessTimeline,
+                noiseProfile
+            );
+
+
+        // ==================================
         // CARACTERÍSTICAS
         // ==================================
 
-                const spectralCore =
+        const spectralCore =
             body +
             lowMid +
             mid +
             presence +
             0.000001;
-        
-        
+
+
         const presenceCoreRatio =
             this.clamp(
                 presence /
@@ -1739,14 +2505,14 @@ class VocalAnalyzer {
                 0,
                 1
             );
-        
-        
+
+
         const midCore =
             lowMid +
             mid +
             0.000001;
-        
-        
+
+
         const presenceToMid =
             this.clamp(
                 presence /
@@ -1754,8 +2520,8 @@ class VocalAnalyzer {
                 0,
                 2
             );
-        
-        
+
+
         const presenceContrast =
             this.clamp(
                 (
@@ -1766,69 +2532,94 @@ class VocalAnalyzer {
                 0,
                 1
             );
-        
-        
-        /*
-         * HARDNESS
-         *
-         * A presença isolada não é considerada
-         * automaticamente como dureza.
-         *
-         * O score considera:
-         *
-         * - predominância da presença dentro
-         *   do núcleo espectral;
-         * - contraste entre presença e médios;
-         * - pequena influência da proporção
-         *   global já existente.
-         *
-         * Isso evita que simples presença
-         * legítima seja interpretada como
-         * agressividade.
-         */
-        
+
+
+        // ==================================
+        // HARDNESS V0.7
+        // ==================================
+        //
+        // A presença isolada não determina
+        // hardness.
+        //
+        // Agora temos:
+        //
+        // 1. predominância da presença;
+        // 2. contraste presença/médios;
+        // 3. roughness temporal;
+        // 4. pequena influência da proporção
+        //    global.
+        //
+        // Isso ajuda a separar:
+        //
+        // voz brilhante
+        //
+        // de
+        //
+        // voz brilhante + comportamento
+        // áspero persistente.
+        //
+        // ==================================
+
+        const temporalRoughness =
+            this.clamp(
+                roughnessTimeline.amount,
+                0,
+                1
+            );
+
+
+        const roughnessConfidence =
+            this.clamp(
+                roughnessTimeline.confidence,
+                0,
+                1
+            );
+
+
         const hardness =
             this.clamp(
                 (
                     presenceCoreRatio *
-                    0.45
+                    0.30
                 ) +
                 (
                     presenceContrast *
-                    0.40
+                    0.30
+                ) +
+                (
+                    temporalRoughness *
+                    0.30
                 ) +
                 (
                     presenceRatio *
-                    0.15
+                    0.10
                 ),
                 0,
                 1
             );
-        
-        
-        /*
-         * ROUGHNESS
-         *
-         * Roughness não utiliza mais
-         * sibilanceRatio diretamente.
-         *
-         * A sibilância possui seu próprio
-         * modelo espectral + temporal.
-         *
-         * Aqui buscamos uma indicação mais
-         * conservadora de concentração
-         * médio-aguda e contraste espectral.
-         */
-        
-        const roughness =
+
+
+        // ==================================
+        // ROUGHNESS V0.7
+        // ==================================
+        //
+        // Roughness passa a representar
+        // principalmente a evidência temporal.
+        //
+        // A concentração espectral permanece
+        // apenas como suporte.
+        //
+        // ==================================
+
+        const spectralRoughnessSupport =
             this.clamp(
                 (
                     presenceCoreRatio *
-                    0.35
+                    0.45
                 ) +
                 (
                     presenceContrast *
-                    0.45
+                    0.35
                 ) +
                 (
                     airRatio *
@@ -1838,6 +2629,29 @@ class VocalAnalyzer {
                 1
             );
 
+
+        const roughness =
+            this.clamp(
+                (
+                    temporalRoughness *
+                    0.65
+                ) +
+                (
+                    spectralRoughnessSupport *
+                    0.35
+                ),
+                0,
+                1
+            );
+
+
+        // ==================================
+        // SIBILÂNCIA
+        // ==================================
+        //
+        // Continua independente da roughness.
+        //
+        // ==================================
 
         const spectralSibilance =
             this.clamp(
@@ -1868,6 +2682,10 @@ class VocalAnalyzer {
             );
 
 
+        // ==================================
+        // BODY
+        // ==================================
+
         const bodyAmount =
             this.clamp(
                 (
@@ -1883,10 +2701,83 @@ class VocalAnalyzer {
             );
 
 
+        // ==================================
+        // PRESENCE
+        // ==================================
+
         const presenceAmount =
             this.clamp(
                 presenceRatio *
                 5,
+                0,
+                1
+            );
+
+
+        // ==================================
+        // ROUGHNESS STATE
+        // ==================================
+        //
+        // Estado descritivo.
+        //
+        // Não autoriza processamento.
+        //
+        // ==================================
+
+        let roughnessState =
+            "low";
+
+
+        if (
+            roughness >=
+            0.70 &&
+            roughnessConfidence >=
+            this.minimumRoughnessConfidence
+        ) {
+
+            roughnessState =
+                "high";
+
+        } else if (
+            roughness >=
+            0.45 &&
+            roughnessConfidence >=
+            this.minimumRoughnessConfidence
+        ) {
+
+            roughnessState =
+                "moderate";
+        }
+
+
+        // ==================================
+        // HARDNESS CONFIDENCE
+        // ==================================
+        //
+        // A confiança da hardness aumenta
+        // quando existe evidência temporal
+        // suficiente.
+        //
+        // ==================================
+
+        const hardnessConfidence =
+            this.clamp(
+                (
+                    analysisConfidence *
+                    0.45
+                ) +
+                (
+                    roughnessConfidence *
+                    0.40
+                ) +
+                (
+                    this.clamp(
+                        presenceContrast,
+                        0,
+                        1
+                    ) *
+                    0.15
+                ),
                 0,
                 1
             );
@@ -1899,7 +2790,7 @@ class VocalAnalyzer {
         this.analysis = {
 
             version:
-                "0.6",
+                "0.7",
 
             sampleRate,
 
@@ -1916,6 +2807,10 @@ class VocalAnalyzer {
             peak,
 
             peakDb,
+
+
+            confidence:
+                analysisConfidence,
 
 
             bands: {
@@ -1967,6 +2862,88 @@ class VocalAnalyzer {
             },
 
 
+            characteristicConfidence: {
+
+                hardness:
+                    hardnessConfidence,
+
+                roughness:
+                    roughnessConfidence,
+
+                sibilance:
+                    this.clamp(
+                        (
+                            analysisConfidence *
+                            0.50
+                        ) +
+                        (
+                            temporalSibilance *
+                            0.50
+                        ),
+                        0,
+                        1
+                    )
+            },
+
+
+            roughnessAnalysis: {
+
+                available:
+                    roughnessTimeline.available,
+
+                confidence:
+                    roughnessTimeline.confidence,
+
+                amount:
+                    roughnessTimeline.amount,
+
+                temporal:
+                    roughnessTimeline.temporalScore,
+
+                averageEnergy:
+                    roughnessTimeline.averageEnergy,
+
+                peakEnergy:
+                    roughnessTimeline.peakEnergy,
+
+                averageRelative:
+                    roughnessTimeline.averageRelative,
+
+                peakRelative:
+                    roughnessTimeline.peakRelative,
+
+                activity:
+                    roughnessTimeline.activity,
+
+                variation:
+                    roughnessTimeline.variation,
+
+                persistence:
+                    roughnessTimeline.persistence,
+
+                repetition:
+                    roughnessTimeline.repetition,
+
+                stability:
+                    roughnessTimeline.stability,
+
+                activeFrames:
+                    roughnessTimeline.activeFrames,
+
+                frameCount:
+                    roughnessTimeline.frameCount,
+
+                candidateRuns:
+                    roughnessTimeline.candidateRuns,
+
+                candidateFrames:
+                    roughnessTimeline.candidateFrames,
+
+                state:
+                    roughnessState
+            },
+
+
             sibilanceAnalysis: {
 
                 spectral:
@@ -2014,9 +2991,7 @@ class VocalAnalyzer {
                     sibilanceTimeline
                         .peakRelative
             },
-
-
-            // ==================================
+                        // ==================================
             // PERFIL DE RUÍDO
             // ==================================
 
@@ -2078,6 +3053,61 @@ class VocalAnalyzer {
 
                 profile:
                     noiseProfile.profile
+            },
+
+
+            // ==================================
+            // EVIDÊNCIA DE INTERPRETAÇÃO
+            // ==================================
+            //
+            // Somente informação.
+            //
+            // Nenhuma dessas propriedades
+            // autoriza processamento.
+            //
+            // ==================================
+
+            evidence: {
+
+                upperPresence:
+
+                    this.clamp(
+                        presenceCoreRatio,
+                        0,
+                        1
+                    ),
+
+                presenceContrast:
+
+                    this.clamp(
+                        presenceContrast,
+                        0,
+                        1
+                    ),
+
+                temporalRoughness:
+
+                    temporalRoughness,
+
+                roughnessConfidence:
+
+                    roughnessConfidence,
+
+                temporalSibilance:
+
+                    temporalSibilance,
+
+                hardnessConfidence:
+
+                    hardnessConfidence,
+
+                preserveIfRoughnessConfidenceLow:
+                    roughnessConfidence <
+                    this.minimumRoughnessConfidence,
+
+                preserveIfSibilanceConfidenceLow:
+                    temporalSibilance <
+                    0.35
             }
         };
 
@@ -2103,3 +3133,4 @@ class VocalAnalyzer {
 
 window.VocalAnalyzer =
     VocalAnalyzer;
+    
