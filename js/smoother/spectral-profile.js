@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // SPECTRAL PROFILE
-// V0.1
+// V0.2
 // ==========================================
 //
 // Camada intermediária entre:
@@ -66,8 +66,40 @@ class SpectralProfile {
             0.20;
 
 
+        // ==================================
+        // EVIDÊNCIA DE CONTEÚDO SUPERIOR
+        // ==================================
+        //
+        // Estes parâmetros não comandam
+        // nenhum processamento.
+        //
+        // Eles apenas controlam a confiança
+        // da classificação espectral.
+        //
+        // ==================================
+
+        this.minimumUpperContentConfidence =
+            options.minimumUpperContentConfidence ??
+            0.55;
+
+
+        this.minimumUpperBands =
+            options.minimumUpperBands ??
+            2;
+
+
+        this.upperContentObserveThreshold =
+            options.upperContentObserveThreshold ??
+            0.20;
+
+
+        this.upperContentCandidateThreshold =
+            options.upperContentCandidateThreshold ??
+            0.08;
+
+
         this.version =
-            "0.1";
+            "0.2";
     }
 
 
@@ -356,11 +388,6 @@ class SpectralProfile {
                 );
 
 
-            /*
-             * Distâncias absurdamente grandes
-             * não devem dominar a decisão.
-             */
-
             const boundedDistance =
                 this.clamp(
                     absoluteDistance,
@@ -368,11 +395,6 @@ class SpectralProfile {
                     this.maxReferenceDistanceDb
                 );
 
-
-            /*
-             * Bandas muito instáveis
-             * têm peso menor.
-             */
 
             const weight =
                 Math.max(
@@ -504,13 +526,6 @@ class SpectralProfile {
 
     // ======================================
     // SEPARAÇÃO ENTRE REFERÊNCIAS
-    // ======================================
-    //
-    // Se Neutral, Warm e Bright estiverem
-    // praticamente empatados, não devemos
-    // fingir que sabemos qual tonalidade
-    // é melhor.
-    //
     // ======================================
 
     calculateReferenceSeparation(
@@ -674,13 +689,6 @@ class SpectralProfile {
         }
 
 
-        /*
-         * A classificação só é considerada
-         * realmente útil quando a referência
-         * mais próxima também está dentro
-         * de uma distância razoável.
-         */
-
         if (
             closest.weightedDistanceDb >
             this.maxReferenceDistanceDb
@@ -712,19 +720,8 @@ class SpectralProfile {
                 true
         };
     }
-
-
-    // ======================================
+        // ======================================
     // MEDIR DIREÇÃO ESPECTRAL
-    // ======================================
-    //
-    // Mede se a gravação tende a acumular
-    // energia relativa em regiões baixas
-    // ou altas.
-    //
-    // Isso é complementar à escolha
-    // Neutral/Warm/Bright.
-    //
     // ======================================
 
     calculateSpectralTilt(
@@ -878,6 +875,515 @@ class SpectralProfile {
 
 
     // ======================================
+    // EVIDÊNCIA DE CONTEÚDO SUPERIOR
+    // ======================================
+    //
+    // Esta análise NÃO determina EQ,
+    // ganho ou reconstrução.
+    //
+    // Ela procura somente evidência de que
+    // o conteúdo superior esteja reduzido
+    // em relação ao conteúdo central.
+    //
+    // A análise usa apenas as bandas já
+    // fornecidas pelo Analyzer.
+    //
+    // ======================================
+
+    calculateUpperContentEvidence(
+        analysis
+    ) {
+
+        const unavailable =
+            (
+                reason
+            ) => {
+
+                return {
+
+                    available:
+                        false,
+
+                    score:
+                        0,
+
+                    confidence:
+                        0,
+
+                    lowerReferenceEnergy:
+                        0,
+
+                    upperReferenceEnergy:
+                        0,
+
+                    upperToLowerRatio:
+                        0,
+
+                    stability:
+                        0,
+
+                    bandwidthDeficiency:
+                        false,
+
+                    status:
+                        "preserve",
+
+                    reason
+                };
+            };
+
+
+        if (
+            !analysis ||
+            !Array.isArray(
+                analysis.bands
+            ) ||
+            analysis.bands.length === 0
+        ) {
+
+            return unavailable(
+                "insufficient-band-data"
+            );
+        }
+
+
+        let lowerEnergy =
+            0;
+
+
+        let upperEnergy =
+            0;
+
+
+        let lowerWeight =
+            0;
+
+
+        let upperWeight =
+            0;
+
+
+        let upperBandCount =
+            0;
+
+
+        let stableUpperBands =
+            0;
+
+
+        let lowerBandCount =
+            0;
+
+
+        let stableLowerBands =
+            0;
+
+
+        // ----------------------------------
+        // REGIÕES UTILIZADAS
+        // ----------------------------------
+        //
+        // Lower reference:
+        // 700 Hz até 3000 Hz
+        //
+        // Upper content:
+        // 3000 Hz até 12000 Hz
+        //
+        // A faixa superior não se estende
+        // automaticamente além de 12 kHz,
+        // evitando que ruído ultrassônico
+        // ou artefatos dominem a evidência.
+        //
+        // ----------------------------------
+
+        for (
+            let i = 0;
+            i < analysis.bands.length;
+            i++
+        ) {
+
+            const band =
+                analysis.bands[i];
+
+
+            const frequency =
+                this.safeNumber(
+                    band.centerFrequency,
+                    0
+                );
+
+
+            const energy =
+                Math.max(
+                    0,
+                    this.safeNumber(
+                        band.spectrumShare,
+                        0
+                    )
+                );
+
+
+            const stability =
+                this.clamp(
+                    this.safeNumber(
+                        band.stability,
+                        0
+                    ),
+                    0,
+                    1
+                );
+
+
+            const weight =
+                Math.max(
+                    0.10,
+                    stability
+                );
+
+
+            const weightedEnergy =
+                energy *
+                weight;
+
+
+            if (
+                frequency >= 700 &&
+                frequency < 3000
+            ) {
+
+                lowerEnergy +=
+                    weightedEnergy;
+
+
+                lowerWeight +=
+                    weight;
+
+
+                lowerBandCount++;
+
+
+                if (
+                    stability >=
+                    this.minimumConfidence
+                ) {
+
+                    stableLowerBands++;
+                }
+            }
+
+
+            else if (
+                frequency >= 3000 &&
+                frequency < 12000
+            ) {
+
+                upperEnergy +=
+                    weightedEnergy;
+
+
+                upperWeight +=
+                    weight;
+
+
+                upperBandCount++;
+
+
+                if (
+                    stability >=
+                    this.minimumConfidence
+                ) {
+
+                    stableUpperBands++;
+                }
+            }
+        }
+
+
+        if (
+            lowerBandCount === 0 ||
+            upperBandCount <
+            this.minimumUpperBands
+        ) {
+
+            return unavailable(
+                "insufficient-upper-band-coverage"
+            );
+        }
+
+
+        if (
+            lowerWeight <= 0 ||
+            upperWeight <= 0
+        ) {
+
+            return unavailable(
+                "insufficient-weighted-energy"
+            );
+        }
+
+
+        const lowerReferenceEnergy =
+            lowerEnergy /
+            lowerWeight;
+
+
+        const upperReferenceEnergy =
+            upperEnergy /
+            upperWeight;
+
+
+        const upperToLowerRatio =
+            lowerReferenceEnergy > 0
+                ? upperReferenceEnergy /
+                  lowerReferenceEnergy
+                : 0;
+
+
+        const upperStability =
+            upperBandCount > 0
+                ? stableUpperBands /
+                  upperBandCount
+                : 0;
+
+
+        const lowerStability =
+            lowerBandCount > 0
+                ? stableLowerBands /
+                  lowerBandCount
+                : 0;
+
+
+        const stability =
+            this.clamp(
+                (
+                    upperStability *
+                    0.70
+                ) +
+                (
+                    lowerStability *
+                    0.30
+                ),
+                0,
+                1
+            );
+
+
+        const globalConfidence =
+            this.calculateConfidence(
+                analysis
+            );
+
+
+        const coverageConfidence =
+            this.clamp(
+                upperBandCount /
+                Math.max(
+                    this.minimumUpperBands,
+                    1
+                ),
+                0,
+                1
+            );
+
+
+        const confidence =
+            this.clamp(
+                (
+                    globalConfidence *
+                    0.50
+                ) +
+                (
+                    stability *
+                    0.30
+                ) +
+                (
+                    coverageConfidence *
+                    0.20
+                ),
+                0,
+                1
+            );
+
+
+        // ----------------------------------
+        // SCORE
+        // ----------------------------------
+        //
+        // O score cresce quando a razão
+        // conteúdo superior / referência
+        // central diminui.
+        //
+        // Não usamos apenas "energia alta
+        // baixa", porque isso confundiria
+        // uma voz naturalmente escura com
+        // deficiência espectral.
+        //
+        // ----------------------------------
+
+        const ratioScore =
+            this.clamp(
+                (
+                    this.upperContentObserveThreshold -
+                    upperToLowerRatio
+                ) /
+                Math.max(
+                    this.upperContentObserveThreshold,
+                    0.0001
+                ),
+                0,
+                1
+            );
+
+
+        const confidenceGate =
+            this.clamp(
+                confidence /
+                Math.max(
+                    this.minimumUpperContentConfidence,
+                    0.0001
+                ),
+                0,
+                1
+            );
+
+
+        const score =
+            this.clamp(
+                ratioScore *
+                confidenceGate *
+                stability,
+                0,
+                1
+            );
+
+
+        let status =
+            "preserve";
+
+
+        let bandwidthDeficiency =
+            false;
+
+
+        let reason =
+            "upper-content-within-conservative-range";
+                    // ----------------------------------
+        // CLASSIFICAÇÃO CONSERVADORA
+        // ----------------------------------
+
+        if (
+            confidence <
+            this.minimumUpperContentConfidence
+        ) {
+
+            status =
+                "preserve";
+
+
+            reason =
+                "insufficient-confidence";
+        }
+
+
+        else if (
+            stability <
+            this.minimumConfidence
+        ) {
+
+            status =
+                "preserve";
+
+
+            reason =
+                "insufficient-stability";
+        }
+
+
+        else if (
+            upperToLowerRatio <=
+            this.upperContentCandidateThreshold
+        ) {
+
+            status =
+                "candidate";
+
+
+            bandwidthDeficiency =
+                true;
+
+
+            reason =
+                "strong-upper-content-deficiency-evidence";
+        }
+
+
+        else if (
+            upperToLowerRatio <
+            this.upperContentObserveThreshold
+        ) {
+
+            status =
+                "observe";
+
+
+            reason =
+                "moderate-upper-content-reduction";
+        }
+
+
+        else {
+
+            status =
+                "preserve";
+
+
+            reason =
+                "upper-content-within-conservative-range";
+        }
+
+
+        return {
+
+            available:
+                true,
+
+            score,
+
+            confidence,
+
+            lowerReferenceEnergy,
+
+            upperReferenceEnergy,
+
+            upperToLowerRatio,
+
+            stability,
+
+            bandwidthDeficiency,
+
+            status,
+
+            reason,
+
+            bands: {
+
+                lower:
+                    lowerBandCount,
+
+                upper:
+                    upperBandCount,
+
+                stableLower:
+                    stableLowerBands,
+
+                stableUpper:
+                    stableUpperBands
+            }
+        };
+    }
+
+
+    // ======================================
     // GERAR PERFIL
     // ======================================
 
@@ -996,6 +1502,16 @@ class SpectralProfile {
 
 
         // ----------------------------------
+        // CONTEÚDO SUPERIOR
+        // ----------------------------------
+
+        const upperContentEvidence =
+            this.calculateUpperContentEvidence(
+                analysis
+            );
+
+
+        // ----------------------------------
         // RESULTADO
         // ----------------------------------
 
@@ -1053,6 +1569,10 @@ class SpectralProfile {
                 tilt,
 
 
+            upperContentEvidence:
+                upperContentEvidence,
+
+
             decisionHints: {
 
                 preserveIfLowConfidence:
@@ -1062,8 +1582,16 @@ class SpectralProfile {
                 preserveIfAmbiguous:
                     separation.ambiguous,
 
+                preserveIfUpperEvidenceWeak:
+                    !upperContentEvidence.available ||
+                    upperContentEvidence.status ===
+                    "preserve",
+
                 avoidAutomaticCorrection:
-                    true
+                    true,
+
+                reconstructionPermission:
+                    "none"
             }
         };
     }
