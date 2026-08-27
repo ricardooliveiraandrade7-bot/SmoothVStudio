@@ -190,6 +190,63 @@ class SpectralProfile {
 
 
     // ======================================
+    // ESTABILIDADE GLOBAL DO ANALYZER
+    // ======================================
+    //
+    // O Analyzer atual fornece estabilidade
+    // espectral global em:
+    //
+    // analysis.spectralAnalysis.stability
+    //
+    // Isso NÃO representa estabilidade
+    // individual de cada banda.
+    //
+    // Portanto, esta informação não será
+    // convertida artificialmente em
+    // "N bandas estáveis".
+    //
+    // ======================================
+
+    getGlobalSpectralStability(
+        analysis
+    ) {
+
+        if (
+            !analysis ||
+            !analysis.spectralAnalysis
+        ) {
+
+            return null;
+        }
+
+
+        const stability =
+            Number(
+                analysis
+                    .spectralAnalysis
+                    .stability
+            );
+
+
+        if (
+            !Number.isFinite(
+                stability
+            )
+        ) {
+
+            return null;
+        }
+
+
+        return this.clamp(
+            stability,
+            0,
+            1
+        );
+    }
+
+
+    // ======================================
     // CONTAR BANDAS ESTÁVEIS
     // ======================================
 
@@ -198,45 +255,68 @@ class SpectralProfile {
     ) {
 
         if (
-            !analysis ||
-            !Array.isArray(
-                analysis.bands
-            )
+            !analysis
         ) {
 
             return 0;
         }
 
 
-        let count =
-            0;
+        // ----------------------------------
+        // COMPATIBILIDADE COM FORMATO ANTIGO
+        // ----------------------------------
 
-
-        for (
-            let i = 0;
-            i < analysis.bands.length;
-            i++
+        if (
+            Array.isArray(
+                analysis.bands
+            )
         ) {
 
-            const stability =
-                this.safeNumber(
-                    analysis
-                        .bands[i]
-                        .stability
-                );
+            let count =
+                0;
 
 
-            if (
-                stability >=
-                this.minimumConfidence
+            for (
+                let i = 0;
+                i < analysis.bands.length;
+                i++
             ) {
 
-                count++;
+                const stability =
+                    this.safeNumber(
+                        analysis
+                            .bands[i]
+                            .stability
+                    );
+
+
+                if (
+                    stability >=
+                    this.minimumConfidence
+                ) {
+
+                    count++;
+                }
             }
+
+
+            return count;
         }
 
 
-        return count;
+        // ----------------------------------
+        // FORMATO ATUAL DO ANALYZER
+        // ----------------------------------
+        //
+        // As bandas atuais não carregam
+        // estabilidade individual.
+        //
+        // Não transformar estabilidade
+        // global em contagem artificial.
+        //
+        // ----------------------------------
+
+        return 0;
     }
 
 
@@ -272,16 +352,68 @@ class SpectralProfile {
             );
 
 
-        const stableBandConfidence =
-            this.clamp(
-                stableBands /
-                Math.max(
-                    this.minimumStableBands,
+        // ----------------------------------
+        // FORMATO ANTIGO
+        // ----------------------------------
+
+        if (
+            Array.isArray(
+                analysis.bands
+            )
+        ) {
+
+            const stableBandConfidence =
+                this.clamp(
+                    stableBands /
+                    Math.max(
+                        this.minimumStableBands,
+                        1
+                    ),
+                    0,
                     1
+                );
+
+
+            return this.clamp(
+                (
+                    analysisConfidence *
+                    0.65
+                ) +
+                (
+                    stableBandConfidence *
+                    0.35
                 ),
                 0,
                 1
             );
+        }
+
+
+        // ----------------------------------
+        // FORMATO ATUAL
+        // ----------------------------------
+        //
+        // O Analyzer já fornece uma medida
+        // global de estabilidade espectral.
+        //
+        // Ela pode contribuir para a confiança,
+        // mas NÃO é convertida em quantidade
+        // de bandas.
+        //
+        // ----------------------------------
+
+        const globalStability =
+            this.getGlobalSpectralStability(
+                analysis
+            );
+
+
+        if (
+            globalStability === null
+        ) {
+
+            return analysisConfidence;
+        }
 
 
         return this.clamp(
@@ -290,7 +422,7 @@ class SpectralProfile {
                 0.65
             ) +
             (
-                stableBandConfidence *
+                globalStability *
                 0.35
             ),
             0,
@@ -647,7 +779,9 @@ class SpectralProfile {
                 this.minimumReferenceSeparationDb
         };
     }
-        // ======================================
+
+
+    // ======================================
     // CLASSIFICAR TENDÊNCIA
     // ======================================
 
@@ -743,9 +877,7 @@ class SpectralProfile {
                 true
         };
     }
-
-
-    // ======================================
+        // ======================================
     // MEDIR DIREÇÃO ESPECTRAL
     // ======================================
 
@@ -754,11 +886,7 @@ class SpectralProfile {
     ) {
 
         if (
-            !analysis ||
-            !Array.isArray(
-                analysis.bands
-            ) ||
-            analysis.bands.length === 0
+            !analysis
         ) {
 
             return {
@@ -775,117 +903,309 @@ class SpectralProfile {
         }
 
 
-        let low =
+        // ----------------------------------
+        // COMPATIBILIDADE COM FORMATO ANTIGO
+        // ----------------------------------
+
+        if (
+            Array.isArray(
+                analysis.bands
+            )
+        ) {
+
+            if (
+                analysis.bands.length === 0
+            ) {
+
+                return {
+
+                    lowEnergy:
+                        0,
+
+                    highEnergy:
+                        0,
+
+                    tilt:
+                        0
+                };
+            }
+
+
+            let low =
+                0;
+
+
+            let high =
+                0;
+
+
+            let lowWeight =
+                0;
+
+
+            let highWeight =
+                0;
+
+
+            for (
+                let i = 0;
+                i < analysis.bands.length;
+                i++
+            ) {
+
+                const band =
+                    analysis.bands[i];
+
+
+                const frequency =
+                    this.safeNumber(
+                        band.centerFrequency
+                    );
+
+
+                const energy =
+                    Math.max(
+                        0,
+                        this.safeNumber(
+                            band.spectrumShare
+                        )
+                    );
+
+
+                const stability =
+                    this.clamp(
+                        this.safeNumber(
+                            band.stability
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const weightedEnergy =
+                    energy *
+                    Math.max(
+                        0.10,
+                        stability
+                    );
+
+
+                if (
+                    frequency <
+                    700
+                ) {
+
+                    low +=
+                        weightedEnergy;
+
+
+                    lowWeight +=
+                        Math.max(
+                            0.10,
+                            stability
+                        );
+                }
+
+
+                else if (
+                    frequency >=
+                    3000
+                ) {
+
+                    high +=
+                        weightedEnergy;
+
+
+                    highWeight +=
+                        Math.max(
+                            0.10,
+                            stability
+                        );
+                }
+            }
+
+
+            const lowEnergy =
+                lowWeight > 0
+                    ? low /
+                      lowWeight
+                    : 0;
+
+
+            const highEnergy =
+                highWeight > 0
+                    ? high /
+                      highWeight
+                    : 0;
+
+
+            return {
+
+                lowEnergy,
+
+                highEnergy,
+
+                tilt:
+                    highEnergy -
+                    lowEnergy
+            };
+        }
+
+
+        // ----------------------------------
+        // FORMATO ATUAL DO ANALYZER
+        // ----------------------------------
+        //
+        // As bandas são regiões nomeadas.
+        //
+        // Frequências centrais aproximadas
+        // são usadas somente para classificar
+        // as regiões no cálculo interno.
+        //
+        // Não são apresentadas como medições
+        // FFT individuais.
+        //
+        // ----------------------------------
+
+        if (
+            !analysis.bands ||
+            typeof analysis.bands !==
+            "object"
+        ) {
+
+            return {
+
+                lowEnergy:
+                    0,
+
+                highEnergy:
+                    0,
+
+                tilt:
+                    0
+            };
+        }
+
+
+        const bands =
+            analysis.bands;
+
+
+        const lowKeys = [
+            "sub",
+            "body",
+            "lowMid"
+        ];
+
+
+        const highKeys = [
+            "presence",
+            "sibilance",
+            "air"
+        ];
+
+
+        let lowEnergy =
             0;
 
 
-        let high =
-            0;
-
-
-        let lowWeight =
-            0;
-
-
-        let highWeight =
+        let highEnergy =
             0;
 
 
         for (
             let i = 0;
-            i < analysis.bands.length;
+            i < lowKeys.length;
             i++
         ) {
 
-            const band =
-                analysis.bands[i];
-
-
-            const frequency =
-                this.safeNumber(
-                    band.centerFrequency
-                );
-
-
-            const energy =
-                Math.max(
-                    0,
-                    this.safeNumber(
-                        band.spectrumShare
-                    )
-                );
-
-
-            const stability =
-                this.clamp(
-                    this.safeNumber(
-                        band.stability
-                    ),
-                    0,
-                    1
-                );
-
-
-            const weightedEnergy =
-                energy *
-                Math.max(
-                    0.10,
-                    stability
+            const value =
+                Number(
+                    bands[
+                        lowKeys[i]
+                    ]
                 );
 
 
             if (
-                frequency <
-                700
+                Number.isFinite(
+                    value
+                )
             ) {
 
-                low +=
-                    weightedEnergy;
-
-
-                lowWeight +=
+                lowEnergy +=
                     Math.max(
-                        0.10,
-                        stability
-                    );
-            }
-
-
-            else if (
-                frequency >=
-                3000
-            ) {
-
-                high +=
-                    weightedEnergy;
-
-
-                highWeight +=
-                    Math.max(
-                        0.10,
-                        stability
+                        0,
+                        value
                     );
             }
         }
 
 
-        const lowEnergy =
-            lowWeight > 0
-                ? low /
-                  lowWeight
-                : 0;
+        for (
+            let i = 0;
+            i < highKeys.length;
+            i++
+        ) {
+
+            const value =
+                Number(
+                    bands[
+                        highKeys[i]
+                    ]
+                );
 
 
-        const highEnergy =
-            highWeight > 0
-                ? high /
-                  highWeight
-                : 0;
+            if (
+                Number.isFinite(
+                    value
+                )
+            ) {
+
+                highEnergy +=
+                    Math.max(
+                        0,
+                        value
+                    );
+            }
+        }
 
 
-        const tilt =
-            highEnergy -
-            lowEnergy;
+        const total =
+            lowEnergy +
+            highEnergy +
+            Math.max(
+                0,
+                this.safeNumber(
+                    bands.mid
+                )
+            );
+
+
+        if (
+            total <= 0
+        ) {
+
+            return {
+
+                lowEnergy:
+                    0,
+
+                highEnergy:
+                    0,
+
+                tilt:
+                    0
+            };
+        }
+
+
+        lowEnergy /=
+            total;
+
+
+        highEnergy /=
+            total;
 
 
         return {
@@ -894,12 +1214,12 @@ class SpectralProfile {
 
             highEnergy,
 
-            tilt
+            tilt:
+                highEnergy -
+                lowEnergy
         };
     }
-
-
-    // ======================================
+        // ======================================
     // EVIDÊNCIA DE CONTEÚDO SUPERIOR
     // ======================================
     //
@@ -910,8 +1230,8 @@ class SpectralProfile {
     // o conteúdo superior esteja reduzido
     // em relação ao conteúdo central.
     //
-    // A análise usa apenas as bandas já
-    // fornecidas pelo Analyzer.
+    // A análise usa as evidências já
+    // produzidas pelo Analyzer.
     //
     // ======================================
 
@@ -959,7 +1279,326 @@ class SpectralProfile {
 
 
         if (
-            !analysis ||
+            !analysis
+        ) {
+
+            return unavailable(
+                "missing-analysis"
+            );
+        }
+
+
+        // ----------------------------------
+        // EVIDÊNCIA DIRETA DO ANALYZER
+        // ----------------------------------
+        //
+        // O Analyzer atual já produz uma
+        // análise superior específica.
+        //
+        // Quando disponível, ela tem
+        // prioridade sobre a antiga tentativa
+        // de reconstruir essa evidência a partir
+        // de um array de bandas.
+        //
+        // ----------------------------------
+
+        const spectralAnalysis =
+            analysis.spectralAnalysis;
+
+
+        if (
+            spectralAnalysis &&
+            typeof spectralAnalysis ===
+            "object"
+        ) {
+
+            const ratio =
+                Number(
+                    spectralAnalysis
+                        .upperToLowerRatio
+                );
+
+
+            const stability =
+                Number(
+                    spectralAnalysis
+                        .stability
+                );
+
+
+            const bandwidthConfidence =
+                Number(
+                    spectralAnalysis
+                        .bandwidthConfidence
+                );
+
+
+            const upperPresence =
+                Number(
+                    spectralAnalysis
+                        .upperPresence
+                );
+
+
+            const hasRatio =
+                Number.isFinite(
+                    ratio
+                );
+
+
+            const hasStability =
+                Number.isFinite(
+                    stability
+                );
+
+
+            const hasBandwidthConfidence =
+                Number.isFinite(
+                    bandwidthConfidence
+                );
+
+
+            const hasUpperPresence =
+                Number.isFinite(
+                    upperPresence
+                );
+
+
+            if (
+                hasRatio ||
+                hasUpperPresence
+            ) {
+
+                const safeRatio =
+                    hasRatio
+                        ? Math.max(
+                            0,
+                            ratio
+                        )
+                        : 0;
+
+
+                const safeStability =
+                    hasStability
+                        ? this.clamp(
+                            stability,
+                            0,
+                            1
+                        )
+                        : 0;
+
+
+                const globalConfidence =
+                    this.clamp(
+                        this.safeNumber(
+                            analysis.confidence
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const safeBandwidthConfidence =
+                    hasBandwidthConfidence
+                        ? this.clamp(
+                            bandwidthConfidence,
+                            0,
+                            1
+                        )
+                        : globalConfidence;
+
+
+                const confidence =
+                    this.clamp(
+                        (
+                            globalConfidence *
+                            0.40
+                        ) +
+                        (
+                            safeStability *
+                            0.30
+                        ) +
+                        (
+                            safeBandwidthConfidence *
+                            0.30
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const ratioScore =
+                    this.clamp(
+                        (
+                            this.upperContentObserveThreshold -
+                            safeRatio
+                        ) /
+                        Math.max(
+                            this.upperContentObserveThreshold,
+                            0.0001
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const confidenceGate =
+                    this.clamp(
+                        confidence /
+                        Math.max(
+                            this.minimumUpperContentConfidence,
+                            0.0001
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const score =
+                    this.clamp(
+                        ratioScore *
+                        confidenceGate *
+                        (
+                            hasStability
+                                ? safeStability
+                                : 1
+                        ),
+                        0,
+                        1
+                    );
+
+
+                let status =
+                    "preserve";
+
+
+                let bandwidthDeficiency =
+                    false;
+
+
+                let reason =
+                    "upper-content-within-conservative-range";
+
+
+                if (
+                    confidence <
+                    this.minimumUpperContentConfidence
+                ) {
+
+                    status =
+                        "preserve";
+
+
+                    reason =
+                        "insufficient-confidence";
+                }
+
+
+                else if (
+                    hasStability &&
+                    safeStability <
+                    this.minimumConfidence
+                ) {
+
+                    status =
+                        "preserve";
+
+
+                    reason =
+                        "insufficient-stability";
+                }
+
+
+                else if (
+                    safeRatio <=
+                    this.upperContentCandidateThreshold
+                ) {
+
+                    status =
+                        "candidate";
+
+
+                    bandwidthDeficiency =
+                        true;
+
+
+                    reason =
+                        "strong-upper-content-deficiency-evidence";
+                }
+
+
+                else if (
+                    safeRatio <
+                    this.upperContentObserveThreshold
+                ) {
+
+                    status =
+                        "observe";
+
+
+                    reason =
+                        "moderate-upper-content-reduction";
+                }
+
+
+                return {
+
+                    available:
+                        true,
+
+                    score,
+
+                    confidence,
+
+                    lowerReferenceEnergy:
+                        0,
+
+                    upperReferenceEnergy:
+                        Math.max(
+                            0,
+                            safeRatio
+                        ),
+
+                    upperToLowerRatio:
+                        safeRatio,
+
+                    stability:
+                        safeStability,
+
+                    bandwidthDeficiency,
+
+                    status,
+
+                    reason,
+
+                    source:
+                        "analyzer-spectral-analysis",
+
+                    upperPresence:
+                        hasUpperPresence
+                            ? upperPresence
+                            : null,
+
+                    bandwidthConfidence:
+                        hasBandwidthConfidence
+                            ? safeBandwidthConfidence
+                            : null
+                };
+            }
+        }
+
+
+        // ----------------------------------
+        // COMPATIBILIDADE LEGADA
+        // ----------------------------------
+        //
+        // Mantém o comportamento original
+        // quando o Analyzer fornece o antigo
+        // formato de array.
+        //
+        // ----------------------------------
+
+        if (
             !Array.isArray(
                 analysis.bands
             ) ||
@@ -1006,19 +1645,6 @@ class SpectralProfile {
 
         // ----------------------------------
         // REGIÕES UTILIZADAS
-        // ----------------------------------
-        //
-        // Lower reference:
-        // 700 Hz até 3000 Hz
-        //
-        // Upper content:
-        // 3000 Hz até 12000 Hz
-        //
-        // A faixa superior não se estende
-        // automaticamente além de 12 kHz,
-        // evitando que ruído ultrassônico
-        // ou artefatos dominem a evidência.
-        //
         // ----------------------------------
 
         for (
@@ -1228,21 +1854,6 @@ class SpectralProfile {
             );
 
 
-        // ----------------------------------
-        // SCORE
-        // ----------------------------------
-        //
-        // O score cresce quando a razão
-        // conteúdo superior / referência
-        // central diminui.
-        //
-        // Não usamos apenas "energia alta
-        // baixa", porque isso confundiria
-        // uma voz naturalmente escura com
-        // deficiência espectral.
-        //
-        // ----------------------------------
-
         const ratioScore =
             this.clamp(
                 (
@@ -1291,10 +1902,6 @@ class SpectralProfile {
         let reason =
             "upper-content-within-conservative-range";
 
-
-        // ----------------------------------
-        // CLASSIFICAÇÃO CONSERVADORA
-        // ----------------------------------
 
         if (
             confidence <
@@ -1652,4 +2259,3 @@ class SpectralProfile {
 
 window.SpectralProfile =
     SpectralProfile;
-    
