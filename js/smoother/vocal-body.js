@@ -1,141 +1,234 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL BODY
-// V0.4
+// V0.6
 // ==========================================
 // Controle adaptativo de grave e médio-grave.
 //
-// V0.4:
+// V0.6:
 //
 // - preserva os cortes corretivos existentes;
-// - adiciona Body Enhancement independente
-//   da atenuação;
-// - permite adicionar corpo quando o vocal
-//   já chega deficiente nessa região;
-// - mantém recuperação pós-atenuação;
-// - usa evidência espectral/local para decidir
-//   a intensidade do enhancement;
-// - mantém limites conservadores;
+// - preserva Body Recovery;
+// - preserva Body Enhancement tonal;
+// - preserva Body Harmonic Enhancement;
+// - torna a atuação do enhancement proporcional
+//   ao nível real de evidência;
+// - deficiência forte → atuação completa;
+// - deficiência moderada → atuação maior;
+// - deficiência baixa/indeterminada → atuação média;
+// - evidência contraditória → atuação mínima;
+// - mantém reconstrução harmônica conservadora;
+// - mantém ramo paralelo interno dedicado;
+// - mantém oversampling 4x;
+// - mantém o enhancement independente
+//   da necessidade de corte;
+// - melhora a audibilidade sem transformar
+//   o módulo em excitador global;
+// - registra diagnóstico explícito;
 // - não cria decisões;
 // - não libera processamento global;
 // - não substitui o vocal original.
 //
 // IMPORTANTE:
 //
-// O Body Enhancement desta versão é uma
-// reconstrução espectral tonal conservadora.
-// Ele NÃO constitui reconstrução harmônica
-// verdadeira.
+// O Body Harmonic Enhancement é uma
+// reconstrução harmônica DSP baseada em
+// excitação não linear controlada.
 //
-// Uma futura Vocal Reconstruction poderá
-// utilizar evidências harmônicas/espectrais
-// mais específicas.
+// Ele NÃO recupera informação espectral
+// ausente de forma literal.
+//
+// Ele cria componentes harmônicos
+// coerentes com o conteúdo corporal
+// existente no sinal.
+//
+// A intensidade de atuação agora considera
+// explicitamente a força da evidência:
+//
+// forte       → atuação completa
+// moderada    → atuação maior
+// baixa       → atuação média
+// contraditória → atuação mínima
 //
 // ==========================================
 
+
 class VocalBody {
-    
+
+
     constructor(options = {}) {
-        
-        this.version = "0.4";
-        
+
+
+        this.version =
+            "0.6";
+
+
+        // ==================================
+        // CORTES CORRETIVOS
+        // ==================================
+
         this.maxLowCut =
             options.maxLowCut ?? -3.0;
-        
+
+
         this.maxLowMidCut =
             options.maxLowMidCut ?? -2.5;
-        
+
+
         this.maxMudCut =
             options.maxMudCut ?? -2.0;
-        
-        
+
+
         // ==================================
         // BODY RECOVERY
         // ==================================
-        //
-        // Recupera parcialmente sensação de
-        // corpo após uma atenuação corretiva.
-        //
-        // ==================================
-        
+
         this.bodyRecoveryEnabled =
             options.bodyRecoveryEnabled ?? true;
-        
+
+
         this.maxBodyRecoveryGain =
             options.maxBodyRecoveryGain ?? 0.6;
-        
+
+
         this.bodyRecoveryQ =
             options.bodyRecoveryQ ?? 0.65;
-        
-        
+
+
         // ==================================
-        // BODY ENHANCEMENT
+        // BODY ENHANCEMENT TONAL
         // ==================================
-        //
-        // Diferentemente do Recovery,
-        // o Enhancement pode atuar quando
-        // existe deficiência de corpo mesmo
-        // sem cortes prévios.
-        //
-        // O objetivo não é simplesmente
-        // aumentar graves.
-        //
-        // A atuação depende da evidência
-        // de deficiência de corpo.
-        //
-        // ==================================
-        
+
         this.bodyEnhancementEnabled =
             options.bodyEnhancementEnabled ?? true;
-        
+
+
         this.maxBodyEnhancementGain =
-            options.maxBodyEnhancementGain ?? 0.75;
-        
+            options.maxBodyEnhancementGain ?? 1.15;
+
+
         this.bodyEnhancementQ =
             options.bodyEnhancementQ ?? 0.65;
-        
-        
+
+
         // ==================================
-        // LIMIARES DE DEFICIÊNCIA
+        // BODY HARMONIC ENHANCEMENT
         // ==================================
-        //
-        // São referências internas para
-        // determinar quando o corpo está
-        // abaixo de uma faixa considerada
-        // suficiente.
-        //
-        // Não representam um alvo rígido.
-        //
+
+        this.bodyHarmonicEnhancementEnabled =
+            options.bodyHarmonicEnhancementEnabled ??
+            true;
+
+
+        this.maxBodyHarmonicDrive =
+            options.maxBodyHarmonicDrive ??
+            0.105;
+
+
+        this.maxBodyHarmonicMix =
+            options.maxBodyHarmonicMix ??
+            0.20;
+
+
+        this.bodyHarmonicOversample =
+            "4x";
+
+
+        this.bodyHarmonicQ =
+            options.bodyHarmonicQ ??
+            0.58;
+
+
+        this.bodyHarmonicPreGain =
+            options.bodyHarmonicPreGain ??
+            1.55;
+
+
+        this.bodyHarmonicPostGain =
+            options.bodyHarmonicPostGain ??
+            0.88;
+
+
         // ==================================
-        
+        // FAIXA DO EXCITADOR CORPORAL
+        // ==================================
+
+        this.bodyHarmonicMinFrequency =
+            options.bodyHarmonicMinFrequency ??
+            150;
+
+
+        this.bodyHarmonicMaxFrequency =
+            options.bodyHarmonicMaxFrequency ??
+            520;
+
+
+        this.bodyHarmonicOutputMinFrequency =
+            options.bodyHarmonicOutputMinFrequency ??
+            180;
+
+
+        this.bodyHarmonicOutputMaxFrequency =
+            options.bodyHarmonicOutputMaxFrequency ??
+            1800;
+
+
+        // ==================================
+        // REFERÊNCIAS DE DEFICIÊNCIA
+        // ==================================
+
         this.bodyReferenceRatio =
-            options.bodyReferenceRatio ?? 0.18;
-        
+            options.bodyReferenceRatio ??
+            0.18;
+
+
         this.localBodyReferenceRatio =
-            options.localBodyReferenceRatio ?? 0.38;
-        
-        
+            options.localBodyReferenceRatio ??
+            0.38;
+
+
         // ==================================
-        // PRIMEIRA INTEGRAÇÃO CONTROLADA
+        // INTEGRAÇÃO COM DECISÃO
         // ==================================
-        
+
         this.decisionIntegrationEnabled =
-            options.decisionIntegrationEnabled ?? true;
-        
+            options.decisionIntegrationEnabled ??
+            true;
+
+
         this.maxDecisionLowCut =
-            options.maxDecisionLowCut ?? -1.0;
-        
+            options.maxDecisionLowCut ??
+            -1.0;
+
+
         this.minDecisionConfidence =
-            options.minDecisionConfidence ?? "moderate";
+            options.minDecisionConfidence ??
+            "moderate";
+
+
+        // ==================================
+        // DIAGNÓSTICO
+        // ==================================
+
+        this.lastSettings =
+            null;
+
+
+        this.lastHarmonicStatus =
+            null;
     }
-    
-    
+
+
     // ======================================
     // CLAMP
     // ======================================
-    
-    clamp(value, min, max) {
-        
+
+    clamp(
+        value,
+        min,
+        max
+    ) {
+
         return Math.min(
             max,
             Math.max(
@@ -144,62 +237,68 @@ class VocalBody {
             )
         );
     }
-    
-    
+
+
     // ======================================
     // NÚMERO SEGURO
     // ======================================
-    
+
     safeNumber(
         value,
         fallback = 0
     ) {
-        
+
         return Number.isFinite(
-                value
-            ) ?
-            value :
-            fallback;
+            value
+        )
+            ? value
+            : fallback;
     }
-    
-    
+
+
     // ======================================
     // RANK DE CONFIANÇA
     // ======================================
-    
-    confidenceRank(value) {
-        
+
+    confidenceRank(
+        value
+    ) {
+
         const text =
             String(
                 value || ""
             ).toLowerCase();
-        
-        
+
+
         if (
             text === "strong" ||
             text === "forte"
         ) {
-            
+
             return 2;
         }
-        
-        
+
+
         if (
             text === "moderate" ||
             text === "moderada"
         ) {
-            
+
             return 1;
         }
-        
-        
+
+
         return 0;
     }
-        // ======================================
+
+
+    // ======================================
     // IDENTIFICAR REGIÃO LOW
     // ======================================
 
-    isLowRegion(region) {
+    isLowRegion(
+        region
+    ) {
 
         if (!region) {
 
@@ -231,7 +330,9 @@ class VocalBody {
     // IDENTIFICAR CORREÇÃO
     // ======================================
 
-    isCorrectionTreatment(intent) {
+    isCorrectionTreatment(
+        intent
+    ) {
 
         const type =
             String(
@@ -256,13 +357,13 @@ class VocalBody {
             type.includes("corte")
         );
     }
-
-
-    // ======================================
+        // ======================================
     // LER CORTE DA DECISÃO
     // ======================================
 
-    getDecisionLowCut(decision) {
+    getDecisionLowCut(
+        decision
+    ) {
 
         if (
             !this.decisionIntegrationEnabled ||
@@ -276,17 +377,19 @@ class VocalBody {
         }
 
 
-        let requestedCut = 0;
+        let requestedCut =
+            0;
 
 
         for (
             const intent of
-                decision.regionalInterventionIntent
+            decision.regionalInterventionIntent
         ) {
 
             if (
                 !intent ||
-                intent.state !== "candidate"
+                intent.state !==
+                "candidate"
             ) {
 
                 continue;
@@ -372,17 +475,6 @@ class VocalBody {
     // ======================================
     // MEDIR DEFICIÊNCIA DE CORPO
     // ======================================
-    //
-    // A deficiência é estimada por duas
-    // evidências independentes:
-    //
-    // 1. relação global de body;
-    // 2. relação local body / low-mid / mid.
-    //
-    // Isso evita que uma única métrica
-    // determine o enhancement.
-    //
-    // ======================================
 
     calculateBodyDeficiency(
         globalBodyRatio,
@@ -415,10 +507,12 @@ class VocalBody {
 
         return this.clamp(
             (
-                globalDeficiency * 0.60
+                globalDeficiency *
+                0.60
             ) +
             (
-                localDeficiency * 0.40
+                localDeficiency *
+                0.40
             ),
             0,
             1
@@ -428,12 +522,6 @@ class VocalBody {
 
     // ======================================
     // CONFIANÇA DO ENHANCEMENT
-    // ======================================
-    //
-    // O enhancement fica mais disponível
-    // que a antiga recuperação, mas ainda
-    // exige evidência mínima.
-    //
     // ======================================
 
     calculateEnhancementConfidence(
@@ -482,43 +570,777 @@ class VocalBody {
         const combinedEvidence =
             this.clamp(
                 (
-                    deficiencyEvidence * 0.50
+                    deficiencyEvidence *
+                    0.50
                 ) +
                 (
-                    localEvidence * 0.25
+                    localEvidence *
+                    0.25
                 ) +
                 (
-                    globalEvidence * 0.25
+                    globalEvidence *
+                    0.25
                 ),
                 0,
                 1
             );
 
 
-        // A evidência corretiva não é
-        // obrigatória para liberar enhancement.
-        //
-        // Quando existe deficiência clara,
-        // o enhancement pode atuar mesmo sem
-        // qualquer corte prévio.
+        return this.clamp(
+            (
+                combinedEvidence *
+                0.75
+            ) +
+            (
+                correctionConfidence *
+                0.25
+            ),
+            0,
+            1
+        );
+    }
+
+
+    // ======================================
+    // CLASSIFICAR EVIDÊNCIA
+    // ======================================
+    //
+    // A classificação não cria uma decisão
+    // externa.
+    //
+    // Ela apenas converte a evidência já
+    // medida em uma intensidade interna
+    // de atuação.
+    //
+    // ======================================
+
+    classifyBodyEvidence(
+        bodyDeficiency,
+        enhancementConfidence,
+        correctionConfidence
+    ) {
+
+        const deficiency =
+            this.clamp(
+                this.safeNumber(
+                    bodyDeficiency,
+                    0
+                ),
+                0,
+                1
+            );
+
 
         const confidence =
             this.clamp(
-                (
-                    combinedEvidence * 0.75
-                ) +
-                (
-                    correctionConfidence * 0.25
+                this.safeNumber(
+                    enhancementConfidence,
+                    0
                 ),
                 0,
                 1
             );
 
 
-        return confidence;
+        const correction =
+            this.clamp(
+                this.safeNumber(
+                    correctionConfidence,
+                    0
+                ),
+                0,
+                1
+            );
+
+
+        // ==================================
+        // EVIDÊNCIA CONTRADITÓRIA
+        // ==================================
+        //
+        // Existe uma deficiência aparente,
+        // porém a confiança geral é baixa.
+        //
+        // Nesse cenário preservamos o sinal
+        // e permitimos somente uma atuação
+        // residual.
+        //
+        // ==================================
+
+        if (
+            deficiency >= 0.35 &&
+            confidence < 0.20
+        ) {
+
+            return {
+                level:
+                    "contradictory",
+
+                label:
+                    "contradictory",
+
+                strength:
+                    0.18,
+
+                deficiency,
+
+                confidence,
+
+                correctionConfidence:
+                    correction
+            };
+        }
+
+
+        // ==================================
+        // EVIDÊNCIA FORTE
+        // ==================================
+
+        if (
+            deficiency >= 0.65 &&
+            confidence >= 0.60
+        ) {
+
+            return {
+                level:
+                    "strong",
+
+                label:
+                    "strong",
+
+                strength:
+                    1.00,
+
+                deficiency,
+
+                confidence,
+
+                correctionConfidence:
+                    correction
+            };
+        }
+
+
+        // ==================================
+        // EVIDÊNCIA MODERADA
+        // ==================================
+
+        if (
+            deficiency >= 0.35 &&
+            confidence >= 0.35
+        ) {
+
+            return {
+                level:
+                    "moderate",
+
+                label:
+                    "moderate",
+
+                strength:
+                    0.78,
+
+                deficiency,
+
+                confidence,
+
+                correctionConfidence:
+                    correction
+            };
+        }
+
+
+        // ==================================
+        // EVIDÊNCIA BAIXA / INDETERMINADA
+        // ==================================
+        //
+        // Mesmo com pouca evidência,
+        // a atuação não é mais praticamente
+        // nula.
+        //
+        // O módulo pode testar uma reconstrução
+        // média, mas continua limitado.
+        //
+        // ==================================
+
+        return {
+            level:
+                "low",
+
+            label:
+                "low",
+
+            strength:
+                0.52,
+
+            deficiency,
+
+            confidence,
+
+            correctionConfidence:
+                correction
+        };
     }
         // ======================================
-    // CONFIGURAÇÃO
+    // DEMANDA HARMÔNICA
+    // ======================================
+    //
+    // A demanda representa a necessidade
+    // estimada de reconstrução.
+    //
+    // A intensidade final é posteriormente
+    // modulada pela classificação da evidência.
+    //
+    // ======================================
+
+    calculateHarmonicDemand(
+        bodyDeficiency,
+        enhancementConfidence
+    ) {
+
+        const deficiency =
+            this.clamp(
+                bodyDeficiency,
+                0,
+                1
+            );
+
+
+        const confidence =
+            this.clamp(
+                enhancementConfidence,
+                0,
+                1
+            );
+
+
+        const demand =
+            this.clamp(
+                (
+                    Math.pow(
+                        deficiency,
+                        0.72
+                    ) *
+                    0.72
+                ) +
+                (
+                    confidence *
+                    0.28
+                ),
+                0,
+                1
+            );
+
+
+        return demand;
+    }
+
+
+    // ======================================
+    // CRIAR CURVA HARMÔNICA
+    // ======================================
+
+    createHarmonicCurve(
+        drive = 0.08
+    ) {
+
+        const samples =
+            2048;
+
+
+        const curve =
+            new Float32Array(
+                samples
+            );
+
+
+        const safeDrive =
+            this.clamp(
+                drive,
+                0,
+                this.maxBodyHarmonicDrive
+            );
+
+
+        const evenAmount =
+            safeDrive *
+            1.55;
+
+
+        const oddAmount =
+            safeDrive *
+            0.55;
+
+
+        const normalization =
+            1 +
+            (
+                evenAmount *
+                0.28
+            ) +
+            (
+                oddAmount *
+                0.16
+            );
+
+
+        for (
+            let i = 0;
+            i < samples;
+            i++
+        ) {
+
+            const x =
+                (
+                    (
+                        i /
+                        (
+                            samples -
+                            1
+                        )
+                    ) *
+                    2
+                ) -
+                1;
+
+
+            const shaped =
+                x +
+                (
+                    evenAmount *
+                    x *
+                    x *
+                    0.34
+                ) +
+                (
+                    oddAmount *
+                    x *
+                    x *
+                    x *
+                    0.18
+                );
+
+
+            curve[i] =
+                this.clamp(
+                    shaped /
+                    normalization,
+                    -1,
+                    1
+                );
+        }
+
+
+        return curve;
+    }
+
+
+    // ======================================
+    // CRIAR WAVESHAPER HARMÔNICO
+    // ======================================
+
+    createHarmonicShaper(
+        context,
+        drive
+    ) {
+
+        const shaper =
+            context.createWaveShaper();
+
+
+        shaper.curve =
+            this.createHarmonicCurve(
+                drive
+            );
+
+
+        shaper.oversample =
+            this.bodyHarmonicOversample;
+
+
+        return shaper;
+    }
+
+
+    // ======================================
+    // CRIAR FILTRO PEAKING
+    // ======================================
+
+    createPeakingFilter(
+        context,
+        frequency,
+        Q,
+        gain
+    ) {
+
+        const filter =
+            context.createBiquadFilter();
+
+
+        filter.type =
+            "peaking";
+
+
+        filter.frequency.value =
+            frequency;
+
+
+        filter.Q.value =
+            Q;
+
+
+        filter.gain.value =
+            gain;
+
+
+        return filter;
+    }
+
+
+    // ======================================
+    // CRIAR FILTRO BANDPASS
+    // ======================================
+
+    createBodyBandpass(
+        context,
+        minFrequency,
+        maxFrequency
+    ) {
+
+        const filter =
+            context.createBiquadFilter();
+
+
+        filter.type =
+            "bandpass";
+
+
+        const center =
+            Math.sqrt(
+                minFrequency *
+                maxFrequency
+            );
+
+
+        const bandwidth =
+            Math.log2(
+                maxFrequency /
+                minFrequency
+            );
+
+
+        filter.frequency.value =
+            this.clamp(
+                center,
+                20,
+                context.sampleRate *
+                0.46
+            );
+
+
+        filter.Q.value =
+            this.clamp(
+                1 /
+                bandwidth,
+                0.25,
+                1.10
+            );
+
+
+        return filter;
+    }
+
+
+    // ======================================
+    // CRIAR FILTRO LOWPASS
+    // ======================================
+
+    createBodyHarmonicLowpass(
+        context
+    ) {
+
+        const filter =
+            context.createBiquadFilter();
+
+
+        filter.type =
+            "lowpass";
+
+
+        filter.frequency.value =
+            Math.min(
+                this.bodyHarmonicOutputMaxFrequency,
+                context.sampleRate *
+                0.42
+            );
+
+
+        filter.Q.value =
+            0.42;
+
+
+        return filter;
+    }
+        // ======================================
+    // CALCULAR GANHO HARMÔNICO
+    // ======================================
+
+    calculateHarmonicSettings(
+        bodyDeficiency,
+        enhancementConfidence,
+        correctionConfidence = 0
+    ) {
+
+        const demand =
+            this.calculateHarmonicDemand(
+                bodyDeficiency,
+                enhancementConfidence
+            );
+
+
+        const evidence =
+            this.classifyBodyEvidence(
+                bodyDeficiency,
+                enhancementConfidence,
+                correctionConfidence
+            );
+
+
+        // ==================================
+        // DEMANDA AJUSTADA PELA EVIDÊNCIA
+        // ==================================
+        //
+        // Aqui ocorre a principal mudança
+        // comportamental da V0.6.
+        //
+        // A demanda continua representando
+        // a necessidade medida.
+        //
+        // A strength representa quanto dessa
+        // necessidade pode realmente se tornar
+        // processamento.
+        //
+        // ==================================
+
+        const effectiveDemand =
+            this.clamp(
+                demand *
+                evidence.strength,
+                0,
+                1
+            );
+
+
+        const drive =
+            this.bodyHarmonicEnhancementEnabled
+                ? this.clamp(
+                    effectiveDemand *
+                    this.maxBodyHarmonicDrive,
+                    0,
+                    this.maxBodyHarmonicDrive
+                )
+                : 0;
+
+
+        const mix =
+            this.bodyHarmonicEnhancementEnabled
+                ? this.clamp(
+                    effectiveDemand *
+                    this.maxBodyHarmonicMix,
+                    0,
+                    this.maxBodyHarmonicMix
+                )
+                : 0;
+
+
+        return {
+
+            demand,
+
+            effectiveDemand,
+
+            evidenceLevel:
+                evidence.level,
+
+            evidenceStrength:
+                evidence.strength,
+
+            drive,
+
+            mix,
+
+            enabled:
+                this.bodyHarmonicEnhancementEnabled &&
+                drive > 0 &&
+                mix > 0,
+
+            oversample:
+                this.bodyHarmonicOversample
+        };
+    }
+
+
+    // ======================================
+    // CALCULAR GANHO TONAL
+    // ======================================
+    //
+    // A mesma filosofia é aplicada ao
+    // enhancement tonal.
+    //
+    // Não basta detectar deficiência:
+    // a confiança determina a intensidade.
+    //
+    // ======================================
+
+    calculateBodyEnhancementGain(
+        bodyDeficiency,
+        enhancementConfidence,
+        correctionConfidence
+    ) {
+
+        if (
+            !this.bodyEnhancementEnabled
+        ) {
+
+            return 0;
+        }
+
+
+        const evidence =
+            this.classifyBodyEvidence(
+                bodyDeficiency,
+                enhancementConfidence,
+                correctionConfidence
+            );
+
+
+        const demand =
+            this.clamp(
+                bodyDeficiency *
+                enhancementConfidence,
+                0,
+                1
+            );
+
+
+        return this.clamp(
+            demand *
+            evidence.strength *
+            this.maxBodyEnhancementGain,
+            0,
+            this.maxBodyEnhancementGain
+        );
+    }
+
+
+    // ======================================
+    // DIAGNÓSTICO HARMÔNICO
+    // ======================================
+
+    logHarmonicObservation(
+        settings
+    ) {
+
+        const harmonic =
+            settings.harmonic;
+
+
+        const observation = {
+
+            version:
+                this.version,
+
+            enabled:
+                harmonic.enabled,
+
+            bodyDeficiency:
+                Number(
+                    settings.bodyDeficiency
+                    .toFixed(4)
+                ),
+
+            enhancementConfidence:
+                Number(
+                    settings.enhancementConfidence
+                    .toFixed(4)
+                ),
+
+            evidenceLevel:
+                harmonic.evidenceLevel,
+
+            evidenceStrength:
+                Number(
+                    harmonic.evidenceStrength
+                    .toFixed(4)
+                ),
+
+            demand:
+                Number(
+                    harmonic.demand
+                    .toFixed(4)
+                ),
+
+            effectiveDemand:
+                Number(
+                    harmonic.effectiveDemand
+                    .toFixed(4)
+                ),
+
+            drive:
+                Number(
+                    harmonic.drive
+                    .toFixed(4)
+                ),
+
+            mix:
+                Number(
+                    harmonic.mix
+                    .toFixed(4)
+                ),
+
+            oversample:
+                harmonic.oversample,
+
+            frequencyRange: {
+
+                inputMin:
+                    this.bodyHarmonicMinFrequency,
+
+                inputMax:
+                    this.bodyHarmonicMaxFrequency,
+
+                outputMin:
+                    this.bodyHarmonicOutputMinFrequency,
+
+                outputMax:
+                    this.bodyHarmonicOutputMaxFrequency
+            },
+
+            mode:
+                harmonic.enabled
+                    ? "harmonic-enhancement"
+                    : "preserve"
+        };
+
+
+        this.lastHarmonicStatus =
+            observation;
+
+
+        if (
+            typeof console !==
+            "undefined" &&
+            typeof console.log ===
+            "function"
+        ) {
+
+            console.log(
+                "[SmoothVStudio][VocalBody] Harmonic enhancement observation:",
+                observation
+            );
+        }
+    }
+        // ======================================
+    // CONFIGURAÇÃO PRINCIPAL
     // ======================================
 
     calculateSettings(
@@ -537,18 +1359,30 @@ class VocalBody {
         const bands =
             analysis.bands || {};
 
+
         const ratios =
             analysis.ratios || {};
 
 
         const body =
-            bands.body || 0;
+            this.safeNumber(
+                bands.body,
+                0
+            );
+
 
         const lowMid =
-            bands.lowMid || 0;
+            this.safeNumber(
+                bands.lowMid,
+                0
+            );
+
 
         const mid =
-            bands.mid || 0;
+            this.safeNumber(
+                bands.mid,
+                0
+            );
 
 
         const total =
@@ -581,7 +1415,7 @@ class VocalBody {
 
 
         // ==================================
-        // EXCESSO DE LOW
+        // EXCESSO LOW
         // ==================================
 
         const globalLowExcess =
@@ -611,10 +1445,12 @@ class VocalBody {
         const lowExcess =
             this.clamp(
                 (
-                    globalLowExcess * 0.55
+                    globalLowExcess *
+                    0.55
                 ) +
                 (
-                    localBodyExcess * 0.45
+                    localBodyExcess *
+                    0.45
                 ),
                 0,
                 1
@@ -639,10 +1475,12 @@ class VocalBody {
 
         const lowMidMidBalance =
             (
-                lowMidRatio * 0.62
+                lowMidRatio *
+                0.62
             ) +
             (
-                midRatio * 0.38
+                midRatio *
+                0.38
             );
 
 
@@ -686,10 +1524,12 @@ class VocalBody {
         const correctionConfidence =
             this.clamp(
                 (
-                    lowMidDominance * 0.60
+                    lowMidDominance *
+                    0.60
                 ) +
                 (
-                    congestion * 0.40
+                    congestion *
+                    0.40
                 ),
                 0,
                 1
@@ -697,7 +1537,7 @@ class VocalBody {
 
 
         // ==================================
-        // CORREÇÃO AUTOMÁTICA LOW
+        // CORREÇÃO AUTOMÁTICA
         // ==================================
 
         const automaticLowGain =
@@ -711,10 +1551,6 @@ class VocalBody {
                 0
             );
 
-
-        // ==================================
-        // DECISÃO
-        // ==================================
 
         const decisionLowCut =
             this.getDecisionLowCut(
@@ -731,10 +1567,6 @@ class VocalBody {
             );
 
 
-        // ==================================
-        // LOW-MID
-        // ==================================
-
         const lowMidGain =
             this.clamp(
                 (
@@ -746,10 +1578,6 @@ class VocalBody {
                 0
             );
 
-
-        // ==================================
-        // MUD
-        // ==================================
 
         const mudGain =
             this.clamp(
@@ -764,7 +1592,7 @@ class VocalBody {
 
 
         // ==================================
-        // FREQUÊNCIAS
+        // FREQUÊNCIAS CORRETIVAS
         // ==================================
 
         const lowFrequency =
@@ -803,20 +1631,19 @@ class VocalBody {
             );
 
 
-        // ==================================
-        // INTENSIDADE CORRETIVA
-        // ==================================
-
         const intensity =
             this.clamp(
                 (
-                    lowExcess * 0.35
+                    lowExcess *
+                    0.35
                 ) +
                 (
-                    lowMidExcess * 0.40
+                    lowMidExcess *
+                    0.40
                 ) +
                 (
-                    congestion * 0.25
+                    congestion *
+                    0.25
                 ),
                 0,
                 1
@@ -841,27 +1668,22 @@ class VocalBody {
                 bodyRatio,
                 globalBodyRatio
             );
-                    // ==================================
-        // BODY ENHANCEMENT DEMAND
+
+
         // ==================================
-        //
-        // Diferentemente do Recovery,
-        // não depende de haver ocorrido corte.
-        //
-        // Isso resolve o problema identificado:
-        //
-        // vocal com pouco corpo
-        //       ↓
-        // sem corte corretivo
-        //       ↓
-        // antigo Recovery = 0
-        //
-        // Agora:
-        //
-        // deficiência detectada
-        //       ↓
-        // enhancement controlado
-        //
+        // CLASSIFICAÇÃO DA EVIDÊNCIA
+        // ==================================
+
+        const bodyEvidence =
+            this.classifyBodyEvidence(
+                bodyDeficiency,
+                enhancementConfidence,
+                correctionConfidence
+            );
+
+
+        // ==================================
+        // ENHANCEMENT TONAL
         // ==================================
 
         const enhancementDemand =
@@ -875,33 +1697,13 @@ class VocalBody {
             );
 
 
-        // ==================================
-        // BODY ENHANCEMENT GAIN
-        // ==================================
-
         const bodyEnhancementGain =
-            this.bodyEnhancementEnabled
-                ? this.clamp(
-                    enhancementDemand *
-                    this.maxBodyEnhancementGain,
-                    0,
-                    this.maxBodyEnhancementGain
-                )
-                : 0;
+            this.calculateBodyEnhancementGain(
+                bodyDeficiency,
+                enhancementConfidence,
+                correctionConfidence
+            );
 
-
-        // ==================================
-        // FREQUÊNCIA DO ENHANCEMENT
-        // ==================================
-        //
-        // A frequência é deslocada
-        // suavemente conforme a deficiência.
-        //
-        // Não é permitido simplesmente
-        // empurrar todo vocal para uma
-        // frequência fixa.
-        //
-        // ==================================
 
         const enhancementFrequency =
             this.clamp(
@@ -918,21 +1720,17 @@ class VocalBody {
         // ==================================
         // BODY RECOVERY
         // ==================================
-        //
-        // Continua existindo separadamente.
-        //
-        // Recovery:
-        //   responde ao que foi atenuado.
-        //
-        // Enhancement:
-        //   responde ao que está faltando.
-        //
-        // ==================================
 
         const totalAttenuation =
-            Math.abs(lowGain) +
-            Math.abs(lowMidGain) +
-            Math.abs(mudGain);
+            Math.abs(
+                lowGain
+            ) +
+            Math.abs(
+                lowMidGain
+            ) +
+            Math.abs(
+                mudGain
+            );
 
 
         const recoveryDemand =
@@ -955,10 +1753,6 @@ class VocalBody {
                 : 0;
 
 
-        // ==================================
-        // FREQUÊNCIA DE RECOVERY
-        // ==================================
-
         const recoveryFrequency =
             this.clamp(
                 (
@@ -978,13 +1772,26 @@ class VocalBody {
                 260,
                 520
             );
+                    // ==================================
+        // HARMONIC ENHANCEMENT
+        // ==================================
+
+        const harmonic =
+            this.calculateHarmonicSettings(
+                bodyDeficiency,
+                enhancementConfidence,
+                correctionConfidence
+            );
 
 
         // ==================================
-        // RESULTADO
+        // CONFIGURAÇÕES FINAIS
         // ==================================
 
-        return {
+        const settings = {
+
+            version:
+                this.version,
 
             lowGain,
 
@@ -1012,15 +1819,17 @@ class VocalBody {
 
             decisionLowCut,
 
-            // ------------------------------
-            // BODY DEFICIENCY
-            // ------------------------------
+            bodyRatio,
+
+            globalBodyRatio,
 
             bodyDeficiency,
 
             enhancementConfidence,
 
             enhancementDemand,
+
+            bodyEvidence,
 
             bodyEnhancementGain,
 
@@ -1029,19 +1838,26 @@ class VocalBody {
             bodyEnhancementQ:
                 this.bodyEnhancementQ,
 
-            // ------------------------------
-            // BODY RECOVERY
-            // ------------------------------
-
             bodyRecoveryGain,
 
             recoveryFrequency,
 
             bodyRecoveryQ:
-                this.bodyRecoveryQ
+                this.bodyRecoveryQ,
+
+            harmonic
         };
+
+
+        this.lastSettings =
+            settings;
+
+
+        return settings;
     }
-        // ======================================
+
+
+    // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -1059,6 +1875,17 @@ class VocalBody {
         }
 
 
+        if (
+            typeof context.createGain !==
+            "function"
+        ) {
+
+            throw new Error(
+                "Contexto de áudio inválido para VocalBody."
+            );
+        }
+
+
         const settings =
             this.calculateSettings(
                 analysis,
@@ -1067,27 +1894,28 @@ class VocalBody {
 
 
         // ==================================
+        // ENTRADA DO MÓDULO
+        // ==================================
+
+        const input =
+            context.createGain();
+
+
+        input.gain.value =
+            1;
+
+
+        // ==================================
         // LOW
         // ==================================
 
         const lowFilter =
-            context.createBiquadFilter();
-
-
-        lowFilter.type =
-            "peaking";
-
-
-        lowFilter.frequency.value =
-            settings.lowFrequency;
-
-
-        lowFilter.Q.value =
-            0.70;
-
-
-        lowFilter.gain.value =
-            settings.lowGain;
+            this.createPeakingFilter(
+                context,
+                settings.lowFrequency,
+                0.70,
+                settings.lowGain
+            );
 
 
         // ==================================
@@ -1095,23 +1923,12 @@ class VocalBody {
         // ==================================
 
         const lowMidFilter =
-            context.createBiquadFilter();
-
-
-        lowMidFilter.type =
-            "peaking";
-
-
-        lowMidFilter.frequency.value =
-            settings.lowMidFrequency;
-
-
-        lowMidFilter.Q.value =
-            0.85;
-
-
-        lowMidFilter.gain.value =
-            settings.lowMidGain;
+            this.createPeakingFilter(
+                context,
+                settings.lowMidFrequency,
+                0.85,
+                settings.lowMidGain
+            );
 
 
         // ==================================
@@ -1119,106 +1936,60 @@ class VocalBody {
         // ==================================
 
         const mudFilter =
-            context.createBiquadFilter();
-
-
-        mudFilter.type =
-            "peaking";
-
-
-        mudFilter.frequency.value =
-            settings.mudFrequency;
-
-
-        mudFilter.Q.value =
-            0.90;
-
-
-        mudFilter.gain.value =
-            settings.mudGain;
+            this.createPeakingFilter(
+                context,
+                settings.mudFrequency,
+                0.90,
+                settings.mudGain
+            );
 
 
         // ==================================
-        // BODY ENHANCEMENT
-        // ==================================
-        //
-        // Atua independentemente da atenuação.
-        //
-        // Este é o ponto principal da correção.
-        //
-        // O filtro é amplo e de baixo ganho,
-        // evitando criar uma ressonância
-        // artificial.
-        //
+        // BODY ENHANCEMENT TONAL
         // ==================================
 
         const bodyEnhancementFilter =
-            context.createBiquadFilter();
-
-
-        bodyEnhancementFilter.type =
-            "peaking";
-
-
-        bodyEnhancementFilter.frequency.value =
-            settings.enhancementFrequency;
-
-
-        bodyEnhancementFilter.Q.value =
-            settings.bodyEnhancementQ;
-
-
-        bodyEnhancementFilter.gain.value =
-            settings.bodyEnhancementGain;
+            this.createPeakingFilter(
+                context,
+                settings.enhancementFrequency,
+                settings.bodyEnhancementQ,
+                settings.bodyEnhancementGain
+            );
 
 
         // ==================================
         // BODY RECOVERY
         // ==================================
-        //
-        // Permanece separado do Enhancement.
-        //
-        // ==================================
 
         const bodyRecoveryFilter =
-            context.createBiquadFilter();
-
-
-        bodyRecoveryFilter.type =
-            "peaking";
-
-
-        bodyRecoveryFilter.frequency.value =
-            settings.recoveryFrequency;
-
-
-        bodyRecoveryFilter.Q.value =
-            settings.bodyRecoveryQ;
-
-
-        bodyRecoveryFilter.gain.value =
-            settings.bodyRecoveryGain;
+            this.createPeakingFilter(
+                context,
+                settings.recoveryFrequency,
+                settings.bodyRecoveryQ,
+                settings.bodyRecoveryGain
+            );
 
 
         // ==================================
-        // CADEIA
+        // BARRAMENTO PRINCIPAL
         // ==================================
-        //
-        // A ordem permanece:
-        //
-        // LOW
-        //   ↓
-        // LOW-MID
-        //   ↓
-        // MUD
-        //   ↓
-        // ENHANCEMENT
-        //   ↓
-        // RECOVERY
-        //
-        // Não existe caminho paralelo novo.
-        //
+
+        const mainOutput =
+            context.createGain();
+
+
+        mainOutput.gain.value =
+            1;
+
+
         // ==================================
+        // CONEXÃO PRINCIPAL
+        // ==================================
+
+        input.connect(
+            lowFilter
+        );
+
 
         lowFilter.connect(
             lowMidFilter
@@ -1240,15 +2011,216 @@ class VocalBody {
         );
 
 
-        return {
+        bodyRecoveryFilter.connect(
+            mainOutput
+        );
 
-            input:
-                lowFilter,
+
+        // ==================================
+        // RAMO HARMÔNICO CORPORAL
+        // ==================================
+
+        const harmonicInputGain =
+            context.createGain();
+
+
+        harmonicInputGain.gain.value =
+            this.bodyHarmonicPreGain;
+
+
+        const harmonicBandpass =
+            this.createBodyBandpass(
+                context,
+                this.bodyHarmonicMinFrequency,
+                this.bodyHarmonicMaxFrequency
+            );
+
+
+        const harmonicShaper =
+            this.createHarmonicShaper(
+                context,
+                settings.harmonic.drive
+            );
+
+
+        const harmonicLowpass =
+            this.createBodyHarmonicLowpass(
+                context
+            );
+
+
+        const harmonicOutputGain =
+            context.createGain();
+
+
+        harmonicOutputGain.gain.value =
+            settings.harmonic.mix *
+            this.bodyHarmonicPostGain;
+
+
+        input.connect(
+            harmonicInputGain
+        );
+
+
+        harmonicInputGain.connect(
+            harmonicBandpass
+        );
+
+
+        harmonicBandpass.connect(
+            harmonicShaper
+        );
+
+
+        harmonicShaper.connect(
+            harmonicLowpass
+        );
+
+
+        harmonicLowpass.connect(
+            harmonicOutputGain
+        );
+
+
+        // ==================================
+        // SOMA
+        // ==================================
+
+        harmonicOutputGain.connect(
+            mainOutput
+        );
+
+
+        // ==================================
+        // DIAGNÓSTICO
+        // ==================================
+
+        this.logHarmonicObservation(
+            settings
+        );
+
+
+        const processorObservation = {
+
+            version:
+                this.version,
+
+            bodyEnhancement: {
+
+                enabled:
+                    this.bodyEnhancementEnabled,
+
+                gainDb:
+                    settings.bodyEnhancementGain,
+
+                frequency:
+                    settings.enhancementFrequency,
+
+                Q:
+                    settings.bodyEnhancementQ
+            },
+
+            harmonicEnhancement: {
+
+                enabled:
+                    settings.harmonic.enabled,
+
+                evidenceLevel:
+                    settings.harmonic.evidenceLevel,
+
+                evidenceStrength:
+                    settings.harmonic.evidenceStrength,
+
+                demand:
+                    settings.harmonic.demand,
+
+                effectiveDemand:
+                    settings.harmonic.effectiveDemand,
+
+                drive:
+                    settings.harmonic.drive,
+
+                mix:
+                    settings.harmonic.mix,
+
+                oversample:
+                    settings.harmonic.oversample
+            },
+
+            recovery: {
+
+                enabled:
+                    this.bodyRecoveryEnabled,
+
+                gainDb:
+                    settings.bodyRecoveryGain,
+
+                frequency:
+                    settings.recoveryFrequency
+            }
+        };
+
+
+        if (
+            typeof console !==
+            "undefined" &&
+            typeof console.log ===
+            "function"
+        ) {
+
+            console.log(
+                "[SmoothVStudio][VocalBody] Processor observation:",
+                processorObservation
+            );
+        }
+                return {
+
+            input,
 
             output:
-                bodyRecoveryFilter,
+                mainOutput,
 
-            settings
+            settings,
+
+            harmonic: {
+
+                input:
+                    harmonicInputGain,
+
+                bandpass:
+                    harmonicBandpass,
+
+                shaper:
+                    harmonicShaper,
+
+                lowpass:
+                    harmonicLowpass,
+
+                output:
+                    harmonicOutputGain
+            },
+
+            main: {
+
+                low:
+                    lowFilter,
+
+                lowMid:
+                    lowMidFilter,
+
+                mud:
+                    mudFilter,
+
+                enhancement:
+                    bodyEnhancementFilter,
+
+                recovery:
+                    bodyRecoveryFilter,
+
+                output:
+                    mainOutput
+            }
         };
     }
 
@@ -1265,6 +2237,7 @@ class VocalBody {
         if (!analysis) {
 
             return {
+
                 version:
                     this.version,
 
@@ -1274,13 +2247,32 @@ class VocalBody {
                 bodyRecoveryEnabled:
                     this.bodyRecoveryEnabled,
 
+                bodyHarmonicEnhancementEnabled:
+                    this.bodyHarmonicEnhancementEnabled,
+
                 maxBodyEnhancementGain:
                     this.maxBodyEnhancementGain,
 
                 maxBodyRecoveryGain:
-                    this.maxBodyRecoveryGain
+                    this.maxBodyRecoveryGain,
+
+                maxBodyHarmonicDrive:
+                    this.maxBodyHarmonicDrive,
+
+                maxBodyHarmonicMix:
+                    this.maxBodyHarmonicMix,
+
+                bodyHarmonicOversample:
+                    this.bodyHarmonicOversample
             };
         }
+
+
+        const settings =
+            this.calculateSettings(
+                analysis,
+                treatmentDecision
+            );
 
 
         return {
@@ -1288,11 +2280,7 @@ class VocalBody {
             version:
                 this.version,
 
-            settings:
-                this.calculateSettings(
-                    analysis,
-                    treatmentDecision
-                ),
+            settings,
 
             bodyEnhancementEnabled:
                 this.bodyEnhancementEnabled,
@@ -1300,100 +2288,36 @@ class VocalBody {
             bodyRecoveryEnabled:
                 this.bodyRecoveryEnabled,
 
+            bodyHarmonicEnhancementEnabled:
+                this.bodyHarmonicEnhancementEnabled,
+
             maxBodyEnhancementGain:
                 this.maxBodyEnhancementGain,
 
             maxBodyRecoveryGain:
                 this.maxBodyRecoveryGain,
 
+            maxBodyHarmonicDrive:
+                this.maxBodyHarmonicDrive,
+
+            maxBodyHarmonicMix:
+                this.maxBodyHarmonicMix,
+
             bodyEnhancementQ:
                 this.bodyEnhancementQ,
 
             bodyRecoveryQ:
-                this.bodyRecoveryQ
+                this.bodyRecoveryQ,
+
+            bodyHarmonicQ:
+                this.bodyHarmonicQ,
+
+            bodyHarmonicOversample:
+                this.bodyHarmonicOversample,
+
+            lastHarmonicStatus:
+                this.lastHarmonicStatus
         };
-    }
-        // ======================================
-    // ATUALIZAR PARÂMETROS DE UMA REGIÃO
-    // ======================================
-
-    setRegion(
-        regionName,
-        options = {}
-    ) {
-
-        // O VocalBody V0.4 mantém os
-        // parâmetros regionais através
-        // das propriedades principais.
-        //
-        // Este método permanece para
-        // compatibilidade com consumidores
-        // existentes.
-
-        if (
-            regionName === "low"
-        ) {
-
-            if (
-                Number.isFinite(
-                    options.maxCut
-                )
-            ) {
-
-                this.maxLowCut =
-                    Math.min(
-                        0,
-                        options.maxCut
-                    );
-            }
-
-            return true;
-        }
-
-
-        if (
-            regionName === "lowMid"
-        ) {
-
-            if (
-                Number.isFinite(
-                    options.maxCut
-                )
-            ) {
-
-                this.maxLowMidCut =
-                    Math.min(
-                        0,
-                        options.maxCut
-                    );
-            }
-
-            return true;
-        }
-
-
-        if (
-            regionName === "mud"
-        ) {
-
-            if (
-                Number.isFinite(
-                    options.maxCut
-                )
-            ) {
-
-                this.maxMudCut =
-                    Math.min(
-                        0,
-                        options.maxCut
-                    );
-            }
-
-            return true;
-        }
-
-
-        return false;
     }
 
 
@@ -1425,7 +2349,7 @@ class VocalBody {
                 this.clamp(
                     options.maxGain,
                     0,
-                    2
+                    3
                 );
         }
 
@@ -1450,6 +2374,86 @@ class VocalBody {
 
 
     // ======================================
+    // CONFIGURAÇÃO DO HARMONIC ENHANCEMENT
+    // ======================================
+
+    setBodyHarmonicEnhancement(
+        options = {}
+    ) {
+
+        if (
+            typeof options.enabled ===
+            "boolean"
+        ) {
+
+            this.bodyHarmonicEnhancementEnabled =
+                options.enabled;
+        }
+
+
+        if (
+            Number.isFinite(
+                options.maxDrive
+            )
+        ) {
+
+            this.maxBodyHarmonicDrive =
+                this.clamp(
+                    options.maxDrive,
+                    0,
+                    0.30
+                );
+        }
+
+
+        if (
+            Number.isFinite(
+                options.maxMix
+            )
+        ) {
+
+            this.maxBodyHarmonicMix =
+                this.clamp(
+                    options.maxMix,
+                    0,
+                    0.40
+                );
+        }
+
+
+        if (
+            Number.isFinite(
+                options.preGain
+            )
+        ) {
+
+            this.bodyHarmonicPreGain =
+                this.clamp(
+                    options.preGain,
+                    1,
+                    3
+                );
+        }
+
+
+        if (
+            Number.isFinite(
+                options.postGain
+            )
+        ) {
+
+            this.bodyHarmonicPostGain =
+                this.clamp(
+                    options.postGain,
+                    0,
+                    2
+                );
+        }
+
+
+        return true;
+    }
+        // ======================================
     // CONFIGURAÇÃO DA RECUPERAÇÃO
     // ======================================
 
@@ -1510,8 +2514,10 @@ class VocalBody {
         this.maxLowCut =
             -3.0;
 
+
         this.maxLowMidCut =
             -2.5;
+
 
         this.maxMudCut =
             -2.0;
@@ -1520,8 +2526,10 @@ class VocalBody {
         this.bodyRecoveryEnabled =
             true;
 
+
         this.maxBodyRecoveryGain =
             0.45;
+
 
         this.bodyRecoveryQ =
             0.70;
@@ -1530,11 +2538,37 @@ class VocalBody {
         this.bodyEnhancementEnabled =
             true;
 
+
         this.maxBodyEnhancementGain =
-            0.55;
+            0.75;
+
 
         this.bodyEnhancementQ =
             0.70;
+
+
+        this.bodyHarmonicEnhancementEnabled =
+            true;
+
+
+        this.maxBodyHarmonicDrive =
+            0.060;
+
+
+        this.maxBodyHarmonicMix =
+            0.10;
+
+
+        this.bodyHarmonicPreGain =
+            1.35;
+
+
+        this.bodyHarmonicPostGain =
+            0.85;
+
+
+        this.bodyHarmonicQ =
+            0.65;
     }
 
 
@@ -1547,8 +2581,10 @@ class VocalBody {
         this.maxLowCut =
             -3.0;
 
+
         this.maxLowMidCut =
             -2.5;
+
 
         this.maxMudCut =
             -2.0;
@@ -1557,8 +2593,10 @@ class VocalBody {
         this.bodyRecoveryEnabled =
             true;
 
+
         this.maxBodyRecoveryGain =
             0.6;
+
 
         this.bodyRecoveryQ =
             0.65;
@@ -1567,11 +2605,37 @@ class VocalBody {
         this.bodyEnhancementEnabled =
             true;
 
+
         this.maxBodyEnhancementGain =
-            0.75;
+            1.15;
+
 
         this.bodyEnhancementQ =
             0.65;
+
+
+        this.bodyHarmonicEnhancementEnabled =
+            true;
+
+
+        this.maxBodyHarmonicDrive =
+            0.105;
+
+
+        this.maxBodyHarmonicMix =
+            0.20;
+
+
+        this.bodyHarmonicPreGain =
+            1.55;
+
+
+        this.bodyHarmonicPostGain =
+            0.88;
+
+
+        this.bodyHarmonicQ =
+            0.58;
     }
 
 
@@ -1582,6 +2646,72 @@ class VocalBody {
     reset() {
 
         this.setDefaultMode();
+
+
+        this.lastSettings =
+            null;
+
+
+        this.lastHarmonicStatus =
+            null;
+    }
+
+
+    // ======================================
+    // DIAGNÓSTICO DE COMPATIBILIDADE
+    // ======================================
+
+    getCompatibilitySnapshot(
+        context = null
+    ) {
+
+        const hasContext =
+            !!context;
+
+
+        const hasGain =
+            hasContext &&
+            typeof context.createGain ===
+            "function";
+
+
+        const hasBiquad =
+            hasContext &&
+            typeof context.createBiquadFilter ===
+            "function";
+
+
+        const hasWaveShaper =
+            hasContext &&
+            typeof context.createWaveShaper ===
+            "function";
+
+
+        return {
+
+            version:
+                this.version,
+
+            contextAvailable:
+                hasContext,
+
+            gain:
+                hasGain,
+
+            biquad:
+                hasBiquad,
+
+            waveShaper:
+                hasWaveShaper,
+
+            harmonicOversample:
+                this.bodyHarmonicOversample,
+
+            harmonicReady:
+                hasWaveShaper &&
+                this.bodyHarmonicOversample ===
+                "4x"
+        };
     }
 }
 
