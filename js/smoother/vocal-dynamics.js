@@ -20,51 +20,49 @@
 
 
 class VocalDynamics {
-
-
+    
+    
     constructor(options = {}) {
-
-
+        
+        
         this.version =
             "0.1";
-
-
+        
+        
         this.threshold =
             options.threshold ??
             -14;
-
-
+        
+        
         this.ratio =
             options.ratio ??
             1.6;
-
-
+        
+        
         this.attack =
             options.attack ??
             0.025;
-
-
+        
+        
         this.release =
             options.release ??
             0.135;
-
-
+        
+        
         this.knee =
             options.knee ??
             22;
     }
-
-
-    // ======================================
+        // ======================================
     // CLAMP
     // ======================================
-
+    
     clamp(
         value,
         min,
         max
     ) {
-
+        
         return Math.min(
             max,
             Math.max(
@@ -73,73 +71,71 @@ class VocalDynamics {
             )
         );
     }
-
-
+    
+    
     // ======================================
     // CALCULAR PARÂMETROS ADAPTATIVOS
     // ======================================
-
+    
     calculateSettings(
-        analysis
-    ) {
-
-        if (
-            !analysis
+            analysis
         ) {
-
-            throw new Error(
-                "Análise vocal não disponível."
-            );
-        }
-
-
-        // ==================================
-        // MÉTRICAS DINÂMICAS EXISTENTES
-        // ==================================
-        //
-        // O VocalAnalyzer já fornece:
-        //
-        // - rmsDb
-        // - peakDb
-        //
-        // A diferença entre pico e RMS
-        // fornece um indicador simples da
-        // dinâmica/crest factor do sinal.
-        //
-        // Não criamos uma nova infraestrutura
-        // de análise.
-        //
-        // ==================================
-
-        const rmsDb =
-            Number(
-                analysis.rmsDb
-            );
-
-
-        const peakDb =
-            Number(
-                analysis.peakDb
-            );
-
-
-        const hasValidRms =
-            Number.isFinite(
-                rmsDb
-            );
-
-
-        const hasValidPeak =
-            Number.isFinite(
-                peakDb
-            );
-
-
-        let dynamicScore =
-            0;
-
-
-        if (
+            
+            if (
+                !analysis
+            ) {
+                
+                throw new Error(
+                    "Análise vocal não disponível."
+                );
+            }
+            
+            
+            // ==================================
+            // MÉTRICAS DINÂMICAS EXISTENTES
+            // ==================================
+            //
+            // O VocalAnalyzer já fornece:
+            //
+            // - rmsDb
+            // - peakDb
+            //
+            // A diferença entre pico e RMS
+            // fornece um indicador simples da
+            // dinâmica/crest factor do sinal.
+            //
+            // Não criamos uma nova infraestrutura
+            // de análise.
+            //
+            // ==================================
+            
+            const rmsDb =
+                Number(
+                    analysis.rmsDb
+                );
+            
+            
+            const peakDb =
+                Number(
+                    analysis.peakDb
+                );
+            
+            
+            const hasValidRms =
+                Number.isFinite(
+                    rmsDb
+                );
+            
+            
+            const hasValidPeak =
+                Number.isFinite(
+                    peakDb
+                );
+            
+            
+            let dynamicScore =
+                0;
+                        if (
             hasValidRms &&
             hasValidPeak
         ) {
@@ -186,13 +182,13 @@ class VocalDynamics {
         // ==================================
         //
         // Hardness, roughness e sibilance
-        // deixam de ser o motor principal.
+        // permanecem disponíveis como
+        // evidências auxiliares para preservar
+        // o contrato de saída existente.
         //
-        // Elas permanecem somente como
-        // influência secundária e limitada,
-        // preservando parte do comportamento
-        // anterior sem transformar o Dynamics
-        // em extensão dos módulos especializados.
+        // Elas NÃO participam da intensidade
+        // final do Dynamics. Esses fenômenos
+        // possuem módulos especializados.
         //
         // ==================================
 
@@ -217,44 +213,42 @@ class VocalDynamics {
             Number(
                 characteristics.sibilance
             );
-
-
-        const hardness =
+                    const hardness =
             Number.isFinite(
                 hardnessValue
-            )
-                ? this.clamp(
-                    hardnessValue,
-                    0,
-                    1
-                )
-                : 0;
-
-
+            ) ?
+            this.clamp(
+                hardnessValue,
+                0,
+                1
+            ) :
+            0;
+        
+        
         const roughness =
             Number.isFinite(
                 roughnessValue
-            )
-                ? this.clamp(
-                    roughnessValue,
-                    0,
-                    1
-                )
-                : 0;
-
-
+            ) ?
+            this.clamp(
+                roughnessValue,
+                0,
+                1
+            ) :
+            0;
+        
+        
         const sibilance =
             Number.isFinite(
                 sibilanceValue
-            )
-                ? this.clamp(
-                    sibilanceValue,
-                    0,
-                    1
-                )
-                : 0;
-
-
+            ) ?
+            this.clamp(
+                sibilanceValue,
+                0,
+                1
+            ) :
+            0;
+        
+        
         const auxiliaryScore =
             this.clamp(
                 (
@@ -272,45 +266,28 @@ class VocalDynamics {
                 0,
                 1
             );
-                    // ==================================
+        
+        
+        // ==================================
         // INTENSIDADE FINAL
         // ==================================
         //
-        // A dinâmica real do sinal é agora
-        // o principal responsável.
+        // A dinâmica real do sinal é a
+        // única autoridade para determinar
+        // a intensidade do Dynamics.
         //
-        // 90% = dinâmica observada
-        // 10% = características auxiliares
-        //
-        // Dessa forma:
-        //
-        // vocal estável
-        //     -> pouca compressão
-        //
-        // vocal moderadamente variável
-        //     -> controle suave
-        //
-        // vocal com grandes picos
-        //     -> controle progressivo
+        // Hardness, roughness e sibilance
+        // não aumentam mais a compressão.
         //
         // ==================================
-
+        
         const intensity =
             this.clamp(
-                (
-                    dynamicScore *
-                    0.90
-                ) +
-                (
-                    auxiliaryScore *
-                    0.10
-                ),
+                dynamicScore,
                 0,
                 1
             );
-
-
-        // ==================================
+                    // ==================================
         // THRESHOLD ADAPTATIVO
         // ==================================
         //
@@ -369,9 +346,7 @@ class VocalDynamics {
                 ) *
                 0.020
             );
-
-
-        // ==================================
+                    // ==================================
         // RELEASE ADAPTATIVO
         // ==================================
         //
@@ -496,8 +471,6 @@ class VocalDynamics {
         };
     }
 }
-
-
 // ==========================================
 // DISPONIBILIZAR
 // ==========================================
