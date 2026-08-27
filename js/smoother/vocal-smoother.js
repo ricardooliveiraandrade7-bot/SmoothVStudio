@@ -6,10 +6,7 @@
 //
 // Orquestrador principal do processamento.
 //
-// Este módulo NÃO contém a inteligência DSP
-// individual.
-//
-// Ele coordena:
+// Integra:
 //
 // - VocalAnalyzer
 // - SpectralRegionalMeasurement
@@ -26,37 +23,6 @@
 // - VocalTreatmentPlan
 // - TreatmentDecisionPipeline
 // - TreatmentContractAudit
-//
-// V1.5:
-//
-// - integração segura da medição espectral
-//   regional;
-// - runtime regional em modo observação;
-// - perfil espectral preservado;
-// - SpectralTreatmentBridge preservado;
-// - diagnóstico espectral preservado;
-// - plano adaptativo continua isolado do DSP;
-// - TreatmentDecisionPipeline integrado em
-//   modo observacional;
-// - TreatmentContractAudit integrado em
-//   modo observacional;
-// - comparação observacional entre
-//   Treatment Plan e DSP Snapshot;
-// - caminho DSP anterior preservado;
-// - falhas nas camadas de observação não
-//   interrompem o processamento principal;
-// - snapshot observacional dos parâmetros DSP
-//   efetivamente calculados;
-// - VocalHarshness integrado como etapa DSP
-//   entre Dynamics e Sibilance;
-// - VocalSibilance integrado como etapa DSP
-//   entre Harshness e Saturation;
-// - VocalSaturation integrado como ÚLTIMA
-//   etapa DSP da cadeia;
-// - Saturation recebe somente o sinal
-//   proveniente da etapa Sibilance;
-// - nenhum módulo posterior à Saturation
-//   é executado antes da saída.
 //
 // CADEIA DSP:
 //
@@ -76,28 +42,10 @@
 //   ↓
 // Output
 //
-// IMPORTANTE:
-//
-// O SpectralRegionalRuntime nesta etapa atua
-// somente como camada de observação.
-//
-// O TreatmentDecisionPipeline também atua
-// somente como camada de decisão/validação.
-//
-// O TreatmentContractAudit atua somente
-// como camada de auditoria observacional.
-//
-// O DSP Snapshot também atua somente como
-// camada de observação.
-//
-// VocalHarshness é um módulo DSP executor.
-// VocalSibilance é um módulo DSP executor.
-// VocalSaturation é um módulo DSP executor.
-//
-// Nenhum ganho, corte, compressão,
-// de-essing ou reconstrução adicional
-// é aplicado pelas camadas observacionais.
-//
+// SpectralProfile é somente interpretativo.
+// Não processa AudioBuffer.
+// Não cria filtros.
+// Não altera parâmetros DSP.
 // ==========================================
 
 
@@ -107,7 +55,6 @@ class VocalSmoother {
     constructor(
         options = {}
     ) {
-
 
         this.version =
             "1.5";
@@ -224,16 +171,6 @@ class VocalSmoother {
         // ==================================
         // HARSHNESS
         // ==================================
-        //
-        // ETAPA DSP.
-        //
-        // O VocalHarshness recebe somente
-        // informações já disponíveis na análise.
-        //
-        // Nenhuma decisão da inteligência
-        // é criada ou modificada aqui.
-        //
-        // ==================================
 
         this.harshness =
             options.harshness ||
@@ -247,16 +184,6 @@ class VocalSmoother {
         // ==================================
         // SIBILANCE
         // ==================================
-        //
-        // ETAPA DSP.
-        //
-        // O VocalSibilance atua depois de
-        // Dynamics e Harshness.
-        //
-        // Sua saída alimenta diretamente
-        // o estágio final de Saturation.
-        //
-        // ==================================
 
         this.sibilance =
             options.sibilance ||
@@ -268,26 +195,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // SATURAÇÃO / HARMÔNICOS
-        // ==================================
-        //
-        // ETAPA DSP FINAL.
-        //
-        // O VocalSaturation é o último
-        // executor DSP da cadeia.
-        //
-        // Ele recebe somente:
-        //
-        // - OfflineAudioContext;
-        // - análise já existente.
-        //
-        // O módulo possui seu próprio
-        // caminho DRY/WET e acrescenta
-        // reconstrução harmônica moderada
-        // sem substituir o sinal recebido.
-        //
-        // Nenhuma etapa DSP ocorre depois dele.
-        //
+        // SATURATION
         // ==================================
 
         this.saturation =
@@ -315,22 +223,6 @@ class VocalSmoother {
         // ==================================
         // DECISION PIPELINE
         // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // O Pipeline valida:
-        //
-        // Treatment Plan
-        //       ↓
-        // Validator
-        //       ↓
-        // Decision Gate
-        //       ↓
-        // Decision Record
-        //
-        // Nenhuma autoridade DSP é concedida.
-        //
-        // ==================================
 
         this.treatmentDecisionPipeline =
             options.treatmentDecisionPipeline ||
@@ -342,21 +234,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // TREATMENT CONTRACT AUDIT
-        // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
-        // O Auditor compara:
-        //
-        // Treatment Plan
-        //       ↓
-        //      Audit
-        //       ↑
-        // DSP Snapshot
-        //
-        // Nenhuma autoridade DSP é concedida.
-        //
+        // CONTRACT AUDIT
         // ==================================
 
         this.treatmentContractAudit =
@@ -375,58 +253,44 @@ class VocalSmoother {
         this.lastAnalysis =
             null;
 
-
         this.lastSpectralRegionalMeasurement =
             null;
-
 
         this.lastSpectralRegionalSummary =
             null;
 
-
         this.lastSpectralProfile =
             null;
-
 
         this.lastSpectralContext =
             null;
 
-
         this.lastSpectralDiagnostic =
             null;
-
 
         this.lastTreatmentPlan =
             null;
 
-
         this.lastTreatmentDecisionPipeline =
             null;
-
 
         this.lastTreatmentContractAudit =
             null;
 
-
         this.lastSettings =
             null;
-
 
         this.lastBodySettings =
             null;
 
-
         this.lastToneSettings =
             null;
-
 
         this.lastHarshnessSettings =
             null;
 
-
         this.lastSibilanceSettings =
             null;
-
 
         this.lastSaturationSettings =
             null;
@@ -454,7 +318,7 @@ class VocalSmoother {
 
 
     // ======================================
-    // OBTER AUDIO NODE
+    // RESOLVER AUDIO NODE
     // ======================================
 
     resolveNode(
@@ -500,14 +364,10 @@ class VocalSmoother {
 
         return null;
     }
-        // ======================================
-    // MEDIÇÃO ESPECTRAL REGIONAL
+
+
     // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
-    // Nenhum parâmetro DSP é alterado.
-    //
+    // MEDIÇÃO ESPECTRAL REGIONAL
     // ======================================
 
     createSpectralRegionalMeasurement(
@@ -515,14 +375,7 @@ class VocalSmoother {
     ) {
 
         if (
-            !this.spectralRegionalRuntime
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !this.spectralRegionalRuntime ||
             typeof this.spectralRegionalRuntime.analyze !==
             "function"
         ) {
@@ -552,7 +405,9 @@ class VocalSmoother {
 
             return result;
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "SpectralRegionalRuntime indisponível nesta etapa:",
@@ -578,14 +433,8 @@ class VocalSmoother {
     ) {
 
         if (
-            !this.spectralProfile
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !analysis ||
+            !this.spectralProfile ||
             typeof this.spectralProfile.analyze !==
             "function"
         ) {
@@ -596,16 +445,38 @@ class VocalSmoother {
 
         try {
 
-            return this.spectralProfile.analyze(
-                analysis
-            );
+            const profile =
+                this.spectralProfile.analyze(
+                    analysis
+                );
 
-        } catch (error) {
+
+            /*
+             * O perfil armazenado no VocalSmoother
+             * é exatamente o resultado desta execução.
+             *
+             * Nenhuma transformação adicional é
+             * aplicada aqui.
+             */
+
+            this.lastSpectralProfile =
+                profile || null;
+
+
+            return this.lastSpectralProfile;
+
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "SpectralProfile indisponível nesta etapa:",
                 error
             );
+
+
+            this.lastSpectralProfile =
+                null;
 
 
             return null;
@@ -614,17 +485,7 @@ class VocalSmoother {
 
 
     // ======================================
-    // GERAR CONTEXTO ESPECTRAL
-    // ======================================
-    //
-    // O diagnóstico é opcional para manter
-    // compatibilidade com a criação inicial
-    // do contexto.
-    //
-    // Quando fornecido, o Bridge passa a
-    // incorporar a interpretação regional
-    // ao contexto de planejamento.
-    //
+    // CONTEXTO ESPECTRAL
     // ======================================
 
     createSpectralContext(
@@ -633,14 +494,7 @@ class VocalSmoother {
     ) {
 
         if (
-            !spectralProfile
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !spectralProfile ||
             !this.spectralTreatmentBridge
         ) {
 
@@ -666,7 +520,9 @@ class VocalSmoother {
                     spectralDiagnostic
                 );
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "SpectralTreatmentBridge indisponível nesta etapa:",
@@ -677,14 +533,8 @@ class VocalSmoother {
             return null;
         }
     }
-
-
-    // ======================================
-    // GERAR DIAGNÓSTICO ESPECTRAL
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
+        // ======================================
+    // DIAGNÓSTICO ESPECTRAL
     // ======================================
 
     createSpectralDiagnostic(
@@ -692,6 +542,7 @@ class VocalSmoother {
     ) {
 
         if (
+            !spectralContext ||
             !this.spectralDiagnosticObserver
         ) {
 
@@ -717,7 +568,9 @@ class VocalSmoother {
                     this.lastSpectralRegionalMeasurement
                 );
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "SpectralDiagnosticObserver indisponível nesta etapa:",
@@ -731,7 +584,7 @@ class VocalSmoother {
 
 
     // ======================================
-    // GERAR PLANO DE TRATAMENTO
+    // PLANO DE TRATAMENTO
     // ======================================
 
     createTreatmentPlan(
@@ -740,14 +593,7 @@ class VocalSmoother {
     ) {
 
         if (
-            !this.treatmentPlan
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !this.treatmentPlan ||
             typeof this.treatmentPlan.createPlan !==
             "function"
         ) {
@@ -765,20 +611,6 @@ class VocalSmoother {
                 );
 
 
-            /*
-             * O plano recebe o contexto
-             * durante sua construção.
-             *
-             * Nenhum parâmetro DSP é alterado.
-             */
-
-
-            /*
-             * A medição regional continua
-             * anexada apenas como evidência
-             * observacional adicional.
-             */
-
             if (
                 plan &&
                 this.lastSpectralRegionalMeasurement
@@ -791,7 +623,9 @@ class VocalSmoother {
 
             return plan;
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "VocalTreatmentPlan indisponível nesta etapa:",
@@ -805,11 +639,7 @@ class VocalSmoother {
 
 
     // ======================================
-    // EXECUTAR TREATMENT DECISION PIPELINE
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
+    // DECISION PIPELINE
     // ======================================
 
     createTreatmentDecisionPipeline(
@@ -817,14 +647,7 @@ class VocalSmoother {
     ) {
 
         if (
-            !this.treatmentDecisionPipeline
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !this.treatmentDecisionPipeline ||
             !treatmentPlan
         ) {
 
@@ -848,15 +671,13 @@ class VocalSmoother {
 
         try {
 
-            const result =
-                this.treatmentDecisionPipeline.evaluate(
-                    treatmentPlan
-                );
+            return this.treatmentDecisionPipeline.evaluate(
+                treatmentPlan
+            );
 
-
-            return result;
-
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.warn(
                 "TreatmentDecisionPipeline indisponível nesta etapa:",
@@ -870,11 +691,7 @@ class VocalSmoother {
 
 
     // ======================================
-    // CRIAR SNAPSHOT DSP
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
+    // SNAPSHOT DSP
     // ======================================
 
     createDspSnapshot() {
@@ -903,61 +720,53 @@ class VocalSmoother {
             version:
                 "1.2",
 
-
             body:
                 copySettings(
                     this.lastBodySettings
                 ),
-
 
             tone:
                 copySettings(
                     this.lastToneSettings
                 ),
 
-
             dynamics:
                 copySettings(
                     this.lastSettings
                 ),
-
 
             harshness:
                 copySettings(
                     this.lastHarshnessSettings
                 ),
 
-
             saturation:
                 copySettings(
                     this.lastSaturationSettings
                 ),
-
 
             sibilance:
                 copySettings(
                     this.lastSibilanceSettings
                 ),
 
-
             processingPermission:
                 "none",
-
 
             audioProcessing:
                 false,
 
-
             reconstructionPermission:
                 "none",
-
 
             executorPermission:
                 "none"
         };
     }
-        // ======================================
-    // AUDITAR TREATMENT PLAN ↔ DSP
+
+
+    // ======================================
+    // AUDITORIA
     // ======================================
 
     createTreatmentContractAudit(
@@ -1024,11 +833,6 @@ class VocalSmoother {
             "function"
         ) {
 
-            console.warn(
-                "TreatmentContractAudit não possui auditTreatmentDspReconciliation()."
-            );
-
-
             return null;
         }
 
@@ -1077,9 +881,7 @@ class VocalSmoother {
             return null;
         }
     }
-
-
-    // ======================================
+        // ======================================
     // PROCESSAR
     // ======================================
 
@@ -1098,7 +900,36 @@ class VocalSmoother {
 
 
         // ==================================
-        // 1. ANALISAR
+        // RESET DA EXECUÇÃO
+        // ==================================
+
+        this.lastSpectralRegionalMeasurement =
+            null;
+
+        this.lastSpectralRegionalSummary =
+            null;
+
+        this.lastSpectralProfile =
+            null;
+
+        this.lastSpectralContext =
+            null;
+
+        this.lastSpectralDiagnostic =
+            null;
+
+        this.lastTreatmentPlan =
+            null;
+
+        this.lastTreatmentDecisionPipeline =
+            null;
+
+        this.lastTreatmentContractAudit =
+            null;
+
+
+        // ==================================
+        // 1. ANALYZER
         // ==================================
 
         const analysis =
@@ -1112,11 +943,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 2. MEDIÇÃO ESPECTRAL REGIONAL
-        // ==================================
-        //
-        // SOMENTE OBSERVAÇÃO.
-        //
+        // 2. MEDIÇÃO REGIONAL
         // ==================================
 
         this.lastSpectralRegionalMeasurement =
@@ -1126,33 +953,23 @@ class VocalSmoother {
 
 
         // ==================================
-        // 3. PERFIL ESPECTRAL
-        // ==================================
-
-        this.lastSpectralProfile =
-            this.createSpectralProfile(
-                analysis
-            );
-
-
-        // ==================================
-        // OBSERVAÇÃO DO SPECTRAL PROFILE
+        // 3. SPECTRAL PROFILE
         // ==================================
         //
-        // SOMENTE DIAGNÓSTICO.
+        // O SpectralProfile recebe somente
+        // a análise produzida pelo Analyzer.
         //
-        // Este bloco não altera:
-        //
-        // - AudioBuffer;
-        // - parâmetros DSP;
-        // - Treatment Plan;
-        // - decisões;
-        // - cadeia de processamento.
-        //
-        // Ele apenas expõe no console
-        // as evidências produzidas pelo
-        // SpectralProfile para validação.
-        //
+        // Ele interpreta.
+        // Não processa.
+        // ==================================
+
+        this.createSpectralProfile(
+            analysis
+        );
+
+
+        // ==================================
+        // OBSERVAÇÃO DO PERFIL
         // ==================================
 
         if (
@@ -1224,7 +1041,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 5. DIAGNÓSTICO ESPECTRAL
+        // 5. DIAGNÓSTICO
         // ==================================
 
         this.lastSpectralDiagnostic =
@@ -1234,7 +1051,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 6. CONTEXTO ESPECTRAL ENRIQUECIDO
+        // 6. CONTEXTO ENRIQUECIDO
         // ==================================
 
         this.lastSpectralContext =
@@ -1245,7 +1062,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 7. GERAR PLANO ADAPTATIVO
+        // 7. TREATMENT PLAN
         // ==================================
 
         this.lastTreatmentPlan =
@@ -1256,7 +1073,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 8. VALIDAR DECISÃO
+        // 8. DECISION PIPELINE
         // ==================================
 
         this.lastTreatmentDecisionPipeline =
@@ -1266,7 +1083,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 9. CONTEXTO OFFLINE
+        // 9. OFFLINE CONTEXT
         // ==================================
 
         const context =
@@ -1290,7 +1107,7 @@ class VocalSmoother {
 
 
         // ==================================
-        // 11. VOCAL BODY
+        // 11. BODY
         // ==================================
 
         const bodyResult =
@@ -1329,17 +1146,17 @@ class VocalSmoother {
                 "VocalBody não retornou uma cadeia de áudio válida."
             );
         }
-                // ==================================
-        // 12. VOCAL TONE
+
+
+        // ==================================
+        // 12. TONE
         // ==================================
 
         let toneInput =
             bodyOutput;
 
-
         let toneOutput =
             bodyOutput;
-
 
         let toneActive =
             false;
@@ -1376,10 +1193,8 @@ class VocalSmoother {
                 toneInput =
                     toneResult.input;
 
-
                 toneOutput =
                     toneResult.output;
-
 
                 toneActive =
                     true;
@@ -1401,310 +1216,287 @@ class VocalSmoother {
                     toneInput =
                         resolvedTone;
 
-
                     toneOutput =
                         resolvedTone;
-
 
                     toneActive =
                         true;
                 }
             }
         }
-
-
+                // ==================================
+        // 13. DYNAMICS
         // ==================================
-        // 13. VOCAL DYNAMICS
-        // ==================================
-
+        
         const dynamicsResult =
             this.dynamics.createProcessor(
                 context,
                 analysis
             );
-
-
+        
+        
         const compressor =
             this.resolveNode(
                 dynamicsResult
             );
-
-
+        
+        
         if (
             !compressor
         ) {
-
+            
             throw new Error(
                 "VocalDynamics não retornou um processador válido."
             );
         }
-
-
+        
+        
         this.lastSettings =
             dynamicsResult.settings ||
             null;
-
-
+        
+        
         // ==================================
-        // 14. VOCAL HARSHNESS
+        // 14. HARSHNESS
         // ==================================
-        //
-        // Dynamics
-        //     ↓
-        // Harshness
-        //
-        // ==================================
-
+        
         let harshnessInput =
             null;
-
-
+        
         let harshnessOutput =
             compressor;
-
-
+        
         let harshnessActive =
             false;
-
-
+        
+        
         if (
             this.harshness &&
             typeof this.harshness.createProcessor ===
             "function"
         ) {
-
+            
             try {
-
+                
                 const harshnessResult =
                     this.harshness.createProcessor(
                         context,
                         analysis
                     );
-
-
+                
+                
                 this.lastHarshnessSettings =
                     harshnessResult &&
                     harshnessResult.settings ?
                     harshnessResult.settings :
                     null;
-
-
+                
+                
                 if (
                     harshnessResult &&
                     harshnessResult.input &&
                     harshnessResult.output
                 ) {
-
+                    
                     harshnessInput =
                         harshnessResult.input;
-
-
+                    
                     harshnessOutput =
                         harshnessResult.output;
-
-
+                    
                     harshnessActive =
                         harshnessInput !==
                         harshnessOutput;
                 }
-
+                
             } catch (
                 error
             ) {
-
+                
                 console.warn(
                     "VocalHarshness indisponível nesta execução:",
                     error
                 );
-
-
+                
+                
                 this.lastHarshnessSettings =
                     null;
-
-
+                
                 harshnessInput =
                     null;
-
-
+                
                 harshnessOutput =
                     compressor;
-
-
+                
                 harshnessActive =
                     false;
             }
         }
-
-
+        
+        
         // ==================================
-        // 15. VOCAL SIBILANCE
+        // 15. SIBILANCE
         // ==================================
-        //
-        // Dynamics
-        //     ↓
-        // Harshness
-        //     ↓
-        // Sibilance
-        //
-        // ==================================
-
+        
         let sibilanceInput =
             null;
-
-
+        
         let sibilanceOutput =
             harshnessOutput;
-
-
+        
         let sibilanceActive =
             false;
-
-
+        
+        
         if (
             this.sibilance &&
             typeof this.sibilance.createProcessor ===
             "function"
         ) {
-
-            const sibilanceResult =
-                this.sibilance.createProcessor(
-                    context,
-                    analysis
-                );
-
-
-            this.lastSibilanceSettings =
-                sibilanceResult.settings ||
-                null;
-
-
-            sibilanceInput =
-                sibilanceResult.input ||
-                null;
-
-
-            const resolvedSibilanceOutput =
-                sibilanceResult.output ||
-                this.resolveNode(
-                    sibilanceResult
-                );
-
-
-            if (
-                sibilanceInput &&
-                resolvedSibilanceOutput
+            
+            try {
+                
+                const sibilanceResult =
+                    this.sibilance.createProcessor(
+                        context,
+                        analysis
+                    );
+                
+                
+                this.lastSibilanceSettings =
+                    sibilanceResult &&
+                    sibilanceResult.settings ?
+                    sibilanceResult.settings :
+                    null;
+                
+                
+                sibilanceInput =
+                    sibilanceResult &&
+                    sibilanceResult.input ?
+                    sibilanceResult.input :
+                    null;
+                
+                
+                const resolvedSibilanceOutput =
+                    sibilanceResult &&
+                    (
+                        sibilanceResult.output ||
+                        this.resolveNode(
+                            sibilanceResult
+                        )
+                    );
+                
+                
+                if (
+                    sibilanceInput &&
+                    resolvedSibilanceOutput
+                ) {
+                    
+                    sibilanceOutput =
+                        resolvedSibilanceOutput;
+                    
+                    sibilanceActive =
+                        sibilanceInput !==
+                        sibilanceOutput;
+                }
+                
+            } catch (
+                error
             ) {
-
+                
+                console.warn(
+                    "VocalSibilance indisponível nesta execução:",
+                    error
+                );
+                
+                
+                this.lastSibilanceSettings =
+                    null;
+                
+                sibilanceInput =
+                    null;
+                
                 sibilanceOutput =
-                    resolvedSibilanceOutput;
-
-
+                    harshnessOutput;
+                
                 sibilanceActive =
-                    sibilanceInput !==
-                    sibilanceOutput;
+                    false;
             }
         }
-
-
+        
+        
         // ==================================
-        // 16. VOCAL SATURATION
+        // 16. SATURATION
         // ==================================
-        //
-        // ÚLTIMA ETAPA DSP.
-        //
-        // Dynamics
-        //     ↓
-        // Harshness
-        //     ↓
-        // Sibilance
-        //     ↓
-        // Saturation
-        //     ↓
-        // Output
-        //
-        // O VocalSaturation possui internamente
-        // seu próprio caminho DRY/WET.
-        //
-        // Nenhum processamento DSP ocorre
-        // depois desta etapa.
-        //
-        // ==================================
-
+        
         let saturationInput =
             null;
-
-
+        
         let saturationOutput =
             sibilanceOutput;
-
-
+        
         let saturationActive =
             false;
-
-
+        
+        
         if (
             this.saturation &&
             typeof this.saturation.createProcessor ===
             "function"
         ) {
-
+            
             try {
-
+                
                 const saturationResult =
                     this.saturation.createProcessor(
                         context,
                         analysis
                     );
-
-
+                
+                
                 this.lastSaturationSettings =
                     saturationResult &&
-                    saturationResult.settings
-                        ? saturationResult.settings
-                        : null;
-
-
+                    saturationResult.settings ?
+                    saturationResult.settings :
+                    null;
+                
+                
                 if (
                     saturationResult &&
                     saturationResult.input &&
                     saturationResult.output
                 ) {
-
+                    
                     saturationInput =
                         saturationResult.input;
-
-
+                    
                     saturationOutput =
                         saturationResult.output;
-
-
+                    
                     saturationActive =
                         saturationInput !==
                         saturationOutput;
                 }
-
+                
             } catch (
                 error
             ) {
-
+                
                 console.warn(
                     "VocalSaturation indisponível nesta execução:",
                     error
                 );
-
-
+                
+                
                 this.lastSaturationSettings =
                     null;
-
-
+                
                 saturationInput =
                     null;
-
-
+                
                 saturationOutput =
                     sibilanceOutput;
-
-
+                
                 saturationActive =
                     false;
             }
@@ -1731,7 +1523,6 @@ class VocalSmoother {
             bodyOutput.connect(
                 toneInput
             );
-            
             
             toneOutput.connect(
                 compressor
@@ -1776,11 +1567,6 @@ class VocalSmoother {
         // ==================================
         // 21. SIBILANCE → SATURATION
         // ==================================
-        //
-        // A Saturation recebe exclusivamente
-        // a saída da etapa Sibilance.
-        //
-        // ==================================
         
         if (
             saturationInput
@@ -1794,10 +1580,6 @@ class VocalSmoother {
         
         // ==================================
         // 22. SAÍDA FINAL
-        // ==================================
-        //
-        // Saturation é o último estágio DSP.
-        //
         // ==================================
         
         saturationOutput.connect(
@@ -1833,97 +1615,97 @@ class VocalSmoother {
         
         return result;
         }
-        
-        
-        // ======================================
-        // ÚLTIMA ANÁLISE
-        // ======================================
-        
-        getLastAnalysis() {
-            
-            return this.lastAnalysis;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA MEDIÇÃO ESPECTRAL REGIONAL
-        // ======================================
-        
-        getLastSpectralRegionalMeasurement() {
-            
-            return this.lastSpectralRegionalMeasurement;
-        }
-        
-        
-        // ======================================
-        // RESUMO DA MEDIÇÃO REGIONAL
-        // ======================================
-        
-        getLastSpectralRegionalSummary() {
-            
-            return this.lastSpectralRegionalSummary;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO PERFIL ESPECTRAL
-        // ======================================
-        
-        getLastSpectralProfile() {
-            
-            return this.lastSpectralProfile;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO CONTEXTO ESPECTRAL
-        // ======================================
-        
-        getLastSpectralContext() {
-            
-            return this.lastSpectralContext;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO DIAGNÓSTICO ESPECTRAL
-        // ======================================
-        
-        getLastSpectralDiagnostic() {
-            
-            return this.lastSpectralDiagnostic;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMO PLANO DE TRATAMENTO
-        // ======================================
-        
-        getLastTreatmentPlan() {
-            
-            return this.lastTreatmentPlan;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA DECISÃO DO PIPELINE
-        // ======================================
-        
-        getLastTreatmentDecisionPipeline() {
-            
-            return this.lastTreatmentDecisionPipeline;
-        }
-        
-        
-        // ======================================
-        // ÚLTIMA AUDITORIA DO CONTRATO
-        // ======================================
-        
-        getLastTreatmentContractAudit() {
-            
-            return this.lastTreatmentContractAudit;
-        }
             // ======================================
+    // ÚLTIMA ANÁLISE
+    // ======================================
+    
+    getLastAnalysis() {
+        
+        return this.lastAnalysis;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMA MEDIÇÃO REGIONAL
+    // ======================================
+    
+    getLastSpectralRegionalMeasurement() {
+        
+        return this.lastSpectralRegionalMeasurement;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMO RESUMO REGIONAL
+    // ======================================
+    
+    getLastSpectralRegionalSummary() {
+        
+        return this.lastSpectralRegionalSummary;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMO PERFIL ESPECTRAL
+    // ======================================
+    
+    getLastSpectralProfile() {
+        
+        return this.lastSpectralProfile;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMO CONTEXTO ESPECTRAL
+    // ======================================
+    
+    getLastSpectralContext() {
+        
+        return this.lastSpectralContext;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMO DIAGNÓSTICO
+    // ======================================
+    
+    getLastSpectralDiagnostic() {
+        
+        return this.lastSpectralDiagnostic;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMO PLANO
+    // ======================================
+    
+    getLastTreatmentPlan() {
+        
+        return this.lastTreatmentPlan;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMA DECISÃO
+    // ======================================
+    
+    getLastTreatmentDecisionPipeline() {
+        
+        return this.lastTreatmentDecisionPipeline;
+    }
+    
+    
+    // ======================================
+    // ÚLTIMA AUDITORIA
+    // ======================================
+    
+    getLastTreatmentContractAudit() {
+        
+        return this.lastTreatmentContractAudit;
+    }
+    
+    
+    // ======================================
     // CONFIGURAÇÃO DINÂMICA
     // ======================================
     
@@ -1934,7 +1716,7 @@ class VocalSmoother {
     
     
     // ======================================
-    // CONFIGURAÇÃO DO BODY
+    // CONFIGURAÇÃO BODY
     // ======================================
     
     getLastBodySettings() {
@@ -1944,7 +1726,7 @@ class VocalSmoother {
     
     
     // ======================================
-    // CONFIGURAÇÃO DO TONE
+    // CONFIGURAÇÃO TONE
     // ======================================
     
     getLastToneSettings() {
@@ -1954,7 +1736,7 @@ class VocalSmoother {
     
     
     // ======================================
-    // CONFIGURAÇÃO DO HARSHNESS
+    // CONFIGURAÇÃO HARSHNESS
     // ======================================
     
     getLastHarshnessSettings() {
@@ -1964,7 +1746,7 @@ class VocalSmoother {
     
     
     // ======================================
-    // CONFIGURAÇÃO DA SIBILÂNCIA
+    // CONFIGURAÇÃO SIBILANCE
     // ======================================
     
     getLastSibilanceSettings() {
@@ -1974,21 +1756,15 @@ class VocalSmoother {
     
     
     // ======================================
-    // CONFIGURAÇÃO DA SATURAÇÃO
+    // CONFIGURAÇÃO SATURATION
     // ======================================
     
     getLastSaturationSettings() {
         
         return this.lastSaturationSettings;
     }
-    
-    
-    // ======================================
-    // SNAPSHOT DSP DA ÚLTIMA EXECUÇÃO
-    // ======================================
-    //
-    // SOMENTE OBSERVAÇÃO.
-    //
+        // ======================================
+    // SNAPSHOT DSP
     // ======================================
     
     getLastDspSnapshot() {
