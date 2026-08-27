@@ -1,14 +1,14 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL ANALYZER
-// V0.7
+// V0.8
 // ==========================================
 //
 // Analisa o vocal antes do processamento.
 //
 // O Analyzer NÃO modifica o áudio.
 //
-// V0.7:
+// V0.8:
 //
 // - análise geral
 // - análise por bandas
@@ -22,20 +22,24 @@
 // - repetição de ocorrências
 // - confiança adaptativa
 // - refinamento conservador de hardness
+// - evidência espectral superior
+// - análise de deficiência aparente de bandwidth
+// - estabilidade das bandas
+// - perfil espectral temporal
 //
 // IMPORTANTE:
 //
 // Esta versão NÃO remove ruído.
 //
 // Ela somente melhora a identificação
-// do possível perfil de ruído e das
-// evidências espectrais/temporais.
+// das características do vocal e fornece
+// evidências para camadas posteriores.
 //
-// A nova análise de roughness NÃO aplica
-// processamento.
+// Nenhuma propriedade desta análise
+// autoriza reconstrução automaticamente.
 //
-// Ela somente fornece evidência para
-// camadas posteriores.
+// Baixa confiança deve favorecer
+// preservação.
 //
 // ==========================================
 
@@ -60,12 +64,6 @@ class VocalAnalyzer {
 
         // ==================================
         // CONFIGURAÇÃO ROUGHNESS
-        // ==================================
-        //
-        // A região principal de harshness/
-        // roughness permanece separada da
-        // região principal de sibilância.
-        //
         // ==================================
 
         this.roughnessLowCut =
@@ -95,6 +93,94 @@ class VocalAnalyzer {
         this.minimumRoughnessConfidence =
             options.minimumRoughnessConfidence ??
             0.45;
+
+
+        // ==================================
+        // CONFIGURAÇÃO ESPECTRAL V0.8
+        // ==================================
+        //
+        // Estas bandas não substituem as
+        // bandas antigas.
+        //
+        // Elas existem para fornecer
+        // contexto adicional.
+        //
+        // ==================================
+
+        this.spectralBands = [
+
+            {
+                name: "sub",
+                low: 20,
+                high: 120
+            },
+
+            {
+                name: "body",
+                low: 120,
+                high: 500
+            },
+
+            {
+                name: "lowMid",
+                low: 500,
+                high: 1200
+            },
+
+            {
+                name: "mid",
+                low: 1200,
+                high: 2500
+            },
+
+            {
+                name: "presence",
+                low: 2500,
+                high: 5000
+            },
+
+            {
+                name: "sibilance",
+                low: 5000,
+                high: 9500
+            },
+
+            {
+                name: "air",
+                low: 9500,
+                high: 14000
+            }
+        ];
+
+
+        this.minimumSpectralFrames =
+            options.minimumSpectralFrames ??
+            4;
+
+
+        this.minimumSpectralConfidence =
+            options.minimumSpectralConfidence ??
+            0.40;
+
+
+        this.upperContentMinimumRatio =
+            options.upperContentMinimumRatio ??
+            0.025;
+
+
+        this.upperContentStrongRatio =
+            options.upperContentStrongRatio ??
+            0.055;
+
+
+        this.upperContentDeficiencyRatio =
+            options.upperContentDeficiencyRatio ??
+            0.018;
+
+
+        this.spectralStabilityThreshold =
+            options.spectralStabilityThreshold ??
+            0.25;
 
 
         this.analysis =
@@ -294,12 +380,22 @@ class VocalAnalyzer {
                 data.length
             );
 
+        const safeCutoff =
+            this.clamp(
+                cutoff,
+                1,
+                (
+                    sampleRate *
+                    0.49
+                )
+            );
+
         const rc =
             1 /
             (
                 2 *
                 Math.PI *
-                cutoff
+                safeCutoff
             );
 
         const dt =
@@ -347,21 +443,43 @@ class VocalAnalyzer {
         highCut
     ) {
 
-        const lowPassed =
+        if (
+            !data ||
+            data.length === 0
+        ) {
+
+            return 0;
+        }
+
+        const safeHigh =
+            this.clamp(
+                highCut,
+                1,
+                sampleRate * 0.49
+            );
+
+        const safeLow =
+            this.clamp(
+                lowCut,
+                0,
+                safeHigh - 1
+            );
+
+        const highPassedBase =
             this.lowPass(
                 data,
                 sampleRate,
-                highCut
+                safeHigh
             );
 
-        let highPassed;
+        let bandSignal;
 
         if (
-            lowCut <= 20
+            safeLow <= 20
         ) {
 
-            highPassed =
-                data;
+            bandSignal =
+                highPassedBase;
 
         } else {
 
@@ -369,10 +487,10 @@ class VocalAnalyzer {
                 this.lowPass(
                     data,
                     sampleRate,
-                    lowCut
+                    safeLow
                 );
 
-            highPassed =
+            bandSignal =
                 new Float32Array(
                     data.length
                 );
@@ -383,14 +501,14 @@ class VocalAnalyzer {
                 i++
             ) {
 
-                highPassed[i] =
-                    lowPassed[i] -
+                bandSignal[i] =
+                    highPassedBase[i] -
                     lower[i];
             }
         }
 
         return this.calculateRMS(
-            highPassed
+            bandSignal
         );
     }
 
@@ -406,15 +524,29 @@ class VocalAnalyzer {
         highCut
     ) {
 
+        const safeHigh =
+            this.clamp(
+                highCut,
+                1,
+                sampleRate * 0.49
+            );
+
+        const safeLow =
+            this.clamp(
+                lowCut,
+                0,
+                safeHigh - 1
+            );
+
         const high =
             this.lowPass(
                 data,
                 sampleRate,
-                highCut
+                safeHigh
             );
 
         if (
-            lowCut <= 20
+            safeLow <= 20
         ) {
 
             return high;
@@ -424,7 +556,7 @@ class VocalAnalyzer {
             this.lowPass(
                 data,
                 sampleRate,
-                lowCut
+                safeLow
             );
 
         const band =
@@ -491,6 +623,130 @@ class VocalAnalyzer {
 
         return mono;
     }
+
+
+    // ======================================
+    // NORMALIZAÇÃO SEGURA
+    // ======================================
+
+    normalizeRatio(
+        value,
+        denominator
+    ) {
+
+        if (
+            !Number.isFinite(value) ||
+            !Number.isFinite(denominator) ||
+            denominator <= 0
+        ) {
+
+            return 0;
+        }
+
+        return this.clamp(
+            value /
+            denominator,
+            0,
+            1
+        );
+    }
+
+
+    // ======================================
+    // DISTÂNCIA RELATIVA
+    // ======================================
+
+    relativeDistance(
+        a,
+        b
+    ) {
+
+        const denominator =
+            Math.max(
+                Math.abs(a),
+                Math.abs(b),
+                0.000001
+            );
+
+        return Math.abs(
+            a - b
+        ) / denominator;
+    }
+
+
+    // ======================================
+    // ESTABILIDADE ENTRE VALORES
+    // ======================================
+
+    calculateValueStability(
+        values
+    ) {
+
+        if (
+            !values ||
+            values.length < 2
+        ) {
+
+            return 0;
+        }
+
+        let sumDifference = 0;
+
+        let comparisons = 0;
+
+        for (
+            let i = 1;
+            i < values.length;
+            i++
+        ) {
+
+            const current =
+                Number.isFinite(
+                    values[i]
+                )
+                    ? values[i]
+                    : 0;
+
+            const previous =
+                Number.isFinite(
+                    values[i - 1]
+                )
+                    ? values[i - 1]
+                    : 0;
+
+            const difference =
+                this.relativeDistance(
+                    current,
+                    previous
+                );
+
+            sumDifference +=
+                this.clamp(
+                    difference,
+                    0,
+                    1
+                );
+
+            comparisons++;
+        }
+
+        if (
+            comparisons === 0
+        ) {
+
+            return 0;
+        }
+
+        return this.clamp(
+            1 -
+            (
+                sumDifference /
+                comparisons
+            ),
+            0,
+            1
+        );
+    }
         // ======================================
     // TIMELINE DE SIBILÂNCIA
     // ======================================
@@ -536,7 +792,9 @@ class VocalAnalyzer {
         const frames = [];
 
         let peakEnergy = 0;
+
         let sumEnergy = 0;
+
         let activeFrames = 0;
 
         const activityThreshold =
@@ -733,28 +991,7 @@ class VocalAnalyzer {
 
 
     // ======================================
-    // TIMELINE DE ROUGHNESS V0.7
-    // ======================================
-    //
-    // Esta análise procura comportamento
-    // temporal irregular na região de
-    // 2,5–5 kHz.
-    //
-    // Ela NÃO interpreta simplesmente
-    // energia alta como roughness.
-    //
-    // A evidência depende de:
-    //
-    // - energia relativa;
-    // - variação entre frames;
-    // - persistência;
-    // - atividade;
-    // - repetição;
-    // - estabilidade da evidência.
-    //
-    // A região é deliberadamente separada
-    // da sibilância principal (5–9,5 kHz).
-    //
+    // TIMELINE DE ROUGHNESS V0.8
     // ======================================
 
     analyzeRoughnessTimeline(
@@ -805,59 +1042,41 @@ class VocalAnalyzer {
 
             return {
 
-                available:
-                    false,
+                available: false,
 
-                confidence:
-                    0,
+                confidence: 0,
 
-                amount:
-                    0,
+                amount: 0,
 
-                temporalScore:
-                    0,
+                temporalScore: 0,
 
-                averageEnergy:
-                    0,
+                averageEnergy: 0,
 
-                peakEnergy:
-                    0,
+                peakEnergy: 0,
 
-                averageRelative:
-                    0,
+                averageRelative: 0,
 
-                peakRelative:
-                    0,
+                peakRelative: 0,
 
-                activity:
-                    0,
+                activity: 0,
 
-                variation:
-                    0,
+                variation: 0,
 
-                persistence:
-                    0,
+                persistence: 0,
 
-                repetition:
-                    0,
+                repetition: 0,
 
-                stability:
-                    0,
+                stability: 0,
 
-                activeFrames:
-                    0,
+                activeFrames: 0,
 
-                frameCount:
-                    0,
+                frameCount: 0,
 
-                candidateRuns:
-                    0,
+                candidateRuns: 0,
 
-                candidateFrames:
-                    0,
+                candidateFrames: 0,
 
-                frames:
-                    []
+                frames: []
             };
         }
 
@@ -865,70 +1084,37 @@ class VocalAnalyzer {
         const frames = [];
 
 
-        let sumEnergy =
-            0;
+        let sumEnergy = 0;
 
+        let peakEnergy = 0;
 
-        let peakEnergy =
-            0;
+        let activeFrames = 0;
 
+        let candidateFrames = 0;
 
-        let activeFrames =
-            0;
+        let candidateRuns = 0;
 
+        let currentRun = 0;
 
-        let candidateFrames =
-            0;
+        let persistentFrames = 0;
 
+        let totalVariation = 0;
 
-        let candidateRuns =
-            0;
+        let variationComparisons = 0;
 
+        let stabilitySum = 0;
 
-        let currentRun =
-            0;
+        let stabilityComparisons = 0;
 
+        let previousRelative = null;
 
-        let persistentFrames =
-            0;
-
-
-        let totalVariation =
-            0;
-
-
-        let variationComparisons =
-            0;
-
-
-        let stabilitySum =
-            0;
-
-
-        let stabilityComparisons =
-            0;
-
-
-        let previousRelative =
-            null;
-
-
-        let previousDb =
-            null;
+        let previousDb = null;
 
 
         const activityThreshold =
             Math.max(
                 totalRms *
                 this.roughnessActivityThreshold,
-                0.00001
-            );
-
-
-        const candidateThreshold =
-            Math.max(
-                totalRms *
-                this.roughnessVariationThreshold,
                 0.00001
             );
 
@@ -1007,12 +1193,9 @@ class VocalAnalyzer {
                 sampleRate;
 
 
-            let variation =
-                0;
+            let variation = 0;
 
-
-            let frameStability =
-                0;
+            let frameStability = 0;
 
 
             if (
@@ -1037,15 +1220,8 @@ class VocalAnalyzer {
                 totalVariation +=
                     variation;
 
-
                 variationComparisons++;
 
-
-                /*
-                 * Variações moderadas e
-                 * persistentes são mais úteis
-                 * que saltos isolados.
-                 */
 
                 const variationStability =
                     this.clamp(
@@ -1065,7 +1241,6 @@ class VocalAnalyzer {
 
                 stabilitySum +=
                     frameStability;
-
 
                 stabilityComparisons++;
             }
@@ -1097,6 +1272,7 @@ class VocalAnalyzer {
             ) {
 
                 candidateFrames++;
+
                 currentRun++;
             }
 
@@ -1111,8 +1287,7 @@ class VocalAnalyzer {
 
 
             if (
-                rms >
-                peakEnergy
+                rms > peakEnergy
             ) {
 
                 peakEnergy =
@@ -1146,7 +1321,6 @@ class VocalAnalyzer {
             previousRelative =
                 relative;
 
-
             previousDb =
                 db;
         }
@@ -1165,56 +1339,39 @@ class VocalAnalyzer {
 
             return {
 
-                available:
-                    false,
+                available: false,
 
-                confidence:
-                    0,
+                confidence: 0,
 
-                amount:
-                    0,
+                amount: 0,
 
-                temporalScore:
-                    0,
+                temporalScore: 0,
 
-                averageEnergy:
-                    0,
+                averageEnergy: 0,
 
-                peakEnergy:
-                    0,
+                peakEnergy: 0,
 
-                averageRelative:
-                    0,
+                averageRelative: 0,
 
-                peakRelative:
-                    0,
+                peakRelative: 0,
 
-                activity:
-                    0,
+                activity: 0,
 
-                variation:
-                    0,
+                variation: 0,
 
-                persistence:
-                    0,
+                persistence: 0,
 
-                repetition:
-                    0,
+                repetition: 0,
 
-                stability:
-                    0,
+                stability: 0,
 
-                activeFrames:
-                    0,
+                activeFrames: 0,
 
-                frameCount:
-                    0,
+                frameCount: 0,
 
-                candidateRuns:
-                    0,
+                candidateRuns: 0,
 
-                candidateFrames:
-                    0,
+                candidateFrames: 0,
 
                 frames
             };
@@ -1319,16 +1476,6 @@ class VocalAnalyzer {
             );
 
 
-        /*
-         * A estabilidade aqui não significa
-         * que o sinal deve ser perfeitamente
-         * estável.
-         *
-         * Ela representa confiança de que
-         * a evidência foi observada de forma
-         * consistente entre frames.
-         */
-
         const confidence =
             this.clamp(
                 (
@@ -1355,16 +1502,6 @@ class VocalAnalyzer {
                 1
             );
 
-
-        /*
-         * Roughness temporal.
-         *
-         * A energia sozinha recebe peso
-         * limitado.
-         *
-         * A variação também não domina
-         * sozinha.
-         */
 
         const temporalScore =
             this.clamp(
@@ -1471,16 +1608,802 @@ class VocalAnalyzer {
         };
     }
         // ======================================
-    // PERFIL DE RUÍDO V0.6
+    // PERFIL ESPECTRAL TEMPORAL V0.8
     // ======================================
     //
-    // A grande mudança desta versão:
+    // Esta é uma das principais melhorias.
     //
-    // não dependemos de silêncio longo.
+    // O Analyzer passa a observar como as
+    // relações entre bandas se comportam
+    // ao longo do tempo.
     //
-    // Pequenas janelas podem acumular
-    // evidências ao longo da gravação.
+    // Não basta existir energia em 9,5–14 kHz.
     //
+    // Precisamos saber se essa evidência:
+    //
+    // - aparece repetidamente;
+    // - permanece coerente;
+    // - é extremamente isolada;
+    // - ou simplesmente não existe.
+    //
+    // ======================================
+
+    analyzeSpectralTimeline(
+        mono,
+        sampleRate,
+        totalRms
+    ) {
+
+        if (
+            !mono ||
+            mono.length === 0 ||
+            totalRms <= 0
+        ) {
+
+            return {
+
+                available: false,
+
+                confidence: 0,
+
+                frameCount: 0,
+
+                activeFrames: 0,
+
+                stability: 0,
+
+                lowerEnergy: 0,
+
+                upperEnergy: 0,
+
+                upperToLowerRatio: 0,
+
+                upperPresence: 0,
+
+                bandwidthDeficiency: false,
+
+                status: "preserve",
+
+                reason:
+                    "insufficient-audio-data",
+
+                frames: []
+            };
+        }
+
+
+        const windowSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.windowMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const hopSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.hopMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const upperHigh =
+            Math.min(
+                14000,
+                sampleRate * 0.49
+            );
+
+
+        const upperLow =
+            Math.min(
+                9500,
+                upperHigh - 100
+            );
+
+
+        if (
+            upperHigh <= upperLow
+        ) {
+
+            return {
+
+                available: false,
+
+                confidence: 0,
+
+                frameCount: 0,
+
+                activeFrames: 0,
+
+                stability: 0,
+
+                lowerEnergy: 0,
+
+                upperEnergy: 0,
+
+                upperToLowerRatio: 0,
+
+                upperPresence: 0,
+
+                bandwidthDeficiency: false,
+
+                status: "preserve",
+
+                reason:
+                    "insufficient-upper-bandwidth",
+
+                frames: []
+            };
+        }
+
+
+        const frames = [];
+
+
+        let lowerEnergySum = 0;
+
+        let upperEnergySum = 0;
+
+        let activeFrames = 0;
+
+        let upperPresentFrames = 0;
+
+        let deficiencyFrames = 0;
+
+        let stabilitySum = 0;
+
+        let stabilityComparisons = 0;
+
+
+        let previousUpperRatio =
+            null;
+
+
+        let previousLowerRatio =
+            null;
+
+
+        const activityThreshold =
+            Math.max(
+                totalRms *
+                0.12,
+                0.00001
+            );
+
+
+        for (
+            let start = 0;
+            start < mono.length;
+            start += hopSize
+        ) {
+
+            const end =
+                Math.min(
+                    mono.length,
+                    start +
+                    windowSize
+                );
+
+
+            if (
+                end <= start
+            ) {
+
+                break;
+            }
+
+
+            const windowData =
+                mono.subarray(
+                    start,
+                    end
+                );
+
+
+            const lowerEnergy =
+                this.calculateBandEnergy(
+                    windowData,
+                    sampleRate,
+                    2500,
+                    upperLow
+                );
+
+
+            const upperEnergy =
+                this.calculateBandEnergy(
+                    windowData,
+                    sampleRate,
+                    upperLow,
+                    upperHigh
+                );
+
+
+            const windowRms =
+                this.calculateRMS(
+                    windowData
+                );
+
+
+            const lowerRatio =
+                totalRms > 0
+                    ? lowerEnergy /
+                      totalRms
+                    : 0;
+
+
+            const upperRatio =
+                totalRms > 0
+                    ? upperEnergy /
+                      totalRms
+                    : 0;
+
+
+            const upperToLowerRatio =
+                lowerEnergy > 0
+                    ? upperEnergy /
+                      lowerEnergy
+                    : 0;
+
+
+            const active =
+                windowRms >
+                activityThreshold;
+
+
+            const upperPresent =
+                upperRatio >=
+                this.upperContentMinimumRatio;
+
+
+            const deficient =
+                active &&
+                upperRatio <
+                this.upperContentDeficiencyRatio;
+
+
+            if (
+                active
+            ) {
+
+                activeFrames++;
+            }
+
+
+            if (
+                upperPresent
+            ) {
+
+                upperPresentFrames++;
+            }
+
+
+            if (
+                deficient
+            ) {
+
+                deficiencyFrames++;
+            }
+
+
+            if (
+                previousUpperRatio !==
+                null
+            ) {
+
+                const upperDifference =
+                    this.relativeDistance(
+                        upperRatio,
+                        previousUpperRatio
+                    );
+
+
+                const lowerDifference =
+                    this.relativeDistance(
+                        lowerRatio,
+                        previousLowerRatio
+                    );
+
+
+                const combinedDifference =
+                    this.clamp(
+                        (
+                            upperDifference *
+                            0.70
+                        ) +
+                        (
+                            lowerDifference *
+                            0.30
+                        ),
+                        0,
+                        1
+                    );
+
+
+                const frameStability =
+                    this.clamp(
+                        1 -
+                        combinedDifference,
+                        0,
+                        1
+                    );
+
+
+                stabilitySum +=
+                    frameStability;
+
+
+                stabilityComparisons++;
+            }
+
+
+            lowerEnergySum +=
+                lowerEnergy;
+
+
+            upperEnergySum +=
+                upperEnergy;
+
+
+            frames.push({
+
+                time:
+                    start /
+                    sampleRate,
+
+                rms:
+                    windowRms,
+
+                lowerEnergy,
+
+                upperEnergy,
+
+                lowerRatio,
+
+                upperRatio,
+
+                upperToLowerRatio,
+
+                active,
+
+                upperPresent,
+
+                deficient
+            });
+
+
+            previousUpperRatio =
+                upperRatio;
+
+
+            previousLowerRatio =
+                lowerRatio;
+        }
+
+
+        const frameCount =
+            frames.length;
+
+
+        if (
+            frameCount === 0
+        ) {
+
+            return {
+
+                available: false,
+
+                confidence: 0,
+
+                frameCount: 0,
+
+                activeFrames: 0,
+
+                stability: 0,
+
+                lowerEnergy: 0,
+
+                upperEnergy: 0,
+
+                upperToLowerRatio: 0,
+
+                upperPresence: 0,
+
+                bandwidthDeficiency: false,
+
+                status: "preserve",
+
+                reason:
+                    "no-spectral-frames",
+
+                frames
+            };
+        }
+
+
+        const activeRatio =
+            activeFrames /
+            frameCount;
+
+
+        const lowerEnergy =
+            lowerEnergySum /
+            frameCount;
+
+
+        const upperEnergy =
+            upperEnergySum /
+            frameCount;
+
+
+        const upperToLowerRatio =
+            lowerEnergy > 0
+                ? upperEnergy /
+                  lowerEnergy
+                : 0;
+
+
+        const upperPresenceRatio =
+            activeFrames > 0
+                ? upperPresentFrames /
+                  activeFrames
+                : 0;
+
+
+        const deficiencyRatio =
+            activeFrames > 0
+                ? deficiencyFrames /
+                  activeFrames
+                : 0;
+
+
+        const stability =
+            stabilityComparisons > 0
+                ? stabilitySum /
+                  stabilityComparisons
+                : 0;
+
+
+        const dataAvailability =
+            this.clamp(
+                activeRatio *
+                1.5,
+                0,
+                1
+            );
+
+
+        const persistence =
+            this.clamp(
+                upperPresenceRatio,
+                0,
+                1
+            );
+
+
+        const deficiencyPersistence =
+            this.clamp(
+                deficiencyRatio,
+                0,
+                1
+            );
+
+
+        const confidence =
+            this.clamp(
+                (
+                    dataAvailability *
+                    0.35
+                ) +
+                (
+                    stability *
+                    0.25
+                ) +
+                (
+                    Math.max(
+                        persistence,
+                        deficiencyPersistence
+                    ) *
+                    0.40
+                ),
+                0,
+                1
+            );
+
+
+        const bandwidthDeficiency =
+            confidence >=
+            this.minimumSpectralConfidence &&
+            activeRatio >=
+            0.20 &&
+            deficiencyRatio >=
+            0.55;
+
+
+        let status =
+            "preserve";
+
+
+        let reason =
+            "insufficient-band-evidence";
+
+
+        if (
+            bandwidthDeficiency
+        ) {
+
+            status =
+                "possible-deficiency";
+
+            reason =
+                "persistent-upper-content-deficit";
+
+        } else if (
+            confidence >=
+            this.minimumSpectralConfidence &&
+            upperPresenceRatio >=
+            0.55
+        ) {
+
+            status =
+                "available";
+
+            reason =
+                "persistent-upper-content";
+
+        } else if (
+            confidence >=
+            this.minimumSpectralConfidence
+        ) {
+
+            status =
+                "neutral";
+
+            reason =
+                "spectral-evidence-inconclusive";
+        }
+
+
+        return {
+
+            available:
+                confidence >=
+                this.minimumSpectralConfidence,
+
+            confidence,
+
+            frameCount,
+
+            activeFrames,
+
+            activeRatio,
+
+            stability,
+
+            lowerEnergy,
+
+            upperEnergy,
+
+            upperToLowerRatio,
+
+            upperPresence:
+                upperPresenceRatio,
+
+            deficiencyRatio,
+
+            bandwidthDeficiency,
+
+            status,
+
+            reason,
+
+            frames
+        };
+    }
+
+
+    // ======================================
+    // RESUMO ESPECTRAL
+    // ======================================
+    //
+    // Converte a análise temporal em um
+    // conjunto pequeno de evidências.
+    //
+    // ======================================
+
+    calculateSpectralEvidence(
+        bands,
+        spectralTimeline
+    ) {
+
+        const body =
+            bands.body || 0;
+
+        const lowMid =
+            bands.lowMid || 0;
+
+        const mid =
+            bands.mid || 0;
+
+        const presence =
+            bands.presence || 0;
+
+        const sibilance =
+            bands.sibilance || 0;
+
+        const air =
+            bands.air || 0;
+
+
+        const lowerCore =
+            body +
+            lowMid +
+            mid +
+            presence +
+            0.000001;
+
+
+        const upperCore =
+            sibilance +
+            air +
+            0.000001;
+
+
+        const upperRatio =
+            upperCore /
+            (
+                lowerCore +
+                upperCore
+            );
+
+
+        const upperPresence =
+            spectralTimeline &&
+            Number.isFinite(
+                spectralTimeline.upperPresence
+            )
+                ? spectralTimeline.upperPresence
+                : this.clamp(
+                    upperRatio * 8,
+                    0,
+                    1
+                );
+
+
+        const upperStability =
+            spectralTimeline &&
+            Number.isFinite(
+                spectralTimeline.stability
+            )
+                ? spectralTimeline.stability
+                : 0;
+
+
+        const bandwidthConfidence =
+            spectralTimeline &&
+            Number.isFinite(
+                spectralTimeline.confidence
+            )
+                ? spectralTimeline.confidence
+                : 0;
+
+
+        const bandwidthDeficiency =
+            Boolean(
+                spectralTimeline &&
+                spectralTimeline.bandwidthDeficiency
+            );
+
+
+        const upperToLowerRatio =
+            spectralTimeline &&
+            Number.isFinite(
+                spectralTimeline.upperToLowerRatio
+            )
+                ? spectralTimeline.upperToLowerRatio
+                : upperCore /
+                  (
+                      lowerCore +
+                      0.000001
+                  );
+
+
+        const upperAvailabilityScore =
+            this.clamp(
+                (
+                    upperPresence *
+                    0.55
+                ) +
+                (
+                    upperStability *
+                    0.20
+                ) +
+                (
+                    bandwidthConfidence *
+                    0.25
+                ),
+                0,
+                1
+            );
+
+
+        let status =
+            "preserve";
+
+
+        let reason =
+            "insufficient-band-evidence";
+
+
+        if (
+            bandwidthDeficiency
+        ) {
+
+            status =
+                "possible-deficiency";
+
+            reason =
+                "persistent-upper-content-deficit";
+
+        } else if (
+            upperAvailabilityScore >=
+            0.55 &&
+            bandwidthConfidence >=
+            this.minimumSpectralConfidence
+        ) {
+
+            status =
+                "available";
+
+            reason =
+                "upper-content-supported";
+
+        } else if (
+            bandwidthConfidence >=
+            this.minimumSpectralConfidence
+        ) {
+
+            status =
+                "neutral";
+
+            reason =
+                "upper-content-not-conclusive";
+        }
+
+
+        return {
+
+            upperRatio,
+
+            upperPresence,
+
+            upperStability,
+
+            upperToLowerRatio,
+
+            upperAvailabilityScore,
+
+            bandwidthConfidence,
+
+            bandwidthDeficiency,
+
+            status,
+
+            reason
+        };
+    }
+        // ======================================
+    // PERFIL DE RUÍDO V0.6
     // ======================================
 
     analyzeNoiseProfile(
@@ -1520,59 +2443,41 @@ class VocalAnalyzer {
 
             return {
 
-                available:
-                    false,
+                available: false,
 
-                confidence:
-                    0,
+                confidence: 0,
 
-                floor:
-                    0,
+                floor: 0,
 
-                floorDb:
-                    -120,
+                floorDb: -120,
 
-                floorRelative:
-                    0,
+                floorRelative: 0,
 
-                low:
-                    0,
+                low: 0,
 
-                mid:
-                    0,
+                mid: 0,
 
-                high:
-                    0,
+                high: 0,
 
-                lowRelative:
-                    0,
+                lowRelative: 0,
 
-                midRelative:
-                    0,
+                midRelative: 0,
 
-                highRelative:
-                    0,
+                highRelative: 0,
 
-                persistence:
-                    0,
+                persistence: 0,
 
-                repetition:
-                    0,
+                repetition: 0,
 
-                stability:
-                    0,
+                stability: 0,
 
-                microDurationMs:
-                    0,
+                microDurationMs: 0,
 
-                candidateRuns:
-                    0,
+                candidateRuns: 0,
 
-                candidateFrames:
-                    0,
+                candidateFrames: 0,
 
-                profile:
-                    "unknown"
+                profile: "unknown"
             };
         }
 
@@ -1599,68 +2504,37 @@ class VocalAnalyzer {
             );
 
 
-        let analyzedFrames =
-            0;
+        let analyzedFrames = 0;
 
+        let candidateFrames = 0;
 
-        let candidateFrames =
-            0;
+        let candidateRuns = 0;
 
+        let currentRun = 0;
 
-        let candidateRuns =
-            0;
+        let totalRunFrames = 0;
 
+        let persistentFrames = 0;
 
-        let currentRun =
-            0;
+        let sumNoiseRms = 0;
 
+        let sumLow = 0;
 
-        let totalRunFrames =
-            0;
+        let sumMid = 0;
 
+        let sumHigh = 0;
 
-        let persistentFrames =
-            0;
+        let previousLowRelative = null;
 
+        let previousMidRelative = null;
 
-        let sumNoiseRms =
-            0;
+        let previousHighRelative = null;
 
+        let stabilitySum = 0;
 
-        let sumLow =
-            0;
+        let stabilityComparisons = 0;
 
-
-        let sumMid =
-            0;
-
-
-        let sumHigh =
-            0;
-
-
-        let previousLowRelative =
-            null;
-
-
-        let previousMidRelative =
-            null;
-
-
-        let previousHighRelative =
-            null;
-
-
-        let stabilitySum =
-            0;
-
-
-        let stabilityComparisons =
-            0;
-
-
-        let longestRun =
-            0;
+        let longestRun = 0;
 
 
         const finishRun =
@@ -1756,6 +2630,7 @@ class VocalAnalyzer {
 
 
             candidateFrames++;
+
             currentRun++;
 
 
@@ -1791,9 +2666,7 @@ class VocalAnalyzer {
                     2500,
                     Math.min(
                         12000,
-                        sampleRate /
-                        2 -
-                        100
+                        sampleRate * 0.49
                     )
                 );
 
@@ -1801,14 +2674,11 @@ class VocalAnalyzer {
             sumNoiseRms +=
                 rms;
 
-
             sumLow +=
                 low;
 
-
             sumMid +=
                 mid;
-
 
             sumHigh +=
                 high;
@@ -1883,7 +2753,6 @@ class VocalAnalyzer {
                 stabilitySum +=
                     frameStability;
 
-
                 stabilityComparisons++;
             }
 
@@ -1891,10 +2760,8 @@ class VocalAnalyzer {
             previousLowRelative =
                 lowRelative;
 
-
             previousMidRelative =
                 midRelative;
-
 
             previousHighRelative =
                 highRelative;
@@ -1911,59 +2778,41 @@ class VocalAnalyzer {
 
             return {
 
-                available:
-                    false,
+                available: false,
 
-                confidence:
-                    0,
+                confidence: 0,
 
-                floor:
-                    0,
+                floor: 0,
 
-                floorDb:
-                    -120,
+                floorDb: -120,
 
-                floorRelative:
-                    0,
+                floorRelative: 0,
 
-                low:
-                    0,
+                low: 0,
 
-                mid:
-                    0,
+                mid: 0,
 
-                high:
-                    0,
+                high: 0,
 
-                lowRelative:
-                    0,
+                lowRelative: 0,
 
-                midRelative:
-                    0,
+                midRelative: 0,
 
-                highRelative:
-                    0,
+                highRelative: 0,
 
-                persistence:
-                    0,
+                persistence: 0,
 
-                repetition:
-                    0,
+                repetition: 0,
 
-                stability:
-                    0,
+                stability: 0,
 
-                microDurationMs:
-                    0,
+                microDurationMs: 0,
 
-                candidateRuns:
-                    0,
+                candidateRuns: 0,
 
-                candidateFrames:
-                    0,
+                candidateFrames: 0,
 
-                profile:
-                    "unknown"
+                profile: "unknown"
             };
         }
 
@@ -2081,14 +2930,6 @@ class VocalAnalyzer {
             );
 
 
-        const repetitionConfidence =
-            repetition;
-
-
-        const stabilityConfidence =
-            stability;
-
-
         const evidenceConfidence =
             this.clamp(
                 (
@@ -2100,11 +2941,11 @@ class VocalAnalyzer {
                     0.30
                 ) +
                 (
-                    repetitionConfidence *
+                    repetition *
                     0.25
                 ) +
                 (
-                    stabilityConfidence *
+                    stability *
                     0.25
                 ),
                 0,
@@ -2204,19 +3045,14 @@ class VocalAnalyzer {
 
 
     // ======================================
-    // CALCULAR CONFIANÇA GLOBAL
-    // ======================================
-    //
-    // Mantemos uma confiança geral simples
-    // para compatibilidade com consumidores
-    // existentes.
-    //
+    // CALCULAR CONFIANÇA GLOBAL V0.8
     // ======================================
 
     calculateAnalysisConfidence(
         sibilanceTimeline,
         roughnessTimeline,
-        noiseProfile
+        noiseProfile,
+        spectralTimeline
     ) {
 
         const sibilanceConfidence =
@@ -2258,30 +3094,39 @@ class VocalAnalyzer {
                 : 0;
 
 
-        /*
-         * A confiança global não deve ser
-         * dominada por roughness ou ruído.
-         *
-         * A análise espectral geral continua
-         * sendo a base principal.
-         */
+        const spectralConfidence =
+            spectralTimeline &&
+            Number.isFinite(
+                spectralTimeline.confidence
+            )
+                ? this.clamp(
+                    spectralTimeline.confidence,
+                    0,
+                    1
+                )
+                : 0;
+
 
         const confidence =
             this.clamp(
                 (
-                    0.55
+                    0.50
                 ) +
                 (
                     sibilanceConfidence *
-                    0.15
+                    0.12
                 ) +
                 (
                     roughnessConfidence *
-                    0.20
+                    0.18
                 ) +
                 (
                     noiseConfidence *
-                    0.10
+                    0.08
+                ) +
+                (
+                    spectralConfidence *
+                    0.12
                 ),
                 0,
                 1
@@ -2400,11 +3245,24 @@ class VocalAnalyzer {
                 mono,
                 sampleRate,
                 9500,
-                14000
+                Math.min(
+                    14000,
+                    sampleRate * 0.49
+                )
+            );
+
+
+        const sub =
+            this.calculateBandEnergy(
+                mono,
+                sampleRate,
+                20,
+                120
             );
 
 
         const total =
+            sub +
             body +
             lowMid +
             mid +
@@ -2438,6 +3296,11 @@ class VocalAnalyzer {
             total;
 
 
+        const subRatio =
+            sub /
+            total;
+
+
         // ==================================
         // TIMELINE DE SIBILÂNCIA
         // ==================================
@@ -2463,6 +3326,33 @@ class VocalAnalyzer {
 
 
         // ==================================
+        // PERFIL ESPECTRAL
+        // ==================================
+
+        const spectralTimeline =
+            this.analyzeSpectralTimeline(
+                mono,
+                sampleRate,
+                rms
+            );
+
+
+        const spectralEvidence =
+            this.calculateSpectralEvidence(
+                {
+                    sub,
+                    body,
+                    lowMid,
+                    mid,
+                    presence,
+                    sibilance,
+                    air
+                },
+                spectralTimeline
+            );
+
+
+        // ==================================
         // RUÍDO
         // ==================================
 
@@ -2482,13 +3372,14 @@ class VocalAnalyzer {
             this.calculateAnalysisConfidence(
                 sibilanceTimeline,
                 roughnessTimeline,
-                noiseProfile
+                noiseProfile,
+                spectralTimeline
             );
 
 
         // ==================================
         // CARACTERÍSTICAS
-        // ==================================
+        // ======================================
 
         const spectralCore =
             body +
@@ -2535,29 +3426,7 @@ class VocalAnalyzer {
 
 
         // ==================================
-        // HARDNESS V0.7
-        // ==================================
-        //
-        // A presença isolada não determina
-        // hardness.
-        //
-        // Agora temos:
-        //
-        // 1. predominância da presença;
-        // 2. contraste presença/médios;
-        // 3. roughness temporal;
-        // 4. pequena influência da proporção
-        //    global.
-        //
-        // Isso ajuda a separar:
-        //
-        // voz brilhante
-        //
-        // de
-        //
-        // voz brilhante + comportamento
-        // áspero persistente.
-        //
+        // HARDNESS V0.8
         // ==================================
 
         const temporalRoughness =
@@ -2600,15 +3469,7 @@ class VocalAnalyzer {
 
 
         // ==================================
-        // ROUGHNESS V0.7
-        // ==================================
-        //
-        // Roughness passa a representar
-        // principalmente a evidência temporal.
-        //
-        // A concentração espectral permanece
-        // apenas como suporte.
-        //
+        // ROUGHNESS
         // ==================================
 
         const spectralRoughnessSupport =
@@ -2647,10 +3508,6 @@ class VocalAnalyzer {
 
         // ==================================
         // SIBILÂNCIA
-        // ==================================
-        //
-        // Continua independente da roughness.
-        //
         // ==================================
 
         const spectralSibilance =
@@ -2717,12 +3574,6 @@ class VocalAnalyzer {
         // ==================================
         // ROUGHNESS STATE
         // ==================================
-        //
-        // Estado descritivo.
-        //
-        // Não autoriza processamento.
-        //
-        // ==================================
 
         let roughnessState =
             "low";
@@ -2753,12 +3604,6 @@ class VocalAnalyzer {
         // ==================================
         // HARDNESS CONFIDENCE
         // ==================================
-        //
-        // A confiança da hardness aumenta
-        // quando existe evidência temporal
-        // suficiente.
-        //
-        // ==================================
 
         const hardnessConfidence =
             this.clamp(
@@ -2784,13 +3629,50 @@ class VocalAnalyzer {
 
 
         // ==================================
+        // EVIDÊNCIA DE BANDWIDTH
+        // ==================================
+
+        const bandwidthConfidence =
+            this.clamp(
+                spectralEvidence
+                    .bandwidthConfidence,
+                0,
+                1
+            );
+
+
+        const upperContentConfidence =
+            this.clamp(
+                (
+                    spectralEvidence
+                        .upperAvailabilityScore *
+                    0.60
+                ) +
+                (
+                    bandwidthConfidence *
+                    0.40
+                ),
+                0,
+                1
+            );
+
+
+        const reconstructionPreservation =
+            bandwidthConfidence <
+            this.minimumSpectralConfidence ||
+            spectralEvidence
+                .status ===
+            "preserve";
+
+
+        // ==================================
         // RESULTADO
         // ==================================
 
         this.analysis = {
 
             version:
-                "0.7",
+                "0.8",
 
             sampleRate,
 
@@ -2815,6 +3697,8 @@ class VocalAnalyzer {
 
             bands: {
 
+                sub,
+
                 body,
 
                 lowMid,
@@ -2830,6 +3714,9 @@ class VocalAnalyzer {
 
 
             ratios: {
+
+                sub:
+                    subRatio,
 
                 body:
                     bodyRatio,
@@ -2885,6 +3772,10 @@ class VocalAnalyzer {
                     )
             },
 
+
+            // ==================================
+            // ROUGHNESS ANALYSIS
+            // ==================================
 
             roughnessAnalysis: {
 
@@ -2942,7 +3833,9 @@ class VocalAnalyzer {
                 state:
                     roughnessState
             },
-
+                        // ==================================
+            // SIBILANCE ANALYSIS
+            // ==================================
 
             sibilanceAnalysis: {
 
@@ -2991,7 +3884,111 @@ class VocalAnalyzer {
                     sibilanceTimeline
                         .peakRelative
             },
-                        // ==================================
+
+
+            // ==================================
+            // PERFIL ESPECTRAL V0.8
+            // ==================================
+            //
+            // Este bloco é informativo.
+            //
+            // Não autoriza reconstrução.
+            //
+            // ==================================
+
+            spectralAnalysis: {
+
+                available:
+                    spectralTimeline.available,
+
+                confidence:
+                    spectralTimeline.confidence,
+
+                frameCount:
+                    spectralTimeline.frameCount,
+
+                activeFrames:
+                    spectralTimeline.activeFrames,
+
+                activeRatio:
+                    spectralTimeline.activeRatio,
+
+                stability:
+                    spectralTimeline.stability,
+
+                lowerEnergy:
+                    spectralTimeline.lowerEnergy,
+
+                upperEnergy:
+                    spectralTimeline.upperEnergy,
+
+                upperToLowerRatio:
+                    spectralTimeline.upperToLowerRatio,
+
+                upperPresence:
+                    spectralTimeline.upperPresence,
+
+                deficiencyRatio:
+                    spectralTimeline.deficiencyRatio,
+
+                bandwidthDeficiency:
+                    spectralTimeline.bandwidthDeficiency,
+
+                status:
+                    spectralTimeline.status,
+
+                reason:
+                    spectralTimeline.reason
+            },
+
+
+            // ==================================
+            // UPPER CONTENT EVIDENCE
+            // ==================================
+
+            upperContentEvidence: {
+
+                available:
+                    spectralTimeline.available,
+
+                confidence:
+                    upperContentConfidence,
+
+                lowerReferenceEnergy:
+                    spectralEvidence
+                        .upperRatio,
+
+                upperReferenceEnergy:
+                    spectralTimeline.upperEnergy,
+
+                upperToLowerRatio:
+                    spectralEvidence
+                        .upperToLowerRatio,
+
+                upperPresence:
+                    spectralEvidence
+                        .upperPresence,
+
+                stability:
+                    spectralEvidence
+                        .upperStability,
+
+                bandwidthDeficiency:
+                    spectralEvidence
+                        .bandwidthDeficiency,
+
+                status:
+                    spectralEvidence.status,
+
+                reason:
+                    spectralEvidence.reason,
+
+                preserve:
+                    reconstructionPreservation
+            },
+
+
+            // ==================================
             // PERFIL DE RUÍDO
             // ==================================
 
@@ -3101,13 +4098,63 @@ class VocalAnalyzer {
 
                     hardnessConfidence,
 
+
+                // ==================================
+                // NOVAS EVIDÊNCIAS V0.8
+                // ==================================
+
+                upperContentConfidence:
+
+                    upperContentConfidence,
+
+                bandwidthConfidence:
+
+                    bandwidthConfidence,
+
+                bandwidthDeficiency:
+
+                    Boolean(
+                        spectralEvidence
+                            .bandwidthDeficiency
+                    ),
+
+                upperContentStability:
+
+                    this.clamp(
+                        spectralEvidence
+                            .upperStability,
+                        0,
+                        1
+                    ),
+
+                upperToLowerRatio:
+
+                    Math.max(
+                        0,
+                        spectralEvidence
+                            .upperToLowerRatio
+                    ),
+
+
+                // ==================================
+                // PRESERVAÇÃO
+                // ==================================
+
                 preserveIfRoughnessConfidenceLow:
                     roughnessConfidence <
                     this.minimumRoughnessConfidence,
 
                 preserveIfSibilanceConfidenceLow:
                     temporalSibilance <
-                    0.35
+                    0.35,
+
+                preserveIfBandwidthConfidenceLow:
+                    bandwidthConfidence <
+                    this.minimumSpectralConfidence,
+
+                preserveIfBandwidthEvidenceAmbiguous:
+                    spectralEvidence.status !==
+                    "possible-deficiency"
             }
         };
 
@@ -3133,4 +4180,3 @@ class VocalAnalyzer {
 
 window.VocalAnalyzer =
     VocalAnalyzer;
-    
