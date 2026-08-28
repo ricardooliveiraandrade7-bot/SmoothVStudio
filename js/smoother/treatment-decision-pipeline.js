@@ -833,60 +833,97 @@ class TreatmentDecisionPipeline {
     // ======================================
     // EXTRAIR EVIDÊNCIAS
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionEvidence.
+    //
+    // ======================================
 
     extractEvidence(
         record
     ) {
 
         if (
-            !this.isObject(
-                record
-            )
+            typeof TreatmentDecisionEvidence !==
+            "function"
         ) {
+
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
+
+            if (
+                !this.isObject(
+                    record
+                )
+            ) {
+
+                return [];
+            }
+
+
+            const sources = [
+
+                record.evidence,
+
+                record.evidenceList,
+
+                record.supportingEvidence,
+
+                record.observations,
+
+                record.diagnostics,
+
+                record.measurements,
+
+                record.decision &&
+                record.decision.evidence
+            ];
+
+
+            for (
+                let i = 0;
+                i < sources.length;
+                i++
+            ) {
+
+                if (
+                    this.isArray(
+                        sources[i]
+                    )
+                ) {
+
+                    return [
+                        ...sources[i]
+                    ];
+                }
+            }
+
 
             return [];
         }
 
 
-        const sources = [
+        return TreatmentDecisionEvidence
+            .extractEvidence(
+                record,
+                {
 
-            record.evidence,
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
 
-            record.evidenceList,
-
-            record.supportingEvidence,
-
-            record.observations,
-
-            record.diagnostics,
-
-            record.measurements,
-
-            record.decision &&
-            record.decision.evidence
-        ];
-
-
-        for (
-            let i = 0;
-            i < sources.length;
-            i++
-        ) {
-
-            if (
-                this.isArray(
-                    sources[i]
-                )
-            ) {
-
-                return [
-                    ...sources[i]
-                ];
-            }
-        }
-
-
-        return [];
+                    isArray:
+                        this.isArray.bind(
+                            this
+                        )
+                }
+            );
     }
 
 
