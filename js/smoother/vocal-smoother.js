@@ -696,6 +696,43 @@ class VocalSmoother {
 
     createDspSnapshot() {
 
+        if (
+            typeof window !==
+            "undefined" &&
+            typeof window.SmootherDspSnapshot ===
+            "function"
+        ) {
+
+            const snapshot =
+                new window.SmootherDspSnapshot();
+
+            return snapshot.create({
+
+                body:
+                    this.lastBodySettings,
+
+                tone:
+                    this.lastToneSettings,
+
+                dynamics:
+                    this.lastSettings,
+
+                harshness:
+                    this.lastHarshnessSettings,
+
+                saturation:
+                    this.lastSaturationSettings,
+
+                sibilance:
+                    this.lastSibilanceSettings
+            });
+        }
+
+
+        // Compatibilidade de segurança:
+        // mantém o comportamento anterior
+        // caso o módulo não esteja disponível.
+
         const copySettings =
             settings => {
 
