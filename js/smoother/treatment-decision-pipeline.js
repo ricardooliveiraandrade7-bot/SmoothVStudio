@@ -434,75 +434,112 @@ class TreatmentDecisionPipeline {
     // ======================================
     // NORMALIZAR REGIÃO
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionRegion.
+    //
+    // ======================================
 
     normalizeRegion(
         value
     ) {
 
         if (
-            typeof value ===
-            "string"
+            typeof TreatmentDecisionRegion !==
+            "function"
         ) {
 
-            const name =
-                this.safeString(
-                    value
-                );
-
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
 
             if (
-                !name
+                typeof value ===
+                "string"
             ) {
 
-                return null;
+                const name =
+                    this.safeString(
+                        value
+                    );
+
+
+                if (
+                    !name
+                ) {
+
+                    return null;
+                }
+
+
+                return {
+
+                    id:
+                        name,
+
+                    name:
+                        name
+                };
             }
 
 
-            return {
+            if (
+                this.isObject(
+                    value
+                )
+            ) {
 
-                id:
-                    name,
-
-                name:
-                    name
-            };
-        }
-
-
-        if (
-            this.isObject(
-                value
-            )
-        ) {
-
-            const id =
-                this.safeString(
-                    value.id ||
-                    value.key ||
-                    value.name,
-                    "unknown"
-                );
+                const id =
+                    this.safeString(
+                        value.id ||
+                        value.key ||
+                        value.name,
+                        "unknown"
+                    );
 
 
-            const name =
-                this.safeString(
-                    value.name ||
-                    value.label ||
+                const name =
+                    this.safeString(
+                        value.name ||
+                        value.label ||
+                        id,
+                        id
+                    );
+
+
+                return {
+
                     id,
-                    id
-                );
+
+                    name
+                };
+            }
 
 
-            return {
-
-                id,
-
-                name
-            };
+            return null;
         }
 
 
-        return null;
+        return TreatmentDecisionRegion
+            .normalizeRegion(
+                value,
+                {
+
+                    safeString:
+                        this.safeString.bind(
+                            this
+                        ),
+
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        )
+                }
+            );
     }
 
 

@@ -1543,4 +1543,3 @@ calculateAnalysisConfidence(
 // ==========================================
 
 window.VocalAnalyzer = VocalAnalyzer;
-    VocalAnalyzer;
