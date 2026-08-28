@@ -690,44 +690,99 @@ class TreatmentDecisionPipeline {
     // ======================================
     // EXTRAIR CONFIANÇA
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionConfidence.
+    //
+    // ======================================
 
     extractConfidence(
         record
     ) {
 
         if (
-            !this.isObject(
-                record
-            )
+            typeof TreatmentDecisionConfidence !==
+            "function"
         ) {
 
-            return "indeterminate";
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        const value =
-            record.confidence ||
-            record.decisionConfidence ||
-            decision.confidence ||
-            record.evidenceConfidence ||
-            null;
-
-
-        if (
-            typeof value ===
-            "number"
-        ) {
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
 
             if (
-                value >= 0.8
+                !this.isObject(
+                    record
+                )
+            ) {
+
+                return "indeterminate";
+            }
+
+
+            const decision =
+                this.isObject(
+                    record.decision
+                )
+                    ? record.decision
+                    : {};
+
+
+            const value =
+                record.confidence ||
+                record.decisionConfidence ||
+                decision.confidence ||
+                record.evidenceConfidence ||
+                null;
+
+
+            if (
+                typeof value ===
+                "number"
+            ) {
+
+                if (
+                    value >= 0.8
+                ) {
+
+                    return "strong";
+                }
+
+
+                if (
+                    value >= 0.5
+                ) {
+
+                    return "moderate";
+                }
+
+
+                if (
+                    value > 0
+                ) {
+
+                    return "weak";
+                }
+
+
+                return "indeterminate";
+            }
+
+
+            const text =
+                this.safeString(
+                    value,
+                    "indeterminate"
+                )
+                    .toLowerCase();
+
+
+            if (
+                text === "strong" ||
+                text === "forte"
             ) {
 
                 return "strong";
@@ -735,7 +790,8 @@ class TreatmentDecisionPipeline {
 
 
             if (
-                value >= 0.5
+                text === "moderate" ||
+                text === "moderada"
             ) {
 
                 return "moderate";
@@ -743,7 +799,8 @@ class TreatmentDecisionPipeline {
 
 
             if (
-                value > 0
+                text === "weak" ||
+                text === "fraca"
             ) {
 
                 return "weak";
@@ -754,42 +811,22 @@ class TreatmentDecisionPipeline {
         }
 
 
-        const text =
-            this.safeString(
-                value,
-                "indeterminate"
-            )
-                .toLowerCase();
+        return TreatmentDecisionConfidence
+            .extractConfidence(
+                record,
+                {
 
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
 
-        if (
-            text === "strong" ||
-            text === "forte"
-        ) {
-
-            return "strong";
-        }
-
-
-        if (
-            text === "moderate" ||
-            text === "moderada"
-        ) {
-
-            return "moderate";
-        }
-
-
-        if (
-            text === "weak" ||
-            text === "fraca"
-        ) {
-
-            return "weak";
-        }
-
-
-        return "indeterminate";
+                    safeString:
+                        this.safeString.bind(
+                            this
+                        )
+                }
+            );
     }
 
 
