@@ -613,40 +613,77 @@ class TreatmentDecisionPipeline {
     // ======================================
     // EXTRAIR TIPO DE TRATAMENTO
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionRecordExtractor.
+    //
+    // ======================================
 
     extractTreatmentType(
         record
     ) {
 
         if (
-            !this.isObject(
-                record
-            )
+            typeof TreatmentDecisionRecordExtractor !==
+            "function"
         ) {
 
-            return "none";
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
+
+            if (
+                !this.isObject(
+                    record
+                )
+            ) {
+
+                return "none";
+            }
+
+
+            const decision =
+                this.isObject(
+                    record.decision
+                )
+                    ? record.decision
+                    : {};
+
+
+            return this.safeString(
+                record.treatmentType ||
+                record.treatment ||
+                record.actionType ||
+                decision.treatmentType ||
+                decision.treatment ||
+                decision.type ||
+                decision.actionType ||
+                "none",
+                "none"
+            );
         }
 
 
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
+        return TreatmentDecisionRecordExtractor
+            .extractTreatmentType(
+                record,
+                {
 
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
 
-        return this.safeString(
-            record.treatmentType ||
-            record.treatment ||
-            record.actionType ||
-            decision.treatmentType ||
-            decision.treatment ||
-            decision.type ||
-            decision.actionType ||
-            "none",
-            "none"
-        );
+                    safeString:
+                        this.safeString.bind(
+                            this
+                        )
+                }
+            );
     }
 
 
