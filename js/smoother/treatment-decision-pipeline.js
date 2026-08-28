@@ -1034,70 +1034,107 @@ class TreatmentDecisionPipeline {
     // ======================================
     // IDENTIFICAR PRESERVAÇÃO
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionPreservation.
+    //
+    // ======================================
 
     isPreserveRecord(
         record
     ) {
 
         if (
-            !this.isObject(
-                record
-            )
+            typeof TreatmentDecisionPreservation !==
+            "function"
         ) {
 
-            return true;
-        }
-
-
-        const decision =
-            this.isObject(
-                record.decision
-            )
-                ? record.decision
-                : {};
-
-
-        const actions = [
-
-            record.action,
-
-            record.decisionAction,
-
-            record.recommendation,
-
-            decision.action,
-
-            decision.recommendation
-        ];
-
-
-        for (
-            let i = 0;
-            i < actions.length;
-            i++
-        ) {
-
-            const action =
-                this.safeString(
-                    actions[i],
-                    ""
-                )
-                    .toLowerCase();
-
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
 
             if (
-                action ===
-                    "preserve" ||
-                action ===
-                    "preservar"
+                !this.isObject(
+                    record
+                )
             ) {
 
                 return true;
             }
+
+
+            const decision =
+                this.isObject(
+                    record.decision
+                )
+                    ? record.decision
+                    : {};
+
+
+            const actions = [
+
+                record.action,
+
+                record.decisionAction,
+
+                record.recommendation,
+
+                decision.action,
+
+                decision.recommendation
+            ];
+
+
+            for (
+                let i = 0;
+                i < actions.length;
+                i++
+            ) {
+
+                const action =
+                    this.safeString(
+                        actions[i],
+                        ""
+                    )
+                        .toLowerCase();
+
+
+                if (
+                    action ===
+                        "preserve" ||
+                    action ===
+                        "preservar"
+                ) {
+
+                    return true;
+                }
+            }
+
+
+            return false;
         }
 
 
-        return false;
+        return TreatmentDecisionPreservation
+            .isPreserveRecord(
+                record,
+                {
+
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
+
+                    safeString:
+                        this.safeString.bind(
+                            this
+                        )
+                }
+            );
     }
 
 
