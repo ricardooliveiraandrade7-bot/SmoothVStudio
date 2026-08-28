@@ -3119,71 +3119,106 @@ class TreatmentDecisionPipeline {
                 authority
         };
     }
-        // ======================================
-    // RESUMIR REGISTROS
+    // ======================================
+    // RESUMIR DECISION RECORDS
+    // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionSummary.
+    //
     // ======================================
 
     summarizeRecords(
         result
     ) {
 
-        const records =
-            result &&
-            this.isArray(
-                result.records
-            )
-                ? result.records
-                : [];
-
-
-        let preserved =
-            0;
-
-
-        let decisions =
-            0;
-
-
-        for (
-            let i = 0;
-            i < records.length;
-            i++
+        if (
+            typeof TreatmentDecisionSummary !==
+            "function"
         ) {
 
-            const action =
-                records[i] &&
-                records[i].decision &&
-                records[i].decision.action;
-
+            // Fallback de segurança:
+            // mantém o comportamento original
+            // caso o módulo não esteja disponível.
 
             if (
-                action ===
-                "preserve"
+                !this.isArray(
+                    result
+                )
             ) {
 
-                preserved++;
+                return {
+
+                    total:
+                        0,
+
+                    preserved:
+                        0,
+
+                    decisions:
+                        0
+                };
             }
 
 
-            if (
-                action ===
-                "decision"
-            ) {
+            let preserved =
+                0;
 
-                decisions++;
-            }
+            let decisions =
+                0;
+
+
+            result.forEach(
+                record => {
+
+                    if (
+                        record &&
+                        record.action ===
+                        "preserve"
+                    ) {
+
+                        preserved++;
+                    }
+
+
+                    if (
+                        record &&
+                        record.action ===
+                        "decision"
+                    ) {
+
+                        decisions++;
+                    }
+                }
+            );
+
+
+            return {
+
+                total:
+                    result.length,
+
+                preserved,
+
+                decisions
+            };
         }
 
 
-        return {
+        return TreatmentDecisionSummary
+            .summarizeRecords(
+                result,
+                {
 
-            total:
-                records.length,
-
-            preserved,
-
-            decisions
-        };
+                    isArray:
+                        this.isArray.bind(
+                            this
+                        )
+                }
+            );
     }
 
 
