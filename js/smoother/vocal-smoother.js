@@ -427,58 +427,86 @@ class VocalSmoother {
     // ======================================
     // GERAR PERFIL ESPECTRAL
     // ======================================
-
+    
     createSpectralProfile(
         analysis
     ) {
-
+        
+        if (
+            typeof window !==
+            "undefined" &&
+            typeof window.SmootherSpectralProfile ===
+            "function"
+        ) {
+            
+            const spectralProfileRunner =
+                new window.SmootherSpectralProfile();
+            
+            
+            const profile =
+                spectralProfileRunner.analyze(
+                    this.spectralProfile,
+                    analysis
+                );
+            
+            
+            this.lastSpectralProfile =
+                profile || null;
+            
+            
+            return this.lastSpectralProfile;
+        }
+        
+        
+        // ==================================
+        // FALLBACK DE COMPATIBILIDADE
+        // ==================================
+        //
+        // Se o módulo auxiliar não estiver
+        // disponível, preservamos o comportamento
+        // anterior diretamente neste arquivo.
+        //
+        // ==================================
+        
         if (
             !analysis ||
             !this.spectralProfile ||
             typeof this.spectralProfile.analyze !==
             "function"
         ) {
-
+            
             return null;
         }
-
-
+        
+        
         try {
-
+            
             const profile =
                 this.spectralProfile.analyze(
                     analysis
                 );
-
-
-            /*
-             * O perfil armazenado no VocalSmoother
-             * é exatamente o resultado desta execução.
-             *
-             * Nenhuma transformação adicional é
-             * aplicada aqui.
-             */
-
+            
+            
             this.lastSpectralProfile =
                 profile || null;
-
-
+            
+            
             return this.lastSpectralProfile;
-
+            
         } catch (
             error
         ) {
-
+            
             console.warn(
                 "SpectralProfile indisponível nesta etapa:",
                 error
             );
-
-
+            
+            
             this.lastSpectralProfile =
                 null;
-
-
+            
+            
             return null;
         }
     }
