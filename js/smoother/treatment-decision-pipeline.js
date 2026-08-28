@@ -2647,120 +2647,142 @@ class TreatmentDecisionPipeline {
 
 
     // ======================================
-    // VALIDAR LIMITES BOUNDED
+    // VALIDAR AUTORIDADE BOUNDED
+    // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionAuthorityValidator.
+    //
     // ======================================
 
     validateBoundedAuthority(
         authority
     ) {
 
-        const errors = [];
-
-
         if (
-            !this.isObject(
-                authority
-            )
+            typeof TreatmentDecisionAuthorityValidator !==
+            "function"
         ) {
 
-            errors.push(
-                "Autoridade bounded ausente."
-            );
+            // Fallback de segurança:
+            // mantém a implementação original
+            // caso o módulo não esteja disponível.
+
+            const errors = [];
 
 
-            return {
+            if (
+                !this.isObject(
+                    authority
+                )
+            ) {
 
-                valid:
-                    false,
-
-                errors
-            };
-        }
-
-
-        if (
-            authority.level !==
-            "bounded"
-        ) {
-
-            errors.push(
-                "Nível de autoridade bounded inválido."
-            );
-        }
+                errors.push(
+                    "Autoridade ausente."
+                );
 
 
-        if (
-            authority.processingPermission !==
-            "none"
-        ) {
+                return {
 
-            errors.push(
-                "Autoridade bounded não pode liberar processingPermission nesta etapa."
-            );
-        }
+                    valid:
+                        false,
 
-
-        if (
-            authority.audioProcessing !==
-            false
-        ) {
-
-            errors.push(
-                "Autoridade bounded não pode liberar processamento de áudio nesta etapa."
-            );
-        }
+                    errors
+                };
+            }
 
 
-        if (
-            authority.reconstructionPermission !==
-            "none"
-        ) {
+            if (
+                authority.level !==
+                "bounded"
+            ) {
 
-            errors.push(
-                "Autoridade bounded não pode liberar reconstrução nesta etapa."
-            );
-        }
-
-
-        if (
-            authority.executorPermission !==
-            "none"
-        ) {
-
-            errors.push(
-                "Autoridade bounded não pode liberar executor nesta etapa."
-            );
-        }
+                errors.push(
+                    "Nível de autoridade inválido."
+                );
+            }
 
 
-        const limits =
-            authority.limits;
+            if (
+                authority.processingPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "Autoridade bounded não pode liberar processamento."
+                );
+            }
 
 
-        if (
-            !this.isObject(
-                limits
-            )
-        ) {
+            if (
+                authority.audioProcessing !==
+                false
+            ) {
 
-            errors.push(
-                "Limites bounded ausentes."
-            );
+                errors.push(
+                    "Autoridade bounded não pode liberar processamento de áudio."
+                );
+            }
 
-        } else {
+
+            if (
+                authority.reconstructionPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "Autoridade bounded não pode liberar reconstrução."
+                );
+            }
+
+
+            if (
+                authority.executorPermission !==
+                "none"
+            ) {
+
+                errors.push(
+                    "Autoridade bounded não pode liberar executor."
+                );
+            }
+
+
+            if (
+                !this.isObject(
+                    authority.limits
+                )
+            ) {
+
+                errors.push(
+                    "Autoridade bounded sem limites."
+                );
+
+
+                return {
+
+                    valid:
+                        false,
+
+                    errors
+                };
+            }
+
+
+            const limits =
+                authority.limits;
+
 
             if (
                 !this.isFiniteNumber(
                     limits.maxGainDb
-                ) ||
-                limits.maxGainDb <
-                0 ||
-                limits.maxGainDb >
-                2
+                )
             ) {
 
                 errors.push(
-                    "maxGainDb fora do limite seguro."
+                    "maxGainDb inválido."
                 );
             }
 
@@ -2768,15 +2790,11 @@ class TreatmentDecisionPipeline {
             if (
                 !this.isFiniteNumber(
                     limits.maxCutDb
-                ) ||
-                limits.maxCutDb >
-                0 ||
-                limits.maxCutDb <
-                -2
+                )
             ) {
 
                 errors.push(
-                    "maxCutDb fora do limite seguro."
+                    "maxCutDb inválido."
                 );
             }
 
@@ -2786,13 +2804,11 @@ class TreatmentDecisionPipeline {
                     limits.maxInterventions
                 ) ||
                 limits.maxInterventions <
-                0 ||
-                limits.maxInterventions >
-                1
+                0
             ) {
 
                 errors.push(
-                    "maxInterventions fora do limite seguro."
+                    "maxInterventions inválido."
                 );
             }
 
@@ -2803,7 +2819,7 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "Autoridade bounded deve permanecer regional."
+                    "Autoridade bounded deve ser regional."
                 );
             }
 
@@ -2814,7 +2830,7 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "Processamento global não é permitido."
+                    "Autoridade bounded não pode liberar processamento global."
                 );
             }
 
@@ -2825,7 +2841,7 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "Reconstrução não é permitida."
+                    "Autoridade bounded não pode liberar reconstrução."
                 );
             }
 
@@ -2836,7 +2852,7 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "Saturação não é permitida nesta etapa."
+                    "Autoridade bounded não pode liberar saturação."
                 );
             }
 
@@ -2847,7 +2863,7 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "Expansão dinâmica não é permitida."
+                    "Autoridade bounded não pode liberar expansão dinâmica."
                 );
             }
 
@@ -2858,31 +2874,49 @@ class TreatmentDecisionPipeline {
             ) {
 
                 errors.push(
-                    "De-essing não controlado não é permitido."
+                    "Autoridade bounded não pode liberar de-essing não controlado."
                 );
             }
+
+
+            if (
+                authority.fallback !==
+                "preserve"
+            ) {
+
+                errors.push(
+                    "Fallback da autoridade bounded deve ser preserve."
+                );
+            }
+
+
+            return {
+
+                valid:
+                    errors.length ===
+                    0,
+
+                errors
+            };
         }
 
 
-        if (
-            authority.fallback !==
-            "preserve"
-        ) {
+        return TreatmentDecisionAuthorityValidator
+            .validateBoundedAuthority(
+                authority,
+                {
 
-            errors.push(
-                "Fallback bounded deve ser preserve."
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
+
+                    isFiniteNumber:
+                        this.isFiniteNumber.bind(
+                            this
+                        )
+                }
             );
-        }
-
-
-        return {
-
-            valid:
-                errors.length ===
-                0,
-
-            errors
-        };
     }
 
 
