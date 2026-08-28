@@ -26,6 +26,10 @@
 // - análise de deficiência aparente de bandwidth
 // - estabilidade das bandas
 // - perfil espectral temporal
+// - análise estrutural high-mid orientada por F0
+// - separação de evidência harmônica/inter-harmônica
+// - concentração high-mid 2,2–3,5 kHz
+// - confiança estrutural conservadora
 //
 // IMPORTANTE:
 //
@@ -187,6 +191,68 @@ class VocalAnalyzer {
             null;
     }
 
+        // ==================================
+        // CONFIGURAÇÃO HIGH-MID / HARMÔNICA V0.9
+        // ==================================
+        //
+        // Esta análise NÃO trata o áudio.
+        //
+        // Ela investiga se a energia agressiva
+        // de 2–5 kHz apresenta estrutura:
+        //
+        // - harmonicamente alinhada;
+        // - inter-harmônica;
+        // - ou mista.
+        //
+        // ==================================
+
+        this.highMidLowCut =
+            options.highMidLowCut ??
+            2000;
+
+        this.highMidHighCut =
+            options.highMidHighCut ??
+            5000;
+
+        this.highMidCriticalLowCut =
+            options.highMidCriticalLowCut ??
+            2200;
+
+        this.highMidCriticalHighCut =
+            options.highMidCriticalHighCut ??
+            3500;
+
+        this.highMidMinimumF0 =
+            options.highMidMinimumF0 ??
+            70;
+
+        this.highMidMaximumF0 =
+            options.highMidMaximumF0 ??
+            300;
+
+        this.highMidMinimumF0Confidence =
+            options.highMidMinimumF0Confidence ??
+            0.30;
+
+        this.highMidMinimumActiveRatio =
+            options.highMidMinimumActiveRatio ??
+            0.20;
+
+        this.highMidMinimumFrames =
+            options.highMidMinimumFrames ??
+            4;
+
+        this.highMidMinimumConfidence =
+            options.highMidMinimumConfidence ??
+            0.45;
+
+        this.highMidHarmonicTolerance =
+            options.highMidHarmonicTolerance ??
+            0.18;
+
+        this.highMidInterharmonicOffset =
+            options.highMidInterharmonicOffset ??
+            0.50;
 
     // ======================================
     // LIMITADOR
@@ -747,6 +813,1277 @@ class VocalAnalyzer {
             1
         );
     }
+    
+        // ======================================
+    // ESTIMATIVA CONSERVADORA DE F0 V0.9
+    // ======================================
+    //
+    // Somente para fornecer referência
+    // harmônica ao Analyzer.
+    //
+    // Não substitui pitch tracking dedicado.
+    //
+    // ======================================
+
+    estimateFrameF0(
+        frame,
+        sampleRate
+    ) {
+
+        if (
+            !frame ||
+            frame.length < 32
+        ) {
+
+            return {
+
+                f0: 0,
+
+                confidence: 0
+            };
+        }
+
+
+        const minF0 =
+            this.highMidMinimumF0;
+
+        const maxF0 =
+            Math.min(
+                this.highMidMaximumF0,
+                sampleRate * 0.45
+            );
+
+
+        const minLag =
+            Math.max(
+                2,
+                Math.floor(
+                    sampleRate /
+                    maxF0
+                )
+            );
+
+
+        const maxLag =
+            Math.min(
+                frame.length - 2,
+                Math.floor(
+                    sampleRate /
+                    minF0
+                )
+            );
+
+
+        if (
+            maxLag <= minLag
+        ) {
+
+            return {
+
+                f0: 0,
+
+                confidence: 0
+            };
+        }
+
+
+        let mean = 0;
+
+
+        for (
+            let i = 0;
+            i < frame.length;
+            i++
+        ) {
+
+            mean +=
+                frame[i];
+        }
+
+
+        mean /=
+            frame.length;
+
+
+        let energy = 0;
+
+
+        for (
+            let i = 0;
+            i < frame.length;
+            i++
+        ) {
+
+            const value =
+                frame[i] -
+                mean;
+
+            energy +=
+                value *
+                value;
+        }
+
+
+        if (
+            energy <=
+            0.0000000001
+        ) {
+
+            return {
+
+                f0: 0,
+
+                confidence: 0
+            };
+        }
+
+
+        let bestLag = 0;
+
+        let bestCorrelation = 0;
+
+
+        for (
+            let lag = minLag;
+            lag <= maxLag;
+            lag++
+        ) {
+
+            let correlation = 0;
+
+            let delayedEnergy = 0;
+
+
+            for (
+                let i = 0;
+                i < frame.length - lag;
+                i++
+            ) {
+
+                const current =
+                    frame[i] -
+                    mean;
+
+                const delayed =
+                    frame[i + lag] -
+                    mean;
+
+
+                correlation +=
+                    current *
+                    delayed;
+
+                delayedEnergy +=
+                    delayed *
+                    delayed;
+            }
+
+
+            const denominator =
+                Math.sqrt(
+                    Math.max(
+                        energy *
+                        delayedEnergy,
+                        0.000000000001
+                    )
+                );
+
+
+            const normalized =
+                correlation /
+                denominator;
+
+
+            if (
+                normalized >
+                bestCorrelation
+            ) {
+
+                bestCorrelation =
+                    normalized;
+
+                bestLag =
+                    lag;
+            }
+        }
+
+
+        if (
+            bestLag === 0 ||
+            bestCorrelation < 0.30
+        ) {
+
+            return {
+
+                f0: 0,
+
+                confidence: 0
+            };
+        }
+
+
+        const f0 =
+            sampleRate /
+            bestLag;
+
+
+        const confidence =
+            this.clamp(
+                (
+                    bestCorrelation -
+                    0.30
+                ) /
+                0.55,
+                0,
+                1
+            );
+
+
+        return {
+
+            f0,
+
+            confidence
+        };
+    }
+    
+        // ======================================
+    // ENERGIA GOERTZEL V0.9
+    // ======================================
+    //
+    // Usado somente para medir componentes
+    // espectrais específicos.
+    //
+    // Não altera o áudio.
+    //
+    // ======================================
+
+    calculateGoertzelEnergy(
+        frame,
+        sampleRate,
+        frequency
+    ) {
+
+        if (
+            !frame ||
+            frame.length < 8 ||
+            frequency <= 0 ||
+            frequency >=
+            sampleRate * 0.5
+        ) {
+
+            return 0;
+        }
+
+
+        const omega =
+            (
+                2 *
+                Math.PI *
+                frequency
+            ) /
+            sampleRate;
+
+
+        const coefficient =
+            2 *
+            Math.cos(
+                omega
+            );
+
+
+        let s1 = 0;
+
+        let s2 = 0;
+
+
+        for (
+            let i = 0;
+            i < frame.length;
+            i++
+        ) {
+
+            const s =
+                frame[i] +
+                (
+                    coefficient *
+                    s1
+                ) -
+                s2;
+
+
+            s2 =
+                s1;
+
+            s1 =
+                s;
+        }
+
+
+        const power =
+            Math.max(
+                0,
+                (
+                    s1 *
+                    s1
+                ) +
+                (
+                    s2 *
+                    s2
+                ) -
+                (
+                    coefficient *
+                    s1 *
+                    s2
+                )
+            );
+
+
+        return (
+            power /
+            frame.length
+        );
+    }
+    
+        // ======================================
+    // ENERGIA LOCAL ESPECTRAL V0.9
+    // ======================================
+
+    calculateLocalSpectralEnergy(
+        frame,
+        sampleRate,
+        frequency,
+        halfWidth
+    ) {
+
+        if (
+            frequency <= 0 ||
+            frequency >=
+            sampleRate * 0.5
+        ) {
+
+            return 0;
+        }
+
+
+        const frequencies = [
+
+            frequency -
+            halfWidth,
+
+            frequency,
+
+            frequency +
+            halfWidth
+        ];
+
+
+        let maximum =
+            0;
+
+
+        for (
+            let i = 0;
+            i < frequencies.length;
+            i++
+        ) {
+
+            const testFrequency =
+                frequencies[i];
+
+
+            if (
+                testFrequency <= 0 ||
+                testFrequency >=
+                sampleRate * 0.5
+            ) {
+
+                continue;
+            }
+
+
+            const energy =
+                this.calculateGoertzelEnergy(
+                    frame,
+                    sampleRate,
+                    testFrequency
+                );
+
+
+            if (
+                energy >
+                maximum
+            ) {
+
+                maximum =
+                    energy;
+            }
+        }
+
+
+        return maximum;
+    }
+    
+        // ======================================
+    // ESTRUTURA HIGH-MID V0.9
+    // ======================================
+    //
+    // Mede:
+    //
+    // - F0 estimada;
+    // - energia high-mid;
+    // - concentração em 2,2–3,5 kHz;
+    // - energia próxima aos harmônicos;
+    // - energia entre harmônicos;
+    // - alinhamento harmônico;
+    // - persistência;
+    // - estabilidade;
+    // - confiança.
+    //
+    // Esta análise é SOMENTE EVIDÊNCIA.
+    //
+    // ======================================
+
+    analyzeHighMidStructure(
+        mono,
+        sampleRate,
+        totalRms
+    ) {
+
+        if (
+            !mono ||
+            mono.length === 0 ||
+            totalRms <= 0
+        ) {
+
+            return {
+
+                available: false,
+
+                confidence: 0,
+
+                f0: 0,
+
+                f0Confidence: 0,
+
+                highMidEnergy: 0,
+
+                highMidExcess: 0,
+
+                highMidConcentration: 0,
+
+                harmonicEnergy: 0,
+
+                interharmonicEnergy: 0,
+
+                harmonicAlignment: 0,
+
+                persistence: 0,
+
+                stability: 0,
+
+                activeRatio: 0,
+
+                validF0Frames: 0,
+
+                frameCount: 0,
+
+                classification:
+                    "insufficient-evidence",
+
+                frames: []
+            };
+        }
+
+
+        const windowSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.windowMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const hopSize =
+            Math.max(
+                1,
+                Math.floor(
+                    sampleRate *
+                    (
+                        this.hopMs /
+                        1000
+                    )
+                )
+            );
+
+
+        const frames = [];
+
+
+        let validF0Frames = 0;
+
+        let activeFrames = 0;
+
+        let candidateFrames = 0;
+
+        let harmonicSum = 0;
+
+        let interharmonicSum = 0;
+
+        let alignmentSum = 0;
+
+        let f0Sum = 0;
+
+        let highMidSum = 0;
+
+        let criticalSum = 0;
+
+        let excessSum = 0;
+
+        let stabilitySum = 0;
+
+        let stabilityComparisons = 0;
+
+
+        let previousAlignment = null;
+
+        let previousF0 = null;
+
+
+        const activityThreshold =
+            Math.max(
+                totalRms *
+                0.12,
+                0.00001
+            );
+
+
+        const midReference =
+            this.calculateBandEnergy(
+                mono,
+                sampleRate,
+                1200,
+                2500
+            );
+
+
+        const bodyReference =
+            this.calculateBandEnergy(
+                mono,
+                sampleRate,
+                120,
+                500
+            );
+
+
+        const referenceEnergy =
+            Math.max(
+                (
+                    midReference +
+                    bodyReference
+                ),
+                0.000001
+            );
+
+
+        for (
+            let start = 0;
+            start < mono.length;
+            start += hopSize
+        ) {
+
+            const end =
+                Math.min(
+                    mono.length,
+                    start +
+                    windowSize
+                );
+
+
+            if (
+                end <= start
+            ) {
+
+                break;
+            }
+
+
+            const frame =
+                mono.subarray(
+                    start,
+                    end
+                );
+
+
+            const rms =
+                this.calculateRMS(
+                    frame
+                );
+
+
+            const active =
+                rms >
+                activityThreshold;
+
+
+            if (
+                active
+            ) {
+
+                activeFrames++;
+            }
+
+
+            const highMidEnergy =
+                this.calculateBandEnergy(
+                    frame,
+                    sampleRate,
+                    this.highMidLowCut,
+                    this.highMidHighCut
+                );
+
+
+            const criticalEnergy =
+                this.calculateBandEnergy(
+                    frame,
+                    sampleRate,
+                    this.highMidCriticalLowCut,
+                    this.highMidCriticalHighCut
+                );
+
+
+            const highMidExcess =
+                this.clamp(
+                    (
+                        highMidEnergy /
+                        referenceEnergy
+                    ) /
+                    0.75,
+                    0,
+                    1
+                );
+
+
+            const highMidConcentration =
+                highMidEnergy > 0
+                    ? this.clamp(
+                        criticalEnergy /
+                        highMidEnergy,
+                        0,
+                        1
+                    )
+                    : 0;
+
+
+            let f0 = 0;
+
+            let f0Confidence = 0;
+
+            let harmonicEnergy = 0;
+
+            let interharmonicEnergy = 0;
+
+            let harmonicAlignment = 0;
+
+            let validHarmonicStructure =
+                false;
+
+
+            if (
+                active
+            ) {
+
+                const pitch =
+                    this.estimateFrameF0(
+                        frame,
+                        sampleRate
+                    );
+
+
+                f0 =
+                    pitch.f0;
+
+                f0Confidence =
+                    pitch.confidence;
+
+
+                if (
+                    f0 > 0 &&
+                    f0Confidence >=
+                    this.highMidMinimumF0Confidence
+                ) {
+
+                    validF0Frames++;
+
+                    f0Sum +=
+                        f0;
+
+
+                    const minimumHarmonic =
+                        Math.ceil(
+                            this.highMidLowCut /
+                            f0
+                        );
+
+
+                    const maximumHarmonic =
+                        Math.floor(
+                            Math.min(
+                                this.highMidHighCut,
+                                sampleRate * 0.49
+                            ) /
+                            f0
+                        );
+
+
+                    const tolerance =
+                        Math.min(
+                            f0 *
+                            this.highMidHarmonicTolerance,
+                            80
+                        );
+
+
+                    let harmonicCount = 0;
+
+                    let interharmonicCount = 0;
+
+
+                    for (
+                        let harmonic =
+                            minimumHarmonic;
+
+                        harmonic <=
+                        maximumHarmonic;
+
+                        harmonic++
+                    ) {
+
+                        const harmonicFrequency =
+                            harmonic *
+                            f0;
+
+
+                        if (
+                            harmonicFrequency <=
+                            this.highMidLowCut ||
+                            harmonicFrequency >=
+                            this.highMidHighCut
+                        ) {
+
+                            continue;
+                        }
+
+
+                        const harmonicComponent =
+                            this.calculateLocalSpectralEnergy(
+                                frame,
+                                sampleRate,
+                                harmonicFrequency,
+                                tolerance
+                            );
+
+
+                        harmonicEnergy +=
+                            harmonicComponent;
+
+                        harmonicCount++;
+
+
+                        const nextFrequency =
+                            (
+                                harmonic +
+                                this.highMidInterharmonicOffset
+                            ) *
+                            f0;
+
+
+                        if (
+                            nextFrequency >
+                            this.highMidLowCut &&
+                            nextFrequency <
+                            this.highMidHighCut
+                        ) {
+
+                            const interComponent =
+                                this.calculateLocalSpectralEnergy(
+                                    frame,
+                                    sampleRate,
+                                    nextFrequency,
+                                    tolerance
+                                );
+
+
+                            interharmonicEnergy +=
+                                interComponent;
+
+                            interharmonicCount++;
+                        }
+                    }
+
+
+                    if (
+                        harmonicCount > 0
+                    ) {
+
+                        harmonicEnergy /=
+                            harmonicCount;
+                    }
+
+
+                    if (
+                        interharmonicCount > 0
+                    ) {
+
+                        interharmonicEnergy /=
+                            interharmonicCount;
+                    }
+
+
+                    const structureTotal =
+                        harmonicEnergy +
+                        interharmonicEnergy +
+                        0.000000001;
+
+
+                    harmonicAlignment =
+                        this.clamp(
+                            harmonicEnergy /
+                            structureTotal,
+                            0,
+                            1
+                        );
+
+
+                    validHarmonicStructure =
+                        harmonicCount >=
+                        2 &&
+                        interharmonicCount >=
+                        1;
+                }
+            }
+
+
+            if (
+                validHarmonicStructure
+            ) {
+
+                candidateFrames++;
+
+                harmonicSum +=
+                    harmonicEnergy;
+
+                interharmonicSum +=
+                    interharmonicEnergy;
+
+                alignmentSum +=
+                    harmonicAlignment;
+
+
+                if (
+                    previousAlignment !==
+                    null
+                ) {
+
+                    const alignmentDifference =
+                        Math.abs(
+                            harmonicAlignment -
+                            previousAlignment
+                        );
+
+
+                    const f0Difference =
+                        previousF0 > 0
+                            ? this.relativeDistance(
+                                f0,
+                                previousF0
+                            )
+                            : 1;
+
+
+                    const combinedDifference =
+                        this.clamp(
+                            (
+                                alignmentDifference *
+                                0.70
+                            ) +
+                            (
+                                f0Difference *
+                                0.30
+                            ),
+                            0,
+                            1
+                        );
+
+
+                    stabilitySum +=
+                        this.clamp(
+                            1 -
+                            combinedDifference,
+                            0,
+                            1
+                        );
+
+
+                    stabilityComparisons++;
+                }
+
+
+                previousAlignment =
+                    harmonicAlignment;
+
+                previousF0 =
+                    f0;
+            }
+
+
+            highMidSum +=
+                highMidEnergy;
+
+            criticalSum +=
+                criticalEnergy;
+
+            excessSum +=
+                highMidExcess;
+
+
+            frames.push({
+
+                time:
+                    start /
+                    sampleRate,
+
+                rms,
+
+                active,
+
+                f0,
+
+                f0Confidence,
+
+                highMidEnergy,
+
+                highMidExcess,
+
+                highMidConcentration,
+
+                harmonicEnergy,
+
+                interharmonicEnergy,
+
+                harmonicAlignment,
+
+                validHarmonicStructure
+            });
+        }
+
+
+        const frameCount =
+            frames.length;
+
+
+        if (
+            frameCount === 0
+        ) {
+
+            return {
+
+                available: false,
+
+                confidence: 0,
+
+                f0: 0,
+
+                f0Confidence: 0,
+
+                highMidEnergy: 0,
+
+                highMidExcess: 0,
+
+                highMidConcentration: 0,
+
+                harmonicEnergy: 0,
+
+                interharmonicEnergy: 0,
+
+                harmonicAlignment: 0,
+
+                persistence: 0,
+
+                stability: 0,
+
+                activeRatio: 0,
+
+                validF0Frames: 0,
+
+                frameCount: 0,
+
+                classification:
+                    "insufficient-evidence",
+
+                frames
+            };
+        }
+
+
+        const activeRatio =
+            activeFrames /
+            frameCount;
+
+
+        const f0Persistence =
+            activeFrames > 0
+                ? validF0Frames /
+                  activeFrames
+                : 0;
+
+
+        const persistence =
+            validF0Frames > 0
+                ? candidateFrames /
+                  validF0Frames
+                : 0;
+
+
+        const averageF0 =
+            validF0Frames > 0
+                ? f0Sum /
+                  validF0Frames
+                : 0;
+
+
+        const averageHighMid =
+            highMidSum /
+            frameCount;
+
+
+        const averageCritical =
+            criticalSum /
+            frameCount;
+
+
+        const averageHighMidExcess =
+            excessSum /
+            frameCount;
+
+
+        const averageHarmonic =
+            candidateFrames > 0
+                ? harmonicSum /
+                  candidateFrames
+                : 0;
+
+
+        const averageInterharmonic =
+            candidateFrames > 0
+                ? interharmonicSum /
+                  candidateFrames
+                : 0;
+
+
+        const averageAlignment =
+            candidateFrames > 0
+                ? alignmentSum /
+                  candidateFrames
+                : 0;
+
+
+        const stability =
+            stabilityComparisons > 0
+                ? stabilitySum /
+                  stabilityComparisons
+                : 0;
+
+
+        const concentration =
+            averageHighMid > 0
+                ? this.clamp(
+                    averageCritical /
+                    averageHighMid,
+                    0,
+                    1
+                )
+                : 0;
+
+
+        const f0Confidence =
+            frames.reduce(
+                (
+                    sum,
+                    frame
+                ) =>
+                    sum +
+                    frame.f0Confidence,
+                0
+            ) /
+            frameCount;
+
+
+        const spectralEvidence =
+            this.clamp(
+                (
+                    this.clamp(
+                        averageHighMidExcess,
+                        0,
+                        1
+                    ) *
+                    0.25
+                ) +
+                (
+                    concentration *
+                    0.20
+                ) +
+                (
+                    f0Persistence *
+                    0.25
+                ) +
+                (
+                    persistence *
+                    0.15
+                ) +
+                (
+                    stability *
+                    0.15
+                ),
+                0,
+                1
+            );
+
+
+        const confidence =
+            this.clamp(
+                (
+                    f0Confidence *
+                    0.25
+                ) +
+                (
+                    f0Persistence *
+                    0.20
+                ) +
+                (
+                    persistence *
+                    0.20
+                ) +
+                (
+                    stability *
+                    0.15
+                ) +
+                (
+                    this.clamp(
+                        activeRatio *
+                        1.5,
+                        0,
+                        1
+                    ) *
+                    0.10
+                ) +
+                (
+                    spectralEvidence *
+                    0.10
+                ),
+                0,
+                1
+            );
+
+
+        let classification =
+            "insufficient-evidence";
+
+
+        if (
+            validF0Frames >=
+            this.highMidMinimumFrames &&
+            confidence >=
+            this.highMidMinimumConfidence
+        ) {
+
+            if (
+                averageAlignment >=
+                0.65 &&
+                persistence >=
+                0.40
+            ) {
+
+                classification =
+                    "harmonic-dominant";
+
+            } else if (
+                averageAlignment <=
+                0.35 &&
+                persistence >=
+                0.40
+            ) {
+
+                classification =
+                    "inharmonic-dominant";
+
+            } else {
+
+                classification =
+                    "mixed";
+            }
+        }
+
+
+        const available =
+            validF0Frames >=
+            this.highMidMinimumFrames &&
+            activeRatio >=
+            this.highMidMinimumActiveRatio &&
+            confidence >=
+            this.highMidMinimumConfidence;
+
+
+        return {
+
+            available,
+
+            confidence,
+
+            f0:
+                averageF0,
+
+            f0Confidence,
+
+            highMidEnergy:
+                averageHighMid,
+
+            highMidExcess:
+                averageHighMidExcess,
+
+            highMidConcentration:
+                concentration,
+
+            harmonicEnergy:
+                averageHarmonic,
+
+            interharmonicEnergy:
+                averageInterharmonic,
+
+            harmonicAlignment:
+                averageAlignment,
+
+            persistence,
+
+            stability,
+
+            activeRatio,
+
+            validF0Frames,
+
+            frameCount,
+
+            classification,
+
+            frames
+        };
+    }
+    
         // ======================================
     // TIMELINE DE SIBILÂNCIA
     // ======================================
@@ -3336,6 +4673,16 @@ class VocalAnalyzer {
                 rms
             );
 
+        // ==================================
+        // ESTRUTURA HIGH-MID / HARMÔNICA V0.9
+        // ==================================
+        
+        const highMidStructure =
+            this.analyzeHighMidStructure(
+                mono,
+                sampleRate,
+                rms
+            );
 
         const spectralEvidence =
             this.calculateSpectralEvidence(
@@ -3672,7 +5019,7 @@ class VocalAnalyzer {
         this.analysis = {
 
             version:
-                "0.8",
+                "0.9",
 
             sampleRate,
 
@@ -3941,6 +5288,66 @@ class VocalAnalyzer {
                     spectralTimeline.reason
             },
 
+            // ==================================
+            // HIGH-MID STRUCTURE V0.9
+            // ==================================
+            //
+            // Evidência acústica.
+            //
+            // Não autoriza tratamento.
+            //
+            // ==================================
+
+            highMidStructureAnalysis: {
+
+                available:
+                    highMidStructure.available,
+
+                confidence:
+                    highMidStructure.confidence,
+
+                f0:
+                    highMidStructure.f0,
+
+                f0Confidence:
+                    highMidStructure.f0Confidence,
+
+                highMidEnergy:
+                    highMidStructure.highMidEnergy,
+
+                highMidExcess:
+                    highMidStructure.highMidExcess,
+
+                highMidConcentration:
+                    highMidStructure.highMidConcentration,
+
+                harmonicEnergy:
+                    highMidStructure.harmonicEnergy,
+
+                interharmonicEnergy:
+                    highMidStructure.interharmonicEnergy,
+
+                harmonicAlignment:
+                    highMidStructure.harmonicAlignment,
+
+                persistence:
+                    highMidStructure.persistence,
+
+                stability:
+                    highMidStructure.stability,
+
+                activeRatio:
+                    highMidStructure.activeRatio,
+
+                validF0Frames:
+                    highMidStructure.validF0Frames,
+
+                frameCount:
+                    highMidStructure.frameCount,
+
+                classification:
+                    highMidStructure.classification
+            },
 
             // ==================================
             // UPPER CONTENT EVIDENCE
@@ -4135,6 +5542,40 @@ class VocalAnalyzer {
                             .upperToLowerRatio
                     ),
 
+                // ==================================
+                // HIGH-MID / HARMÔNICA V0.9
+                // ==================================
+                
+                highMidStructureConfidence:
+                    highMidStructure.confidence,
+                    
+                    highMidF0:
+                    highMidStructure.f0,
+                    
+                    highMidF0Confidence:
+                    highMidStructure.f0Confidence,
+                    
+                    highMidExcess:
+                    highMidStructure.highMidExcess,
+                    
+                    highMidConcentration:
+                    highMidStructure.highMidConcentration,
+                    
+                    harmonicAlignment:
+                    highMidStructure.harmonicAlignment,
+                    
+                    interharmonicEnergy:
+                    highMidStructure.interharmonicEnergy,
+                    
+                    harmonicEnergy:
+                    highMidStructure.harmonicEnergy,
+                    
+                    highMidStructureClassification:
+                    highMidStructure.classification,
+                    
+                    preserveIfHighMidStructureConfidenceLow:
+                    highMidStructure.confidence <
+                    this.highMidMinimumConfidence,
 
                 // ==================================
                 // PRESERVAÇÃO
