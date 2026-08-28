@@ -513,51 +513,62 @@ class VocalSmoother {
 
 
     // ======================================
-    // CONTEXTO ESPECTRAL
+    // CRIAR CONTEXTO ESPECTRAL
     // ======================================
-
+    
     createSpectralContext(
         spectralProfile,
         spectralDiagnostic = null
     ) {
-
+        
         if (
-            !spectralProfile ||
-            !this.spectralTreatmentBridge
-        ) {
-
-            return null;
-        }
-
-
-        if (
-            typeof this.spectralTreatmentBridge
-                .createPlanningContext !==
+            typeof window !==
+            "undefined" &&
+            typeof window.SmootherSpectralContext ===
             "function"
         ) {
-
+            
+            const spectralContextRunner =
+                new window.SmootherSpectralContext();
+            
+            return spectralContextRunner.create(
+                this.spectralTreatmentBridge,
+                spectralProfile,
+                spectralDiagnostic
+            );
+        }
+        
+        
+        // ==================================
+        // FALLBACK DE COMPATIBILIDADE
+        // ==================================
+        
+        if (
+            !spectralProfile ||
+            !this.spectralTreatmentBridge ||
+            typeof this.spectralTreatmentBridge.createPlanningContext !==
+            "function"
+        ) {
+            
             return null;
         }
-
-
+        
         try {
-
-            return this.spectralTreatmentBridge
-                .createPlanningContext(
-                    spectralProfile,
-                    spectralDiagnostic
-                );
-
+            
+            return this.spectralTreatmentBridge.createPlanningContext(
+                spectralProfile,
+                spectralDiagnostic
+            );
+            
         } catch (
             error
         ) {
-
+            
             console.warn(
-                "SpectralTreatmentBridge indisponível nesta etapa:",
+                "Spectral context indisponível nesta etapa:",
                 error
             );
-
-
+            
             return null;
         }
     }
