@@ -193,19 +193,17 @@ class VocalAnalyzer {
     // ======================================
 
     clamp(
+    value,
+    min,
+    max
+) {
+    
+    return AnalyzerUtils.clamp(
         value,
         min,
         max
-    ) {
-
-        return Math.min(
-            max,
-            Math.max(
-                min,
-                value
-            )
-        );
-    }
+    );
+}
 
 
     // ======================================
@@ -213,21 +211,13 @@ class VocalAnalyzer {
     // ======================================
 
     amplitudeToDb(
+    amplitude
+) {
+    
+    return AnalyzerUtils.amplitudeToDb(
         amplitude
-    ) {
-
-        if (
-            amplitude <= 0
-        ) {
-
-            return -120;
-        }
-
-        return 20 *
-            Math.log10(
-                amplitude
-            );
-    }
+    );
+}
 
 
     // ======================================
@@ -235,38 +225,13 @@ class VocalAnalyzer {
     // ======================================
 
     calculateRMS(
+    data
+) {
+    
+    return AnalyzerUtils.calculateRMS(
         data
-    ) {
-
-        if (
-            !data ||
-            data.length === 0
-        ) {
-
-            return 0;
-        }
-
-        let sum = 0;
-
-        for (
-            let i = 0;
-            i < data.length;
-            i++
-        ) {
-
-            const sample =
-                data[i];
-
-            sum +=
-                sample *
-                sample;
-        }
-
-        return Math.sqrt(
-            sum /
-            data.length
-        );
-    }
+    );
+}
 
 
     // ======================================
@@ -274,62 +239,17 @@ class VocalAnalyzer {
     // ======================================
 
     calculateRMSRange(
+    data,
+    start,
+    end
+) {
+    
+    return AnalyzerUtils.calculateRMSRange(
         data,
         start,
         end
-    ) {
-
-        if (
-            !data ||
-            data.length === 0
-        ) {
-
-            return 0;
-        }
-
-        const safeStart =
-            Math.max(
-                0,
-                Math.floor(start)
-            );
-
-        const safeEnd =
-            Math.min(
-                data.length,
-                Math.floor(end)
-            );
-
-        if (
-            safeEnd <= safeStart
-        ) {
-
-            return 0;
-        }
-
-        let sum = 0;
-
-        for (
-            let i = safeStart;
-            i < safeEnd;
-            i++
-        ) {
-
-            const sample =
-                data[i];
-
-            sum +=
-                sample *
-                sample;
-        }
-
-        return Math.sqrt(
-            sum /
-            (
-                safeEnd -
-                safeStart
-            )
-        );
-    }
+    );
+}
 
 
     // ======================================
@@ -337,32 +257,13 @@ class VocalAnalyzer {
     // ======================================
 
     calculatePeak(
+    data
+) {
+    
+    return AnalyzerUtils.calculatePeak(
         data
-    ) {
-
-        let peak = 0;
-
-        for (
-            let i = 0;
-            i < data.length;
-            i++
-        ) {
-
-            const value =
-                Math.abs(
-                    data[i]
-                );
-
-            if (
-                value > peak
-            ) {
-
-                peak = value;
-            }
-        }
-
-        return peak;
-    }
+    );
+}
 
 
     // ======================================
@@ -630,26 +531,15 @@ class VocalAnalyzer {
     // ======================================
 
     normalizeRatio(
+    value,
+    denominator
+) {
+    
+    return AnalyzerUtils.normalizeRatio(
         value,
         denominator
-    ) {
-
-        if (
-            !Number.isFinite(value) ||
-            !Number.isFinite(denominator) ||
-            denominator <= 0
-        ) {
-
-            return 0;
-        }
-
-        return this.clamp(
-            value /
-            denominator,
-            0,
-            1
-        );
-    }
+    );
+}
 
 
     // ======================================
@@ -657,21 +547,15 @@ class VocalAnalyzer {
     // ======================================
 
     relativeDistance(
+    a,
+    b
+) {
+    
+    return AnalyzerUtils.relativeDistance(
         a,
         b
-    ) {
-
-        const denominator =
-            Math.max(
-                Math.abs(a),
-                Math.abs(b),
-                0.000001
-            );
-
-        return Math.abs(
-            a - b
-        ) / denominator;
-    }
+    );
+}
 
 
     // ======================================
@@ -679,74 +563,13 @@ class VocalAnalyzer {
     // ======================================
 
     calculateValueStability(
+    values
+) {
+    
+    return AnalyzerUtils.calculateValueStability(
         values
-    ) {
-
-        if (
-            !values ||
-            values.length < 2
-        ) {
-
-            return 0;
-        }
-
-        let sumDifference = 0;
-
-        let comparisons = 0;
-
-        for (
-            let i = 1;
-            i < values.length;
-            i++
-        ) {
-
-            const current =
-                Number.isFinite(
-                    values[i]
-                )
-                    ? values[i]
-                    : 0;
-
-            const previous =
-                Number.isFinite(
-                    values[i - 1]
-                )
-                    ? values[i - 1]
-                    : 0;
-
-            const difference =
-                this.relativeDistance(
-                    current,
-                    previous
-                );
-
-            sumDifference +=
-                this.clamp(
-                    difference,
-                    0,
-                    1
-                );
-
-            comparisons++;
-        }
-
-        if (
-            comparisons === 0
-        ) {
-
-            return 0;
-        }
-
-        return this.clamp(
-            1 -
-            (
-                sumDifference /
-                comparisons
-            ),
-            0,
-            1
-        );
-    }
+    );
+}
         // ======================================
     // TIMELINE DE SIBILÂNCIA
     // ======================================
