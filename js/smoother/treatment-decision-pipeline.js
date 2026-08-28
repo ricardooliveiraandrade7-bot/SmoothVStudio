@@ -1852,30 +1852,54 @@ class TreatmentDecisionPipeline {
     // ======================================
     // CRIAR RESULTADO DE ETAPA
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionStage.
+    //
+    // ======================================
 
     createStage(
         name
     ) {
 
-        return {
+        if (
+            typeof TreatmentDecisionStage !==
+            "function"
+        ) {
 
-            name,
+            // Fallback de segurança:
+            // mantém o comportamento original
+            // caso o módulo não esteja disponível.
 
-            executed:
-                false,
+            return {
 
-            valid:
-                false,
+                name,
 
-            available:
-                false,
+                executed:
+                    false,
 
-            errors:
-                [],
+                valid:
+                    false,
 
-            warnings:
-                []
-        };
+                available:
+                    false,
+
+                errors:
+                    [],
+
+                warnings:
+                    []
+            };
+        }
+
+
+        return TreatmentDecisionStage
+            .createStage(
+                name
+            );
     }
 
 
