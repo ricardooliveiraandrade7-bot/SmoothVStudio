@@ -1,7 +1,7 @@
 // ==========================================
 // SMOOTHVSTUDIO
 // VOCAL HARSHNESS
-// V0.1
+// V0.2
 // ==========================================
 //
 // Tratamento DSP adaptativo de harshness vocal.
@@ -13,23 +13,27 @@
 //
 // - analysis.characteristics.hardness
 // - analysis.characteristics.roughness
-// - analysis.characteristics.sibilance
+//
+// A sibilância é lida apenas para diagnóstico/telemetria,
+// mas NÃO participa mais da evidência de harshness.
 //
 // Objetivos:
 //
 // - controlar agressividade vocal nos high-mids;
 // - preservar presença;
 // - preservar inteligibilidade;
-// - evitar cortes estáticos excessivos;
 // - adaptar a intensidade ao tipo de vocal;
-// - atuar somente quando houver evidência suficiente;
-// - manter o processamento conservador.
+// - permitir atuação perceptível quando houver
+//   dureza/aspereza real;
+// - evitar dependência excessiva da confiança;
+// - manter processamento serial;
+// - preparar o módulo para futura recuperação harmônica.
 //
-// Região inicial:
+// Região:
 //
 // 2.5 kHz → 5.0 kHz
 //
-// O módulo utiliza processamento espectral serial:
+// Arquitetura:
 //
 // sinal original
 //      ↓
@@ -37,8 +41,7 @@
 //      ↓
 // sinal processado
 //
-// Dessa maneira não existe soma/subtração de duas
-// bandas filtradas paralelas.
+// Não existe soma/subtração de bandas paralelas.
 //
 // ==========================================
 
@@ -52,7 +55,7 @@ class VocalHarshness {
 
 
         this.version =
-            "0.1";
+            "0.2";
 
 
         // ==================================
@@ -91,10 +94,14 @@ class VocalHarshness {
         // REDUÇÃO
         // ==================================
         //
-        // Limite deliberadamente conservador.
+        // A versão anterior era limitada a 2 dB.
         //
-        // O módulo não busca remover toda a
-        // agressividade em uma única passagem.
+        // Nesta versão permitimos tratamento
+        // perceptivelmente mais efetivo.
+        //
+        // O limite continua finito para impedir
+        // que o módulo remova agressividade de
+        // forma destrutiva.
         //
         // ==================================
 
@@ -103,7 +110,7 @@ class VocalHarshness {
                 options.maxReductionDb
             )
                 ? options.maxReductionDb
-                : 2.0;
+                : 4.0;
 
 
         // ==================================
@@ -143,17 +150,11 @@ class VocalHarshness {
                 options.maxRatio
             )
                 ? options.maxRatio
-                : 2.0;
+                : 2.5;
 
 
         // ==================================
         // ATAQUE / RELEASE
-        // ==================================
-        //
-        // Valores deliberadamente naturais.
-        //
-        // Mantidos no contrato do módulo.
-        //
         // ==================================
 
         this.attack =
@@ -199,13 +200,22 @@ class VocalHarshness {
         // ==================================
         // PESOS ADAPTATIVOS
         // ==================================
+        //
+        // Hardness é a evidência principal.
+        //
+        // Roughness complementa a percepção de
+        // aspereza/agressividade.
+        //
+        // Sibilance NÃO participa da evidência.
+        //
+        // ==================================
 
         this.hardnessWeight =
             Number.isFinite(
                 options.hardnessWeight
             )
                 ? options.hardnessWeight
-                : 0.70;
+                : 0.65;
 
 
         this.roughnessWeight =
@@ -213,23 +223,18 @@ class VocalHarshness {
                 options.roughnessWeight
             )
                 ? options.roughnessWeight
-                : 0.25;
-
-
-        this.sibilanceWeight =
-            Number.isFinite(
-                options.sibilanceWeight
-            )
-                ? options.sibilanceWeight
-                : 0.05;
+                : 0.35;
 
 
         // ==================================
         // LIMIAR DE ATIVAÇÃO
         // ==================================
         //
-        // Abaixo desse ponto o módulo fica
-        // essencialmente transparente.
+        // Reduzido de 0.25 para 0.15.
+        //
+        // O objetivo é impedir que uma evidência
+        // perceptivelmente relevante seja anulada
+        // apenas por um limiar excessivamente alto.
         //
         // ==================================
 
@@ -238,20 +243,11 @@ class VocalHarshness {
                 options.activationThreshold
             )
                 ? options.activationThreshold
-                : 0.25;
+                : 0.15;
 
 
         // ==================================
-        // INTENSIDADE DA CORREÇÃO
-        // ==================================
-        //
-        // Mantido como parâmetro compatível
-        // com a versão anterior.
-        //
-        // Nesta versão a intensidade efetiva
-        // é aplicada através de um filtro
-        // peaking serial.
-        //
+        // INTENSIDADE
         // ==================================
 
         this.maxBlend =
@@ -259,21 +255,11 @@ class VocalHarshness {
                 options.maxBlend
             )
                 ? options.maxBlend
-                : 0.65;
+                : 0.75;
 
 
         // ==================================
         // Q ADAPTATIVO
-        // ==================================
-        //
-        // Mantém o Q base próximo do valor
-        // anterior.
-        //
-        // Com evidência forte, a banda fica
-        // ligeiramente mais seletiva para
-        // reduzir a possibilidade de remover
-        // presença adjacente.
-        //
         // ==================================
 
         this.minBandQ =
@@ -289,7 +275,31 @@ class VocalHarshness {
                 options.maxBandQ
             )
                 ? options.maxBandQ
-                : 1.30;
+                : 1.35;
+
+
+        // ==================================
+        // PISO DE CONFIANÇA
+        // ==================================
+        //
+        // A confiança NÃO funciona como gate.
+        //
+        // Mesmo quando o Analyzer apresenta
+        // confiança baixa, uma medida de
+        // hardness/roughness ainda pode produzir
+        // atuação.
+        //
+        // O piso impede que uma confiança baixa
+        // reduza a evidência para zero.
+        //
+        // ==================================
+
+        this.minimumConfidenceInfluence =
+            Number.isFinite(
+                options.minimumConfidenceInfluence
+            )
+                ? options.minimumConfidenceInfluence
+                : 0.65;
 
 
         // ==================================
@@ -381,16 +391,6 @@ class VocalHarshness {
     // ======================================
     // NORMALIZAR INDICADOR
     // ======================================
-    //
-    // Aceita indicadores em:
-    //
-    // 0 → 1
-    //
-    // ou
-    //
-    // 0 → 100
-    //
-    // ======================================
 
     normalizeIndicator(
         value
@@ -424,21 +424,129 @@ class VocalHarshness {
 
 
     // ======================================
-    // CURVA DE ATIVIDADE
+    // LER CONFIANÇA
     // ======================================
     //
-    // Suaviza a transição próxima ao limiar
-    // de ativação.
+    // A função aceita diferentes nomes para
+    // permanecer compatível com possíveis
+    // formatos já existentes no Analyzer.
     //
-    // A resposta continua:
+    // Se nenhuma confiança específica existir,
+    // retornamos 1.
     //
-    // baixa evidência → baixa atuação
-    // evidência moderada → atuação progressiva
-    // evidência forte → aproximação do máximo
+    // Isso significa:
+    //
+    // ausência de confiança explícita
+    // ≠ ausência de evidência.
     //
     // ======================================
 
-   shapeActivity(
+    readCharacteristicConfidence(
+        analysis,
+        names
+    ) {
+
+        const confidenceSource =
+            analysis &&
+            analysis.characteristicConfidence
+                ? analysis.characteristicConfidence
+                : (
+                    analysis &&
+                    analysis.characteristics &&
+                    analysis.characteristics.confidence
+                        ? analysis.characteristics.confidence
+                        : null
+                );
+
+
+        if (
+            !confidenceSource
+        ) {
+
+            return 1;
+        }
+
+
+        for (
+            const name of names
+        ) {
+
+            const value =
+                confidenceSource[name];
+
+
+            if (
+                Number.isFinite(
+                    value
+                )
+            ) {
+
+                return this.normalizeIndicator(
+                    value
+                );
+            }
+        }
+
+
+        return 1;
+    }
+
+
+    // ======================================
+    // INFLUÊNCIA DA CONFIANÇA
+    // ======================================
+    //
+    // A confiança apenas modula a evidência.
+    //
+    // Ela não funciona como autorização binária.
+    //
+    // Fórmula:
+    //
+    // piso + (1 - piso) × confiança
+    //
+    // Com piso 0.65:
+    //
+    // confiança 1.00 → 1.00
+    // confiança 0.50 → 0.825
+    // confiança 0.00 → 0.65
+    //
+    // ======================================
+
+    calculateConfidenceInfluence(
+        confidence
+    ) {
+
+        const normalized =
+            this.normalizeIndicator(
+                confidence
+            );
+
+
+        return this.clamp(
+
+            this.minimumConfidenceInfluence
+            +
+            (
+                1 -
+                this.minimumConfidenceInfluence
+            )
+            *
+            normalized,
+
+            this.minimumConfidenceInfluence,
+
+            1
+        );
+    }
+        // ======================================
+    // CURVA DE ATIVIDADE
+    // ======================================
+    //
+    // Curva suavizada para evitar degrau brusco.
+    //
+    // ======================================
+
+    shapeActivity(
         value
     ) {
 
@@ -468,7 +576,57 @@ class VocalHarshness {
 
 
     // ======================================
+    // CURVA DE ATUAÇÃO
+    // ======================================
+    //
+    // Diferente da versão anterior, esta curva
+    // não começa extremamente lenta.
+    //
+    // Isso permite que evidências moderadas
+    // tenham consequência audível.
+    //
+    // ======================================
+
+    shapeTreatment(
+        value
+    ) {
+
+        const normalized =
+            this.clamp(
+                this.number(
+                    value,
+                    0
+                ),
+                0,
+                1
+            );
+
+
+        return (
+            0.35 *
+            normalized
+        )
+        +
+        (
+            0.65 *
+            this.shapeActivity(
+                normalized
+            )
+        );
+    }
+
+
+    // ======================================
     // CALCULAR EVIDÊNCIA
+    // ======================================
+    //
+    // PRINCÍPIO:
+    //
+    // Hardness = evidência primária
+    // Roughness = evidência complementar
+    //
+    // Sibilance não participa da decisão.
+    //
     // ======================================
 
     calculateEvidence(
@@ -504,6 +662,15 @@ class VocalHarshness {
             );
 
 
+        // ----------------------------------
+        // SIBILANCE
+        // ----------------------------------
+        //
+        // Continua disponível para diagnóstico,
+        // mas não influencia a decisão de Harshness.
+        //
+        // ----------------------------------
+
         const sibilance =
             this.normalizeIndicator(
                 this.readCharacteristic(
@@ -515,16 +682,66 @@ class VocalHarshness {
             );
 
 
+        // ----------------------------------
+        // CONFIANÇAS
+        // ----------------------------------
+
+        const hardnessConfidence =
+            this.readCharacteristicConfidence(
+                analysis,
+                [
+                    "hardness",
+                    "hardnessConfidence"
+                ]
+            );
+
+
+        const roughnessConfidence =
+            this.readCharacteristicConfidence(
+                analysis,
+                [
+                    "roughness",
+                    "roughnessConfidence"
+                ]
+            );
+
+
+        // ----------------------------------
+        // INFLUÊNCIA DA CONFIANÇA
+        // ----------------------------------
+
+        const hardnessInfluence =
+            this.calculateConfidenceInfluence(
+                hardnessConfidence
+            );
+
+
+        const roughnessInfluence =
+            this.calculateConfidenceInfluence(
+                roughnessConfidence
+            );
+
+
+        // ----------------------------------
+        // EVIDÊNCIA PONDERADA
+        // ----------------------------------
+
+        const weightedHardness =
+            hardness *
+            this.hardnessWeight *
+            hardnessInfluence;
+
+
+        const weightedRoughness =
+            roughness *
+            this.roughnessWeight *
+            roughnessInfluence;
+
+
         const evidence =
             this.clamp(
-                hardness *
-                    this.hardnessWeight
-                +
-                roughness *
-                    this.roughnessWeight
-                +
-                sibilance *
-                    this.sibilanceWeight,
+                weightedHardness +
+                weightedRoughness,
                 0,
                 1
             );
@@ -538,6 +755,18 @@ class VocalHarshness {
 
             sibilance,
 
+            hardnessConfidence,
+
+            roughnessConfidence,
+
+            hardnessInfluence,
+
+            roughnessInfluence,
+
+            weightedHardness,
+
+            weightedRoughness,
+
             evidence
         };
     }
@@ -547,10 +776,14 @@ class VocalHarshness {
     // CALCULAR FREQUÊNCIA
     // ======================================
     //
-    // O centro permanece dentro da região
-    // de harshness.
+    // Hardness tende a deslocar a região
+    // de atuação para cima.
     //
-    // A adaptação é deliberadamente limitada.
+    // Roughness tende a manter a atuação
+    // mais centrada.
+    //
+    // A adaptação permanece limitada aos
+    // limites do módulo.
     //
     // ======================================
 
@@ -647,6 +880,10 @@ class VocalHarshness {
             evidenceData.evidence;
 
 
+        // ----------------------------------
+        // ATIVAÇÃO
+        // ----------------------------------
+
         const rawActivity =
             this.clamp(
                 (
@@ -663,11 +900,19 @@ class VocalHarshness {
             );
 
 
+        // ----------------------------------
+        // ATIVIDADE
+        // ----------------------------------
+
         const activity =
-            this.shapeActivity(
+            this.shapeTreatment(
                 rawActivity
             );
 
+
+        // ----------------------------------
+        // REDUÇÃO
+        // ----------------------------------
 
         const reductionDb =
             this.clamp(
@@ -678,6 +923,10 @@ class VocalHarshness {
             );
 
 
+        // ----------------------------------
+        // RATIO
+        // ----------------------------------
+
         const ratio =
             this.minRatio +
             (
@@ -686,6 +935,10 @@ class VocalHarshness {
             ) *
             activity;
 
+
+        // ----------------------------------
+        // THRESHOLD
+        // ----------------------------------
 
         const threshold =
             this.maxThresholdDb -
@@ -696,6 +949,10 @@ class VocalHarshness {
             activity;
 
 
+        // ----------------------------------
+        // FREQUÊNCIA
+        // ----------------------------------
+
         const frequency =
             this.calculateFrequency(
                 evidenceData,
@@ -703,11 +960,19 @@ class VocalHarshness {
             );
 
 
+        // ----------------------------------
+        // Q
+        // ----------------------------------
+
         const bandQ =
             this.calculateBandQ(
                 activity
             );
 
+
+        // ----------------------------------
+        // BLEND
+        // ----------------------------------
 
         const blend =
             this.clamp(
@@ -760,6 +1025,18 @@ class VocalHarshness {
             sibilance:
                 evidenceData.sibilance,
 
+            hardnessConfidence:
+                evidenceData.hardnessConfidence,
+
+            roughnessConfidence:
+                evidenceData.roughnessConfidence,
+
+            hardnessInfluence:
+                evidenceData.hardnessInfluence,
+
+            roughnessInfluence:
+                evidenceData.roughnessInfluence,
+
             active:
                 blend > 0.01,
 
@@ -776,9 +1053,7 @@ class VocalHarshness {
                 "none"
         };
     }
-
-
-    // ======================================
+        // ======================================
     // CRIAR PROCESSADOR
     // ======================================
 
@@ -827,9 +1102,9 @@ class VocalHarshness {
         // CAMINHO DIRETO
         // ==================================
         //
-        // O sinal passa por um único caminho.
+        // O sinal permanece em um único caminho.
         //
-        // Não existe mais:
+        // Não existe:
         //
         // originalBand
         // +
@@ -839,42 +1114,38 @@ class VocalHarshness {
         //
         // ==================================
 
+
         // ==================================
-        // SE NÃO HOUVER EVIDÊNCIA
+        // SEM ATUAÇÃO
         // ==================================
         //
-        // O módulo permanece transparente.
+        // Quando não existe evidência suficiente,
+        // o módulo permanece transparente.
         //
         // ==================================
-        
+
         if (
             !settings.active
         ) {
-            
+
             input.connect(
                 output
             );
-            
+
+
             return {
-                
+
                 input,
-                
+
                 output,
-                
+
                 settings
             };
         }
 
+
         // ==================================
         // FILTRO PEAKING
-        // ==================================
-        //
-        // O tratamento é aplicado diretamente
-        // em série no sinal.
-        //
-        // Isso evita a soma/subtração de duas
-        // bandas filtradas paralelas.
-        //
         // ==================================
 
         const harshnessFilter =
@@ -897,12 +1168,10 @@ class VocalHarshness {
         // GANHO ADAPTATIVO
         // ==================================
         //
-        // A redução efetiva vem da evidência
-        // calculada previamente.
+        // A redução agora pode chegar a 4 dB.
         //
-        // O limite continua conservador:
-        //
-        // máximo = 2 dB.
+        // O valor efetivo continua totalmente
+        // subordinado à evidência calculada.
         //
         // ==================================
 
