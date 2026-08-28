@@ -546,30 +546,67 @@ class TreatmentDecisionPipeline {
     // ======================================
     // EXTRAIR REGIÃO DO REGISTRO
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionRegion.
+    //
+    // ======================================
 
     extractRegionFromRecord(
         record
     ) {
 
         if (
-            !this.isObject(
-                record
-            )
+            typeof TreatmentDecisionRegion !==
+            "function"
         ) {
 
-            return null;
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
+
+            if (
+                !this.isObject(
+                    record
+                )
+            ) {
+
+                return null;
+            }
+
+
+            return this.normalizeRegion(
+                record.region ||
+                record.regionResult ||
+                record.regionData ||
+                record.targetRegion ||
+                record.area ||
+                record.frequencyRegion ||
+                null
+            );
         }
 
 
-        return this.normalizeRegion(
-            record.region ||
-            record.regionResult ||
-            record.regionData ||
-            record.targetRegion ||
-            record.area ||
-            record.frequencyRegion ||
-            null
-        );
+        return TreatmentDecisionRegion
+            .extractRegionFromRecord(
+                record,
+                {
+
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
+
+                    normalizeRegion:
+                        this.normalizeRegion.bind(
+                            this
+                        )
+                }
+            );
     }
 
 

@@ -132,6 +132,67 @@ class TreatmentDecisionRegion {
 
         return null;
     }
+    // ======================================
+    // EXTRAIR REGIÃO DO REGISTRO
+    // ======================================
+    
+    static extractRegionFromRecord(
+        record,
+        helpers = {}
+    ) {
+        
+        const isObject =
+            typeof helpers.isObject ===
+            "function" ?
+            helpers.isObject :
+            (
+                input
+            ) => {
+                
+                return !!(
+                    input &&
+                    typeof input ===
+                    "object"
+                );
+            };
+        
+        
+        const normalizeRegion =
+            typeof helpers.normalizeRegion ===
+            "function" ?
+            helpers.normalizeRegion :
+            (
+                value
+            ) => {
+                
+                return TreatmentDecisionRegion
+                    .normalizeRegion(
+                        value,
+                        helpers
+                    );
+            };
+        
+        
+        if (
+            !isObject(
+                record
+            )
+        ) {
+            
+            return null;
+        }
+        
+        
+        return normalizeRegion(
+            record.region ||
+            record.regionResult ||
+            record.regionData ||
+            record.targetRegion ||
+            record.area ||
+            record.frequencyRegion ||
+            null
+        );
+    }
 }
 
 
