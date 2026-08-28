@@ -1480,246 +1480,289 @@ class TreatmentDecisionPipeline {
     // ======================================
     // VALIDAR INTENÇÃO REGIONAL
     // ======================================
+    //
+    // Ponte de compatibilidade.
+    //
+    // Mantém o método público no Pipeline,
+    // mas delega a implementação para o
+    // módulo TreatmentDecisionIntentValidator.
+    //
+    // ======================================
 
     validateRegionalInterventionIntent(
         intent,
         authority
     ) {
 
-        const errors = [];
-
-
         if (
-            !this.isObject(
-                intent
-            )
+            typeof TreatmentDecisionIntentValidator !==
+            "function"
         ) {
 
-            errors.push(
-                "Intenção regional ausente."
-            );
+            // Fallback de segurança:
+            // mantém exatamente o comportamento
+            // original caso o módulo não esteja
+            // disponível.
 
+            const errors = [];
 
-            return {
-
-                valid:
-                    false,
-
-                errors
-            };
-        }
-
-
-        if (
-            intent.state !==
-                "preserve" &&
-            intent.state !==
-                "candidate" &&
-            intent.state !==
-                "blocked"
-        ) {
-
-            errors.push(
-                "Estado da intenção regional inválido."
-            );
-        }
-
-
-        if (
-            intent.executionPermission !==
-            "none"
-        ) {
-
-            errors.push(
-                "Intenção regional não pode autorizar execução."
-            );
-        }
-
-
-        if (
-            intent.processingPermission !==
-            "none"
-        ) {
-
-            errors.push(
-                "Intenção regional não pode liberar processamento."
-            );
-        }
-
-
-        if (
-            intent.audioProcessing !==
-            false
-        ) {
-
-            errors.push(
-                "Intenção regional não pode executar processamento de áudio."
-            );
-        }
-
-
-        if (
-            !this.isObject(
-                intent.decisionAuthority
-            )
-        ) {
-
-            errors.push(
-                "Intenção regional sem autoridade de decisão."
-            );
-
-        } else {
-
-            const authorityValidation =
-                this.validateBoundedAuthority(
-                    intent.decisionAuthority
-                );
-
-
-            if (
-                !authorityValidation.valid
-            ) {
-
-                errors.push(
-                    ...authorityValidation.errors
-                );
-            }
-        }
-
-
-        if (
-            intent.state ===
-            "candidate"
-        ) {
 
             if (
                 !this.isObject(
-                    intent.region
+                    intent
                 )
             ) {
 
                 errors.push(
-                    "Intenção candidata sem região."
+                    "Intenção regional ausente."
+                );
+
+
+                return {
+
+                    valid:
+                        false,
+
+                    errors
+                };
+            }
+
+
+            if (
+                intent.state !==
+                    "preserve" &&
+                intent.state !==
+                    "candidate" &&
+                intent.state !==
+                    "blocked"
+            ) {
+
+                errors.push(
+                    "Estado da intenção regional inválido."
                 );
             }
 
 
             if (
-                intent.treatmentType ===
+                intent.executionPermission !==
                 "none"
             ) {
 
                 errors.push(
-                    "Intenção candidata sem tratamento definido."
+                    "Intenção regional não pode autorizar execução."
                 );
             }
 
 
             if (
-                intent.confidence ===
-                    "weak" ||
-                intent.confidence ===
-                    "indeterminate"
+                intent.processingPermission !==
+                "none"
             ) {
 
                 errors.push(
-                    "Intenção candidata possui confiança insuficiente."
+                    "Intenção regional não pode liberar processamento."
                 );
             }
-        }
-
-
-        if (
-            !this.isFiniteNumber(
-                intent.requestedGainDb
-            )
-        ) {
-
-            errors.push(
-                "requestedGainDb inválido."
-            );
-        }
-
-
-        if (
-            !this.isFiniteNumber(
-                intent.boundedGainDb
-            )
-        ) {
-
-            errors.push(
-                "boundedGainDb inválido."
-            );
-        }
-
-
-        if (
-            authority &&
-            authority.limits
-        ) {
-
-            const min =
-                authority.limits.maxCutDb;
-
-
-            const max =
-                authority.limits.maxGainDb;
 
 
             if (
-                this.isFiniteNumber(
-                    min
-                ) &&
-                this.isFiniteNumber(
-                    max
+                intent.audioProcessing !==
+                false
+            ) {
+
+                errors.push(
+                    "Intenção regional não pode executar processamento de áudio."
+                );
+            }
+
+
+            if (
+                !this.isObject(
+                    intent.decisionAuthority
                 )
             ) {
 
+                errors.push(
+                    "Intenção regional sem autoridade de decisão."
+                );
+
+            } else {
+
+                const authorityValidation =
+                    this.validateBoundedAuthority(
+                        intent.decisionAuthority
+                    );
+
+
                 if (
-                    intent.boundedGainDb <
-                    min ||
-                    intent.boundedGainDb >
-                    max
+                    !authorityValidation.valid
                 ) {
 
                     errors.push(
-                        "boundedGainDb ultrapassa o orçamento de autoridade."
+                        ...authorityValidation.errors
                     );
                 }
             }
 
 
             if (
-                authority.limits.regionalOnly !==
-                true
+                intent.state ===
+                "candidate"
+            ) {
+
+                if (
+                    !this.isObject(
+                        intent.region
+                    )
+                ) {
+
+                    errors.push(
+                        "Intenção candidata sem região."
+                    );
+                }
+
+
+                if (
+                    intent.treatmentType ===
+                    "none"
+                ) {
+
+                    errors.push(
+                        "Intenção candidata sem tratamento definido."
+                    );
+                }
+
+
+                if (
+                    intent.confidence ===
+                        "weak" ||
+                    intent.confidence ===
+                        "indeterminate"
+                ) {
+
+                    errors.push(
+                        "Intenção candidata possui confiança insuficiente."
+                    );
+                }
+            }
+
+
+            if (
+                !this.isFiniteNumber(
+                    intent.requestedGainDb
+                )
             ) {
 
                 errors.push(
-                    "Autoridade regional não está restrita a regiões."
+                    "requestedGainDb inválido."
                 );
             }
+
+
+            if (
+                !this.isFiniteNumber(
+                    intent.boundedGainDb
+                )
+            ) {
+
+                errors.push(
+                    "boundedGainDb inválido."
+                );
+            }
+
+
+            if (
+                authority &&
+                authority.limits
+            ) {
+
+                const min =
+                    authority.limits.maxCutDb;
+
+
+                const max =
+                    authority.limits.maxGainDb;
+
+
+                if (
+                    this.isFiniteNumber(
+                        min
+                    ) &&
+                    this.isFiniteNumber(
+                        max
+                    )
+                ) {
+
+                    if (
+                        intent.boundedGainDb <
+                        min ||
+                        intent.boundedGainDb >
+                        max
+                    ) {
+
+                        errors.push(
+                            "boundedGainDb ultrapassa o orçamento de autoridade."
+                        );
+                    }
+                }
+
+
+                if (
+                    authority.limits.regionalOnly !==
+                    true
+                ) {
+
+                    errors.push(
+                        "Autoridade regional não está restrita a regiões."
+                    );
+                }
+            }
+
+
+            if (
+                intent.fallback !==
+                "preserve"
+            ) {
+
+                errors.push(
+                    "Fallback da intenção regional deve ser preserve."
+                );
+            }
+
+
+            return {
+
+                valid:
+                    errors.length ===
+                    0,
+
+                errors
+            };
         }
 
 
-        if (
-            intent.fallback !==
-            "preserve"
-        ) {
+        return TreatmentDecisionIntentValidator
+            .validateRegionalInterventionIntent(
+                intent,
+                authority,
+                {
 
-            errors.push(
-                "Fallback da intenção regional deve ser preserve."
+                    isObject:
+                        this.isObject.bind(
+                            this
+                        ),
+
+                    isFiniteNumber:
+                        this.isFiniteNumber.bind(
+                            this
+                        ),
+
+                    validateBoundedAuthority:
+                        this.validateBoundedAuthority.bind(
+                            this
+                        )
+                }
             );
-        }
-
-
-        return {
-
-            valid:
-                errors.length ===
-                0,
-
-            errors
-        };
     }
 
 
