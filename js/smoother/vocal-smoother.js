@@ -616,7 +616,7 @@ class VocalSmoother {
     // SNAPSHOT DSP
     // ======================================
 
-    createDspSnapshot() {
+        createDspSnapshot() {
 
         if (
             typeof window !==
@@ -627,6 +627,7 @@ class VocalSmoother {
 
             const snapshot =
                 new window.SmootherDspSnapshot();
+
 
             return snapshot.create({
 
@@ -651,76 +652,7 @@ class VocalSmoother {
         }
 
 
-        // Compatibilidade de segurança:
-        // mantém o comportamento anterior
-        // caso o módulo não esteja disponível.
-
-        const copySettings =
-            settings => {
-
-                if (
-                    !settings ||
-                    typeof settings !==
-                    "object"
-                ) {
-
-                    return null;
-                }
-
-
-                return {
-                    ...settings
-                };
-            };
-
-
-        return {
-
-            version:
-                "1.2",
-
-            body:
-                copySettings(
-                    this.lastBodySettings
-                ),
-
-            tone:
-                copySettings(
-                    this.lastToneSettings
-                ),
-
-            dynamics:
-                copySettings(
-                    this.lastSettings
-                ),
-
-            harshness:
-                copySettings(
-                    this.lastHarshnessSettings
-                ),
-
-            saturation:
-                copySettings(
-                    this.lastSaturationSettings
-                ),
-
-            sibilance:
-                copySettings(
-                    this.lastSibilanceSettings
-                ),
-
-            processingPermission:
-                "none",
-
-            audioProcessing:
-                false,
-
-            reconstructionPermission:
-                "none",
-
-            executorPermission:
-                "none"
-        };
+        return null;
     }
 
 
