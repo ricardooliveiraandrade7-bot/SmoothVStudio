@@ -1,508 +1,304 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!-- PARTE 1/6 --><!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
 
-<head>
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <meta charset="UTF-8">
+<meta
+    name="theme-color"
+    content="#101216"
+>
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+<title>
+    SmoothVStudio
+</title>
 
-    <meta
-        name="theme-color"
-        content="#101216"
-    >
+<link
+    rel="stylesheet"
+    href="style.css"
+>
 
-    <title>
-        SmoothVStudio
-    </title>
+</head><body><main class="app">
 
+    <header class="header">
 
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
+        <h1>
+            SmoothVStudio
+        </h1>
 
-</head>
+        <p>
+            Processamento vocal offline
+        </p>
 
-
-<body>
-
-
-    <main class="app">
-
-
-        <header class="header">
-
-            <h1>
-                SmoothVStudio
-            </h1>
-
-            <p>
-                Vocal Smoother — processamento vocal offline
-            </p>
-
-        </header>
+    </header>
 
 
-        <section class="panel">
+    <section class="panel">
 
-            <h2>
-                Áudio
-            </h2>
+        <h2>
+            Áudio
+        </h2>
+
+        <label
+            class="input-label"
+            for="audioFile"
+        >
+            Selecione seu vocal
+        </label>
+
+        <input
+            id="audioFile"
+            class="audio-input"
+            type="file"
+            accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac"
+        >
+
+        <div
+            id="fileName"
+            class="file-name"
+        >
+            Nenhum arquivo selecionado.
+        </div>
+
+        <audio
+            id="originalPlayer"
+            controls
+            preload="metadata"
+        ></audio>
+
+        <div class="time-display">
+
+            <span id="originalCurrent">
+                00:00
+            </span>
+
+            <span id="originalDuration">
+                00:00
+            </span>
+
+        </div>
+
+    </section>
 
 
-            <label
-                class="input-label"
-                for="audioFile"
-            >
-                Selecione seu vocal
-            </label>
+    <section class="panel smoother-panel">
 
+        <div class="plugin-header">
 
-            <input
-                id="audioFile"
-                class="audio-input"
-                type="file"
-                accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac"
-            >
+            <div>
 
+                <h2>
+                    Vocal Smoother
+                </h2>
 
-            <div
-                id="fileName"
-                class="file-name"
-            >
-                Nenhum arquivo selecionado.
+                <p>
+                    Processamento vocal offline
+                </p>
+
             </div>
 
+        </div>
+
+        <button
+            id="processButton"
+            class="process-button"
+            type="button"
+            disabled
+        >
+            Processar Vocal
+        </button>
+
+        <div
+            id="processingStatus"
+            class="status"
+        >
+            Aguardando áudio.
+        </div>
+
+<!-- PARTE 2/6 -->        <div
+            id="processedSection"
+            class="hidden"
+        >
+
+            <h2>
+                Resultado
+            </h2>
 
             <audio
-                id="originalPlayer"
+                id="processedPlayer"
                 controls
                 preload="metadata"
             ></audio>
 
-
             <div class="time-display">
 
-                <span id="originalCurrent">
+                <span id="processedCurrent">
                     00:00
                 </span>
 
-                <span id="originalDuration">
+                <span id="processedDuration">
                     00:00
                 </span>
 
             </div>
 
-        </section>
+            <div class="comparison">
 
+                <button
+                    id="bypassButton"
+                    type="button"
+                >
+                    Bypass: Original
+                </button>
 
-        <section
-            class="panel smoother-panel"
-        >
-
-
-            <div class="plugin-header">
-
-                <div>
-
-                    <h2>
-                        Vocal Smoother
-                    </h2>
-
-                    <p>
-                        Suavização vocal inteligente
-                    </p>
-
-                </div>
-
-
-                <span class="version">
-                    V0.5
-                </span>
+                <button
+                    id="reprocessButton"
+                    type="button"
+                >
+                    Processar novamente
+                </button>
 
             </div>
-
 
             <button
-                id="processButton"
-                class="process-button"
+                id="downloadButton"
+                class="download-button"
                 type="button"
                 disabled
             >
-                Processar Vocal
+                Salvar WAV 24-bit
             </button>
 
+            <button
+                id="shareButton"
+                class="share-button hidden"
+                type="button"
+            >
+                Compartilhar WAV
+            </button>
 
             <div
-                id="processingStatus"
-                class="status"
-            >
-                Aguardando áudio.
-            </div>
+                id="downloadStatus"
+                class="download-status"
+            ></div>
+
+        </div>
+
+    </section>
 
 
-            <div
-                id="processedSection"
-                class="hidden"
-            >
+    <section class="panel">
 
+        <h2>
+            Motor
+        </h2>
 
-                <h2>
-                    Resultado
-                </h2>
+        <div class="engine-info">
 
+            <div>
 
-                <audio
-                    id="processedPlayer"
-                    controls
-                    preload="metadata"
-                ></audio>
+                <span>
+                    Processamento
+                </span>
 
-
-                <div class="time-display">
-
-                    <span id="processedCurrent">
-                        00:00
-                    </span>
-
-                    <span id="processedDuration">
-                        00:00
-                    </span>
-
-                </div>
-
-
-                <div class="comparison">
-
-
-                    <button
-                        id="bypassButton"
-                        type="button"
-                    >
-                        Bypass: Original
-                    </button>
-
-
-                    <button
-                        id="reprocessButton"
-                        type="button"
-                    >
-                        Processar novamente
-                    </button>
-
-
-                </div>
-
-
-                <button
-                    id="downloadButton"
-                    class="download-button"
-                    type="button"
-                    disabled
-                >
-                    Salvar WAV 24-bit
-                </button>
-
-
-                <button
-                    id="shareButton"
-                    class="share-button hidden"
-                    type="button"
-                >
-                    Compartilhar WAV
-                </button>
-
-
-                <div
-                    id="downloadStatus"
-                    class="download-status"
-                ></div>
-
+                <strong>
+                    Offline
+                </strong>
 
             </div>
 
+            <div>
 
-        </section>
+                <span>
+                    Exportação
+                </span>
 
-
-        <section class="panel">
-
-
-            <h2>
-                Motor
-            </h2>
-
-
-            <div class="engine-info">
-
-
-                <div>
-
-                    <span>
-                        Processamento
-                    </span>
-
-                    <strong>
-                        Offline
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    <span>
-                        Exportação
-                    </span>
-
-                    <strong>
-                        WAV 24-bit
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    <span>
-                        Análise
-                    </span>
-
-                    <strong>
-                        Adaptativa
-                    </strong>
-
-                </div>
-
+                <strong>
+                    WAV 24-bit
+                </strong>
 
             </div>
 
+            <div>
 
-        </section>
+                <span>
+                    Tratamento
+                </span>
 
+                <strong>
+                    Neutro
+                </strong>
 
-    </main>
+            </div>
 
-    <!-- =====================================
-         SMOOTHVSTUDIO
-         MÓDULOS DE ANÁLISE E PLANEJAMENTO
-         ===================================== -->
+        </div>
 
+    </section>
 
-<script src="js/smoother/analyzer/analyzer-utils.js"></script>
+</main>
 
-<script src="js/smoother/analyzer/analyzer-signal.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-sibilance.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-roughness.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-spectral.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-noise.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-spectral-evidence.js"></script>
-
-<script src="js/smoother/analyzer/analyzer-confidence.js"></script>
-
-<script src="js/smoother/vocal-analyzer.js"></script>
-
-    <script
-        src="js/smoother/vocal-treatment-plan.js"
-    ></script>
-
-
-    <script
-        src="js/smoother/spectral-balancer.js"
-    ></script>
-
-
-    <!-- =====================================
-         MEDIÇÃO ESPECTRAL REGIONAL
-         ===================================== -->
-
-
-    <script
-        src="js/smoother/spectral-regional-measurement.js"
-    ></script>
-
-
-    <script
-        src="js/smoother/spectral-regional-runtime.js"
-    ></script>
-
-
-    <!-- =====================================
-         PERFIL E PLANEJAMENTO ESPECTRAL
-         ===================================== -->
-
-
-    <script
-        src="js/smoother/spectral-profile.js"
-    ></script>
+<!-- PARTE 3/6 --><script
+    src="js/audio-engine.js"
+    defer
+></script>
 
 <script
-    src="js/smoother/spectral/smoother-spectral-profile.js"
+    src="js/wav-exporter.js"
+    defer
 ></script>
-
-    <script
-        src="js/smoother/spectral-treatment-bridge.js"
-    ></script>
 
 <script
-    src="js/smoother/spectral/smoother-spectral-context.js"
+    src="js/file-downloader.js"
+    defer
 ></script>
-
-    <script
-        src="js/smoother/spectral-diagnostic-observer.js"
-    ></script>
-    
-    <script
-    src="js/smoother/spectral/smoother-spectral-diagnostic.js"
-></script>
-
-
-    <!-- =====================================
-         CAMADA DE DECISÃO
-         ===================================== -->
-
-
-    <script
-        src="js/smoother/treatment-plan-validator.js"
-    ></script>
-
-
-    <script
-        src="js/smoother/treatment-decision-gate.js"
-    ></script>
-
-
-    <script
-        src="js/smoother/treatment-decision-record.js"
-    ></script>
-
-
-<script src="js/smoother/decision/decision-region.js"></script>
-
-
-<script src="js/smoother/decision/decision-record-extractor.js"></script>
-
-<script src="js/smoother/decision/decision-confidence.js"></script>
-
-<script src="js/smoother/decision/decision-evidence.js"></script>
-
-<script src="js/smoother/decision/decision-gain.js"></script>
-
-<script src="js/smoother/decision/decision-preservation.js"></script>
-
-<script src="js/smoother/decision/decision-intent-validator.js"></script>
-
-<script src="js/smoother/decision/decision-stage.js"></script>
-
-<script src="js/smoother/decision/decision-authority-validator.js"></script>
-
-<script src="js/smoother/decision/decision-summary.js"></script>
-
-    <script
-        src="js/smoother/treatment-decision-pipeline.js"
-    ></script>
 
 <script
-    src="js/smoother/decision/smoother-treatment-decision.js"
+    src="js/export/export-manager.js"
+    defer
 ></script>
 
-    <script
-        src="js/smoother/treatment-execution-validator.js"
-    ></script>
+<script
+    src="js/app.js"
+    defer
+></script>
 
+</body></html><!-- PARTE 4/6 --><!--
+    Os elementos abaixo pertencem exclusivamente
+    à interface básica do SmoothVStudio.
 
-    <script
-        src="js/smoother/treatment-contract-audit.js"
-    ></script>
+    O processamento, a decodificação e a
+    exportação pertencem aos módulos JavaScript.
 
-    <!-- =====================================
-         PROCESSAMENTO VOCAL
-         ===================================== -->
+    Nenhum Analyzer, sistema de decisão,
+    módulo DSP ou inteligência é carregado
+    por este arquivo.
+--><!-- PARTE 5/6 --><!--
+    Ordem dos módulos:
 
+    1. AudioEngine
+       Responsável pelo áudio.
 
-    <script
-        src="js/smoother/vocal-body.js"
-    ></script>
+    2. WavExporter
+       Responsável pela criação do WAV.
 
+    3. FileDownloader
+       Responsável pela entrega/compartilhamento.
 
-    <script
-        src="js/smoother/vocal-dynamics.js"
-    ></script>
+    4. ExportManager
+       Responsável pela coordenação da exportação.
 
+    5. App
+       Responsável pela interface e pelo fluxo
+       entre usuário e módulos.
+--><!-- PARTE 6/6 --><!--
+    Esta estrutura é intencionalmente simples.
 
-    <script
-        src="js/smoother/vocal-sibilance.js"
-    ></script>
+    A futura camada de inteligência/DSP não deve
+    ser adicionada aqui antecipadamente.
 
-
-    <script
-        src="js/smoother/vocal-tone.js"
-    ></script>
-
-
-<script src="js/smoother/vocal-harshness.js"></script>
-
-
-<script src="js/smoother/vocal-saturation.js"></script>
-
-<script src="js/smoother/snapshot/smoother-dsp-snapshot.js"></script>
-
-    <script
-        src="js/smoother/vocal-smoother.js"
-    ></script>
-    
-
-<script src="js/smoother/treatment-dsp-bridge.js"></script>
-
-
-    <!-- =====================================
-         AUDIO ENGINE
-         ===================================== -->
-
-
-    <script
-        src="js/audio-engine.js"
-    ></script>
-
-
-    <!-- =====================================
-         EXPORTAÇÃO
-         ===================================== -->
-
-
-    <script
-        src="js/wav-exporter.js"
-    ></script>
-
-
-    <script
-        src="js/file-downloader.js"
-    ></script>
-
-
-    <script
-        src="js/export/export-manager.js"
-    ></script>
-
-
-    <!-- =====================================
-         APP
-         ===================================== -->
-
-
-    <script
-        src="js/app.js"
-    ></script>
-
-</body>
-
-</html>
+    Quando essa etapa for definida, ela deverá
+    entrar por uma arquitetura própria, sem
+    transformar o index.html novamente em um
+    ponto central de dependências.
+-->
