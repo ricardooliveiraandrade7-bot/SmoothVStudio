@@ -136,6 +136,17 @@ class VocalSmoother {
                     : null
             );
 
+        // ==================================
+        // NOISE
+        // ==================================
+        
+        this.noise =
+            options.noise ||
+            (
+                window.VocalNoiseReducer ?
+                new VocalNoiseReducer() :
+                null
+            );
 
         // ==================================
         // BODY
@@ -1096,6 +1107,90 @@ class VocalSmoother {
             );
 
         // ==================================
+        // 10.5. NOISE
+        // ==================================
+        
+        let noiseInput =
+            null;
+        
+        let noiseOutput =
+            null;
+        
+        let noiseActive =
+            false;
+        
+        
+        if (
+            this.noise &&
+            typeof this.noise.createProcessor ===
+            "function"
+        ) {
+            
+            try {
+                
+                const noiseResult =
+                    this.noise.createProcessor(
+                        context,
+                        analysis.noiseProfile,
+                        audioBuffer
+                    );
+                
+                
+                this.lastNoiseSettings =
+                    noiseResult &&
+                    noiseResult.settings ?
+                    noiseResult.settings :
+                    null;
+                
+                
+                noiseInput =
+                    noiseResult &&
+                    noiseResult.input ?
+                    noiseResult.input :
+                    null;
+                
+                
+                noiseOutput =
+                    noiseResult &&
+                    (
+                        noiseResult.output ||
+                        this.resolveNode(
+                            noiseResult
+                        )
+                    );
+                
+                
+                noiseActive =
+                    Boolean(
+                        noiseInput &&
+                        noiseOutput
+                    );
+                
+            } catch (
+                error
+            ) {
+                
+                console.warn(
+                    "VocalNoiseReducer indisponível nesta execução:",
+                    error
+                );
+                
+                
+                this.lastNoiseSettings =
+                    null;
+                
+                noiseInput =
+                    null;
+                
+                noiseOutput =
+                    null;
+                
+                noiseActive =
+                    false;
+            }
+        }
+
+        // ==================================
         // 11. BODY
         // ==================================
 
@@ -1599,9 +1694,29 @@ class VocalSmoother {
             
         } else {
             
+                    // ==================================
+        // SOURCE → NOISE → BODY
+        // ==================================
+        
+        if (
+            noiseActive
+        ) {
+            
+            source.connect(
+                noiseInput
+            );
+            
+            
+            noiseOutput.connect(
+                bodyInput
+            );
+            
+        } else {
+            
             source.connect(
                 bodyInput
             );
+        }
         }
         
         
