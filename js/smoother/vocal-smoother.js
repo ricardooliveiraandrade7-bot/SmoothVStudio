@@ -470,7 +470,7 @@ class VocalSmoother {
     // CRIAR CONTEXTO ESPECTRAL
     // ======================================
     
-    createSpectralContext(
+        createSpectralContext(
         spectralProfile,
         spectralDiagnostic = null
     ) {
@@ -485,6 +485,7 @@ class VocalSmoother {
             const spectralContextRunner =
                 new window.SmootherSpectralContext();
             
+            
             return spectralContextRunner.create(
                 this.spectralTreatmentBridge,
                 spectralProfile,
@@ -493,38 +494,7 @@ class VocalSmoother {
         }
         
         
-        // ==================================
-        // FALLBACK DE COMPATIBILIDADE
-        // ==================================
-        
-        if (
-            !spectralProfile ||
-            !this.spectralTreatmentBridge ||
-            typeof this.spectralTreatmentBridge.createPlanningContext !==
-            "function"
-        ) {
-            
-            return null;
-        }
-        
-        try {
-            
-            return this.spectralTreatmentBridge.createPlanningContext(
-                spectralProfile,
-                spectralDiagnostic
-            );
-            
-        } catch (
-            error
-        ) {
-            
-            console.warn(
-                "Spectral context indisponível nesta etapa:",
-                error
-            );
-            
-            return null;
-        }
+        return null;
     }
     // ======================================
     // CRIAR DIAGNÓSTICO ESPECTRAL
