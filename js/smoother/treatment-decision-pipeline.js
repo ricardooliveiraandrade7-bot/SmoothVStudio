@@ -444,103 +444,34 @@ class TreatmentDecisionPipeline {
     // ======================================
 
     normalizeRegion(
-        value
+    value
+) {
+
+    if (
+        typeof TreatmentDecisionRegion !==
+        "function"
     ) {
 
-        if (
-            typeof TreatmentDecisionRegion !==
-            "function"
-        ) {
-
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                typeof value ===
-                "string"
-            ) {
-
-                const name =
-                    this.safeString(
-                        value
-                    );
-
-
-                if (
-                    !name
-                ) {
-
-                    return null;
-                }
-
-
-                return {
-
-                    id:
-                        name,
-
-                    name:
-                        name
-                };
-            }
-
-
-            if (
-                this.isObject(
-                    value
-                )
-            ) {
-
-                const id =
-                    this.safeString(
-                        value.id ||
-                        value.key ||
-                        value.name,
-                        "unknown"
-                    );
-
-
-                const name =
-                    this.safeString(
-                        value.name ||
-                        value.label ||
-                        id,
-                        id
-                    );
-
-
-                return {
-
-                    id,
-
-                    name
-                };
-            }
-
-
-            return null;
-        }
-
-
-        return TreatmentDecisionRegion
-            .normalizeRegion(
-                value,
-                {
-
-                    safeString:
-                        this.safeString.bind(
-                            this
-                        ),
-
-                    isObject:
-                        this.isObject.bind(
-                            this
-                        )
-                }
-            );
+        return null;
     }
+
+
+    return TreatmentDecisionRegion
+        .normalizeRegion(
+            value,
+            {
+                safeString:
+                    this.safeString.bind(
+                        this
+                    ),
+
+                isObject:
+                    this.isObject.bind(
+                        this
+                    )
+            }
+        );
+}
 
 
     // ======================================
@@ -556,58 +487,34 @@ class TreatmentDecisionPipeline {
     // ======================================
 
     extractRegionFromRecord(
-        record
+    record
+) {
+
+    if (
+        typeof TreatmentDecisionRegion !==
+        "function"
     ) {
 
-        if (
-            typeof TreatmentDecisionRegion !==
-            "function"
-        ) {
-
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return null;
-            }
-
-
-            return this.normalizeRegion(
-                record.region ||
-                record.regionResult ||
-                record.regionData ||
-                record.targetRegion ||
-                record.area ||
-                record.frequencyRegion ||
-                null
-            );
-        }
-
-
-        return TreatmentDecisionRegion
-            .extractRegionFromRecord(
-                record,
-                {
-
-                    isObject:
-                        this.isObject.bind(
-                            this
-                        ),
-
-                    normalizeRegion:
-                        this.normalizeRegion.bind(
-                            this
-                        )
-                }
-            );
+        return null;
     }
+
+
+    return TreatmentDecisionRegion
+        .extractRegionFromRecord(
+            record,
+            {
+                isObject:
+                    this.isObject.bind(
+                        this
+                    ),
+
+                normalizeRegion:
+                    this.normalizeRegion.bind(
+                        this
+                    )
+            }
+        );
+}
 
 
     // ======================================
