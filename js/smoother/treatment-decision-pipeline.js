@@ -573,7 +573,7 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    extractConfidence(
+        extractConfidence(
         record
     ) {
 
@@ -582,106 +582,7 @@ class TreatmentDecisionPipeline {
             "function"
         ) {
 
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return "indeterminate";
-            }
-
-
-            const decision =
-                this.isObject(
-                    record.decision
-                )
-                    ? record.decision
-                    : {};
-
-
-            const value =
-                record.confidence ||
-                record.decisionConfidence ||
-                decision.confidence ||
-                record.evidenceConfidence ||
-                null;
-
-
-            if (
-                typeof value ===
-                "number"
-            ) {
-
-                if (
-                    value >= 0.8
-                ) {
-
-                    return "strong";
-                }
-
-
-                if (
-                    value >= 0.5
-                ) {
-
-                    return "moderate";
-                }
-
-
-                if (
-                    value > 0
-                ) {
-
-                    return "weak";
-                }
-
-
-                return "indeterminate";
-            }
-
-
-            const text =
-                this.safeString(
-                    value,
-                    "indeterminate"
-                )
-                    .toLowerCase();
-
-
-            if (
-                text === "strong" ||
-                text === "forte"
-            ) {
-
-                return "strong";
-            }
-
-
-            if (
-                text === "moderate" ||
-                text === "moderada"
-            ) {
-
-                return "moderate";
-            }
-
-
-            if (
-                text === "weak" ||
-                text === "fraca"
-            ) {
-
-                return "weak";
-            }
-
-
-            return "indeterminate";
+            return 0;
         }
 
 
@@ -689,14 +590,13 @@ class TreatmentDecisionPipeline {
             .extractConfidence(
                 record,
                 {
-
                     isObject:
                         this.isObject.bind(
                             this
                         ),
 
-                    safeString:
-                        this.safeString.bind(
+                    clamp:
+                        this.clamp.bind(
                             this
                         )
                 }
