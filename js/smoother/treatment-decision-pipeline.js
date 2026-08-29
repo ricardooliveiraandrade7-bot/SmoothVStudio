@@ -702,7 +702,7 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    isPreserveRecord(
+        isPreserveRecord(
         record
     ) {
 
@@ -710,69 +710,6 @@ class TreatmentDecisionPipeline {
             typeof TreatmentDecisionPreservation !==
             "function"
         ) {
-
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return true;
-            }
-
-
-            const decision =
-                this.isObject(
-                    record.decision
-                )
-                    ? record.decision
-                    : {};
-
-
-            const actions = [
-
-                record.action,
-
-                record.decisionAction,
-
-                record.recommendation,
-
-                decision.action,
-
-                decision.recommendation
-            ];
-
-
-            for (
-                let i = 0;
-                i < actions.length;
-                i++
-            ) {
-
-                const action =
-                    this.safeString(
-                        actions[i],
-                        ""
-                    )
-                        .toLowerCase();
-
-
-                if (
-                    action ===
-                        "preserve" ||
-                    action ===
-                        "preservar"
-                ) {
-
-                    return true;
-                }
-            }
-
 
             return false;
         }
@@ -782,7 +719,6 @@ class TreatmentDecisionPipeline {
             .isPreserveRecord(
                 record,
                 {
-
                     isObject:
                         this.isObject.bind(
                             this
