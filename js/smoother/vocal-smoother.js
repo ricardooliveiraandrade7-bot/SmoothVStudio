@@ -514,6 +514,7 @@ class VocalSmoother {
             const spectralDiagnosticRunner =
                 new window.SmootherSpectralDiagnostic();
             
+            
             return spectralDiagnosticRunner.observe(
                 this.spectralDiagnosticObserver,
                 spectralContext,
@@ -522,37 +523,7 @@ class VocalSmoother {
         }
         
         
-        // ==================================
-        // FALLBACK DE COMPATIBILIDADE
-        // ==================================
-        
-        if (
-            !spectralContext ||
-            !this.spectralDiagnosticObserver ||
-            typeof this.spectralDiagnosticObserver.observe !==
-            "function"
-        ) {
-            return null;
-        }
-        
-        try {
-            
-            return this.spectralDiagnosticObserver.observe(
-                spectralContext,
-                this.lastSpectralRegionalMeasurement
-            );
-            
-        } catch (
-            error
-        ) {
-            
-            console.warn(
-                "Spectral diagnostic indisponível nesta etapa:",
-                error
-            );
-            
-            return null;
-        }
+        return null;
     }
 
 
