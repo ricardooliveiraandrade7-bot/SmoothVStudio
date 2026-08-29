@@ -659,7 +659,7 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    extractRequestedGainDb(
+        extractRequestedGainDb(
         record
     ) {
 
@@ -667,66 +667,6 @@ class TreatmentDecisionPipeline {
             typeof TreatmentDecisionGain !==
             "function"
         ) {
-
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return 0;
-            }
-
-
-            const decision =
-                this.isObject(
-                    record.decision
-                )
-                    ? record.decision
-                    : {};
-
-
-            const candidates = [
-
-                record.requestedGainDb,
-
-                record.gainDb,
-
-                record.recommendedGainDb,
-
-                record.amountDb,
-
-                decision.requestedGainDb,
-
-                decision.gainDb,
-
-                decision.recommendedGainDb,
-
-                decision.amountDb
-            ];
-
-
-            for (
-                let i = 0;
-                i < candidates.length;
-                i++
-            ) {
-
-                if (
-                    this.isFiniteNumber(
-                        candidates[i]
-                    )
-                ) {
-
-                    return candidates[i];
-                }
-            }
-
 
             return 0;
         }
@@ -736,14 +676,13 @@ class TreatmentDecisionPipeline {
             .extractRequestedGainDb(
                 record,
                 {
-
                     isObject:
                         this.isObject.bind(
                             this
                         ),
 
-                    isFiniteNumber:
-                        this.isFiniteNumber.bind(
+                    safeString:
+                        this.safeString.bind(
                             this
                         )
                 }
