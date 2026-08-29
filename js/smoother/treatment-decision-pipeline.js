@@ -1223,41 +1223,26 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    createStage(
+        createStage(
         name
     ) {
-
+        
         if (
             typeof TreatmentDecisionStage !==
             "function"
         ) {
-
-            // Fallback de segurança:
-            // mantém o comportamento original
-            // caso o módulo não esteja disponível.
-
+            
             return {
-
                 name,
-
-                executed:
-                    false,
-
-                valid:
-                    false,
-
-                available:
-                    false,
-
-                errors:
-                    [],
-
-                warnings:
-                    []
+                executed: false,
+                valid: false,
+                available: false,
+                errors: [],
+                warnings: []
             };
         }
-
-
+        
+        
         return TreatmentDecisionStage
             .createStage(
                 name
