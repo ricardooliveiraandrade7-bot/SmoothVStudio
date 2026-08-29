@@ -458,57 +458,11 @@ class VocalSmoother {
         }
         
         
-        // ==================================
-        // FALLBACK DE COMPATIBILIDADE
-        // ==================================
-        //
-        // Se o módulo auxiliar não estiver
-        // disponível, preservamos o comportamento
-        // anterior diretamente neste arquivo.
-        //
-        // ==================================
-        
-        if (
-            !analysis ||
-            !this.spectralProfile ||
-            typeof this.spectralProfile.analyze !==
-            "function"
-        ) {
-            
-            return null;
-        }
+        this.lastSpectralProfile =
+            null;
         
         
-        try {
-            
-            const profile =
-                this.spectralProfile.analyze(
-                    analysis
-                );
-            
-            
-            this.lastSpectralProfile =
-                profile || null;
-            
-            
-            return this.lastSpectralProfile;
-            
-        } catch (
-            error
-        ) {
-            
-            console.warn(
-                "SpectralProfile indisponível nesta etapa:",
-                error
-            );
-            
-            
-            this.lastSpectralProfile =
-                null;
-            
-            
-            return null;
-        }
+        return null;
     }
 
 
