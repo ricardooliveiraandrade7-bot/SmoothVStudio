@@ -586,7 +586,7 @@ class VocalSmoother {
     // DECISION PIPELINE
     // ======================================
     
-    createTreatmentDecisionPipeline(
+        createTreatmentDecisionPipeline(
         treatmentPlan
     ) {
         
@@ -600,6 +600,7 @@ class VocalSmoother {
             const treatmentDecisionRunner =
                 new window.SmootherTreatmentDecision();
             
+            
             return treatmentDecisionRunner.evaluate(
                 this.treatmentDecisionPipeline,
                 treatmentPlan
@@ -607,51 +608,7 @@ class VocalSmoother {
         }
         
         
-        // ==================================
-        // FALLBACK DE COMPATIBILIDADE
-        // ==================================
-        
-        if (
-            !this.treatmentDecisionPipeline ||
-            !treatmentPlan
-        ) {
-            
-            return null;
-        }
-        
-        
-        if (
-            typeof this.treatmentDecisionPipeline.evaluate !==
-            "function"
-        ) {
-            
-            console.warn(
-                "TreatmentDecisionPipeline não possui evaluate()."
-            );
-            
-            
-            return null;
-        }
-        
-        
-        try {
-            
-            return this.treatmentDecisionPipeline.evaluate(
-                treatmentPlan
-            );
-            
-        } catch (
-            error
-        ) {
-            
-            console.warn(
-                "TreatmentDecisionPipeline indisponível nesta etapa:",
-                error
-            );
-            
-            
-            return null;
-        }
+        return null;
     }
 
 
