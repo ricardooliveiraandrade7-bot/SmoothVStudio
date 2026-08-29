@@ -529,7 +529,7 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    extractTreatmentType(
+        extractTreatmentType(
         record
     ) {
 
@@ -538,40 +538,7 @@ class TreatmentDecisionPipeline {
             "function"
         ) {
 
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return "none";
-            }
-
-
-            const decision =
-                this.isObject(
-                    record.decision
-                )
-                    ? record.decision
-                    : {};
-
-
-            return this.safeString(
-                record.treatmentType ||
-                record.treatment ||
-                record.actionType ||
-                decision.treatmentType ||
-                decision.treatment ||
-                decision.type ||
-                decision.actionType ||
-                "none",
-                "none"
-            );
+            return "none";
         }
 
 
