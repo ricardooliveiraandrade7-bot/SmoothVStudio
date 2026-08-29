@@ -616,7 +616,7 @@ class TreatmentDecisionPipeline {
     //
     // ======================================
 
-    extractEvidence(
+        extractEvidence(
         record
     ) {
 
@@ -624,59 +624,6 @@ class TreatmentDecisionPipeline {
             typeof TreatmentDecisionEvidence !==
             "function"
         ) {
-
-            // Fallback de segurança:
-            // mantém exatamente o comportamento
-            // original caso o módulo não esteja
-            // disponível.
-
-            if (
-                !this.isObject(
-                    record
-                )
-            ) {
-
-                return [];
-            }
-
-
-            const sources = [
-
-                record.evidence,
-
-                record.evidenceList,
-
-                record.supportingEvidence,
-
-                record.observations,
-
-                record.diagnostics,
-
-                record.measurements,
-
-                record.decision &&
-                record.decision.evidence
-            ];
-
-
-            for (
-                let i = 0;
-                i < sources.length;
-                i++
-            ) {
-
-                if (
-                    this.isArray(
-                        sources[i]
-                    )
-                ) {
-
-                    return [
-                        ...sources[i]
-                    ];
-                }
-            }
-
 
             return [];
         }
@@ -686,14 +633,13 @@ class TreatmentDecisionPipeline {
             .extractEvidence(
                 record,
                 {
-
                     isObject:
                         this.isObject.bind(
                             this
                         ),
 
-                    isArray:
-                        this.isArray.bind(
+                    safeString:
+                        this.safeString.bind(
                             this
                         )
                 }
