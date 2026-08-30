@@ -1,145 +1,16 @@
-// ==========================================
-// SMOOTHVSTUDIO
-// EXPORT MANAGER
-// V0.2
-// ==========================================
-//
-// Camada independente responsável por entregar
-// o WAV gerado pelo SmoothVStudio.
-//
-// O motor de áudio NÃO conhece esta camada.
-//
-// V0.2:
-//
-// - validação reforçada do Blob;
-// - diagnóstico detalhado;
-// - registro das tentativas;
-// - tratamento explícito de cancelamento;
-// - limpeza segura de Object URLs;
-// - fallback controlado;
-// - nenhum processamento DSP.
-//
-// ==========================================
+"use strict";
 
 
 class ExportManager {
 
 
-    // ======================================
-    // DIAGNÓSTICO DO AMBIENTE
-    // ======================================
+    // ======================================================
+    // VALIDAR ENTRADA
+    // ======================================================
 
-    static getEnvironment() {
-
-        return {
-
-            secureContext:
-                window.isSecureContext === true,
-
-            fileSystemAccess:
-                typeof window.showSaveFilePicker ===
-                "function",
-
-            blob:
-                typeof Blob ===
-                "function",
-
-            objectURL:
-                typeof URL !==
-                "undefined" &&
-
-                typeof URL.createObjectURL ===
-                "function",
-
-            revokeObjectURL:
-                typeof URL !==
-                "undefined" &&
-
-                typeof URL.revokeObjectURL ===
-                "function",
-
-            anchorDownload:
-                typeof document !==
-                "undefined",
-
-            androidBridge:
-                typeof window.android !==
-                "undefined",
-
-            navigatorShare:
-                typeof navigator.share ===
-                "function",
-
-            navigatorCanShare:
-                typeof navigator.canShare ===
-                "function"
-        };
-    }
-
-
-    // ======================================
-    // CRIAR DIAGNÓSTICO BASE
-    // ======================================
-
-    static createDiagnostic(
-        fileName,
+    static validateExport(
         blob,
-        environment
-    ) {
-
-        return {
-
-            version:
-                "0.2",
-
-            fileName:
-                fileName || null,
-
-            mimeType:
-                blob && blob.type
-                    ? blob.type
-                    : null,
-
-            size:
-                blob && Number.isFinite(blob.size)
-                    ? blob.size
-                    : 0,
-
-            sizeMB:
-                blob && Number.isFinite(blob.size)
-                    ? Number(
-                        (
-                            blob.size /
-                            1024 /
-                            1024
-                        ).toFixed(2)
-                    )
-                    : 0,
-
-            environment:
-                environment,
-
-            attempts:
-                [],
-
-            finalMethod:
-                null,
-
-            success:
-                false,
-
-            error:
-                null
-        };
-    }
-
-
-    // ======================================
-    // VALIDAR BLOB
-    // ======================================
-
-    static validateBlob(
-        blob
+        fileName
     ) {
 
         if (
@@ -147,7 +18,7 @@ class ExportManager {
         ) {
 
             throw new Error(
-                "Nenhum arquivo foi fornecido para exportação."
+                "Nenhum WAV foi fornecido para exportação."
             );
         }
 
@@ -181,21 +52,96 @@ class ExportManager {
         ) {
 
             throw new Error(
-                "O arquivo possui tamanho zero ou tamanho inválido."
+                "O WAV está vazio ou possui tamanho inválido."
             );
         }
 
 
+        const normalizedName =
+            ExportManager.normalizeFileName(
+                fileName
+            );
+
+
+        return {
+            blob,
+            fileName:
+                normalizedName
+        };
+    }
+
+
+    // ======================================================
+    // NORMALIZAR NOME
+    // ======================================================
+
+    static normalizeFileName(
+        fileName
+    ) {
+
+        const fallback =
+            "smoothvstudio-vocal.wav";
+
+
         if (
-            blob.type &&
-            blob.type !==
-            "audio/wav"
+            typeof fileName !==
+            "string"
         ) {
 
-            console.warn(
-                "SmoothVStudio: MIME inesperado:",
-                blob.type
-            );
+            return fallback;
+        }
+
+
+        const trimmed =
+            fileName.trim();
+
+
+        if (
+            !trimmed
+        ) {
+
+            return fallback;
+        }
+
+
+        if (
+            /\.wav$/i.test(
+                trimmed
+            )
+        ) {
+
+            return trimmed;
+        }
+
+
+        return (
+            trimmed +
+            ".wav"
+        );
+    }
+
+
+    // ======================================================
+    // VERIFICAR DISPONIBILIDADE
+    // ======================================================
+
+    static canExport() {
+
+        if (
+            typeof FileDownloader ===
+            "undefined"
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            typeof FileDownloader.deliver !==
+            "function"
+        ) {
+
+            return false;
         }
 
 
@@ -203,228 +149,116 @@ class ExportManager {
     }
 
 
-    // ======================================
-    // FILE SYSTEM ACCESS
-    // ======================================
+    // ======================================================
+    // CRIAR ARQUIVO
+    // ======================================================
 
-    static async saveWithFileSystem(
+    static createFile(
         blob,
         fileName
     ) {
 
-        if (
-            typeof window.showSaveFilePicker !==
-            "function"
-        ) {
-
-            throw new Error(
-                "showSaveFilePicker não está disponível."
-            );
-        }
-
-
-        const handle =
-            await window.showSaveFilePicker({
-
-                suggestedName:
-                    fileName,
-
-                types: [
-
-                    {
-
-                        description:
-                            "Arquivo WAV",
-
-                        accept: {
-
-                            "audio/wav":
-                                [
-                                    ".wav"
-                                ]
-                        }
-                    }
-                ]
-            });
-
-
-        if (
-            !handle
-        ) {
-
-            throw new Error(
-                "O seletor de arquivo não retornou um destino válido."
-            );
-        }
-
-
-        const writable =
-            await handle.createWritable();
-
-
-        try {
-
-            await writable.write(
-                blob
-            );
-
-
-            await writable.close();
-
-
-        } catch (error) {
-
-            try {
-
-                await writable.abort();
-
-            } catch (_) {}
-
-
-            throw error;
-        }
-
-
-        return {
-
-            success:
-                true,
-
-            method:
-                "file-system-access"
-        };
-    }
-
-
-    // ======================================
-    // DOWNLOAD TRADICIONAL
-    // ======================================
-
-    static async saveWithAnchor(
-        blob,
-        fileName
-    ) {
-
-        if (
-            typeof URL ===
-            "undefined" ||
-
-            typeof URL.createObjectURL !==
-            "function"
-        ) {
-
-            throw new Error(
-                "URL.createObjectURL não está disponível."
-            );
-        }
-
-
-        if (
-            typeof document ===
-            "undefined"
-        ) {
-
-            throw new Error(
-                "Documento HTML indisponível."
-            );
-        }
-
-
-        const url =
-            URL.createObjectURL(
-                blob
-            );
-
-
-        let anchor =
-            null;
-
-
-        try {
-
-            anchor =
-                document.createElement(
-                    "a"
-                );
-
-
-            if (
-                !anchor
-            ) {
-
-                throw new Error(
-                    "Não foi possível criar o elemento de download."
-                );
-            }
-
-
-            anchor.href =
-                url;
-
-
-            anchor.download =
-                fileName;
-
-
-            anchor.setAttribute(
-                "download",
+        const validated =
+            ExportManager.validateExport(
+                blob,
                 fileName
             );
 
 
-            anchor.rel =
-                "noopener";
+        if (
+            typeof File ===
+            "undefined"
+        ) {
+
+            throw new Error(
+                "A API File não está disponível neste ambiente."
+            );
+        }
 
 
-            anchor.style.position =
-                "fixed";
+        return new File(
+            [
+                validated.blob
+            ],
+            validated.fileName,
+            {
+                type:
+                    validated.blob.type ||
+                    "audio/wav"
+            }
+        );
+    }
+        // ======================================================
+    // EXPORTAR WAV
+    // ======================================================
+    //
+    // Recebe o Blob já criado pelo WavExporter.
+    //
+    // O ExportManager não cria o WAV.
+    // Apenas coordena sua entrega.
+    // ======================================================
 
+    static async exportWav(
+        blob,
+        fileName
+    ) {
 
-            anchor.style.left =
-                "-9999px";
-
-
-            anchor.style.top =
-                "-9999px";
-
-
-            anchor.style.width =
-                "1px";
-
-
-            anchor.style.height =
-                "1px";
-
-
-            document.body.appendChild(
-                anchor
+        const validated =
+            ExportManager.validateExport(
+                blob,
+                fileName
             );
 
 
-            /*
-             * O clique precisa acontecer
-             * enquanto ainda estamos dentro
-             * da ação iniciada pelo usuário.
-             */
+        if (
+            !ExportManager.canExport()
+        ) {
 
-            anchor.click();
+            return {
+
+                success:
+                    false,
+
+                method:
+                    "unavailable",
+
+                error:
+                    new Error(
+                        "Módulo de entrega de arquivos não está disponível."
+                    )
+            };
+        }
 
 
-            /*
-             * Damos tempo para o navegador
-             * processar o evento antes de
-             * remover o elemento.
-             */
+        try {
 
-            await new Promise(
-                resolve => {
+            const result =
+                await FileDownloader.deliver(
+                    validated.blob,
+                    validated.fileName,
+                    "download"
+                );
 
-                    setTimeout(
-                        resolve,
-                        300
-                    );
-                }
-            );
+
+            if (
+                !result ||
+                result.success !== true
+            ) {
+
+                return {
+
+                    success:
+                        false,
+
+                    method:
+                        "failed",
+
+                    error:
+                        new Error(
+                            "Não foi possível entregar o WAV."
+                        )
+                };
+            }
 
 
             return {
@@ -433,195 +267,58 @@ class ExportManager {
                     true,
 
                 method:
-                    "anchor-download",
+                    result.action ||
+                    "download",
 
-                note:
-                    "Download solicitado ao navegador."
+                fileName:
+                    validated.fileName,
+
+                size:
+                    validated.blob.size
             };
 
 
-        } finally {
-
-            if (
-                anchor
-            ) {
-
-                try {
-
-                    anchor.remove();
-
-                } catch (_) {}
-            }
-
-
-            /*
-             * Não revogar imediatamente.
-             *
-             * Alguns WebViews precisam
-             * consumir a Blob URL depois
-             * do clique.
-             */
-
-            setTimeout(
-                () => {
-
-                    try {
-
-                        if (
-                            typeof URL !==
-                            "undefined" &&
-
-                            typeof URL.revokeObjectURL ===
-                            "function"
-                        ) {
-
-                            URL.revokeObjectURL(
-                                url
-                            );
-                        }
-
-                    } catch (_) {}
-
-                },
-                15000
-            );
-        }
-    }
-
-
-    // ======================================
-    // NAVEGAÇÃO PARA BLOB
-    // ======================================
-
-    static async saveWithBlobNavigation(
-        blob
-    ) {
-
-        if (
-            typeof URL ===
-            "undefined" ||
-
-            typeof URL.createObjectURL !==
-            "function"
+        } catch (
+            error
         ) {
 
-            throw new Error(
-                "URL.createObjectURL não está disponível."
+            console.error(
+                "SmoothVStudio: erro na exportação do WAV.",
+                error
             );
+
+
+            throw error;
         }
-
-
-        const url =
-            URL.createObjectURL(
-                blob
-            );
-
-
-        /*
-         * Este método pode substituir a
-         * página atual.
-         *
-         * Por isso ele permanece como
-         * último recurso.
-         */
-
-        window.location.href =
-            url;
-
-
-        /*
-         * Não revogar imediatamente.
-         *
-         * A navegação precisa continuar
-         * tendo acesso à URL.
-         */
-
-        return {
-
-            success:
-                true,
-
-            method:
-                "blob-navigation",
-
-            note:
-                "O navegador recebeu uma navegação para o Blob."
-        };
     }
 
 
-    // ======================================
-    // EXPORTAÇÃO PRINCIPAL
-    // ======================================
+    // ======================================================
+    // COMPARTILHAR WAV
+    // ======================================================
+    //
+    // Mantido aqui como ponto de coordenação futura.
+    // A operação real continua no FileDownloader.
+    // ======================================================
 
-    static async exportWav(
+    static async shareWav(
         blob,
         fileName
     ) {
 
-        const environment =
-            this.getEnvironment();
-
-
-        const diagnostic =
-            this.createDiagnostic(
-                fileName,
+        const validated =
+            ExportManager.validateExport(
                 blob,
-                environment
+                fileName
             );
 
 
-        try {
-
-            // ==============================
-            // VALIDAÇÃO
-            // ==============================
-
-            this.validateBlob(
-                blob
-            );
-
-
-            // ==============================
-            // LOG INICIAL
-            // ==============================
-
-            console.log(
-                "SmoothVStudio Export Environment:",
-                environment
-            );
-
-
-            console.log(
-                "SmoothVStudio Export File:",
-                {
-
-                    name:
-                        fileName,
-
-                    type:
-                        blob.type,
-
-                    size:
-                        blob.size,
-
-                    sizeMB:
-                        diagnostic.sizeMB
-                }
-            );
-
-
-        } catch (error) {
-
-            diagnostic.error =
-                error.message;
-
-
-            console.error(
-                "SmoothVStudio: validação da exportação falhou:",
-                error
-            );
-
+        if (
+            typeof FileDownloader ===
+            "undefined" ||
+            typeof FileDownloader.shareFile !==
+            "function"
+        ) {
 
             return {
 
@@ -629,227 +326,224 @@ class ExportManager {
                     false,
 
                 method:
-                    "validation-failed",
+                    "unavailable",
 
                 error:
-                    error,
-
-                diagnostic:
-                    diagnostic
+                    new Error(
+                        "Compartilhamento de arquivos não está disponível."
+                    )
             };
         }
 
 
-        // ==================================
-        // MÉTODO 1
-        // FILE SYSTEM ACCESS
-        // ==================================
+        const file =
+            ExportManager.createFile(
+                validated.blob,
+                validated.fileName
+            );
+
+
+        const shared =
+            await FileDownloader.shareFile(
+                file,
+                validated.fileName
+            );
+
+
+        return {
+
+            success:
+                shared === true,
+
+            method:
+                "share",
+
+            fileName:
+                validated.fileName
+        };
+    }
+        // ======================================================
+    // VALIDAR WAV
+    // ======================================================
+    //
+    // Esta função valida somente a presença do arquivo.
+    //
+    // A validação estrutural do WAV pertence ao WavExporter.
+    // ======================================================
+
+    static validateWav(
+        blob
+    ) {
 
         if (
-            environment.fileSystemAccess &&
-            environment.secureContext
+            typeof WavExporter !==
+            "undefined" &&
+            typeof WavExporter.validateBlob ===
+            "function"
         ) {
 
             try {
 
-                diagnostic.attempts.push(
-                    "file-system-access"
+                WavExporter.validateBlob(
+                    blob
                 );
 
+            } catch (
+                error
+            ) {
 
-                const result =
-                    await this.saveWithFileSystem(
-                        blob,
-                        fileName
-                    );
-
-
-                diagnostic.finalMethod =
-                    result.method;
-
-
-                diagnostic.success =
-                    true;
-
-
-                return {
-
-                    ...result,
-
-                    diagnostic:
-                        diagnostic
-                };
-
-
-            } catch (error) {
-
-                /*
-                 * AbortError significa
-                 * normalmente cancelamento
-                 * do seletor pelo usuário.
-                 */
-
-                diagnostic.attempts.push(
-                    "file-system-access-failed"
-                );
-
-
-                diagnostic.lastError =
-                    error.message;
-
-
-                console.warn(
-                    "File System Access falhou:",
-                    error
-                );
+                throw error;
             }
         }
 
 
-        // ==================================
-        // MÉTODO 2
-        // DOWNLOAD TRADICIONAL
-        // ==================================
+        ExportManager.validateExport(
+            blob,
+            "smoothvstudio-vocal.wav"
+        );
+
+
+        return true;
+    }
+
+
+    // ======================================================
+    // INFORMAÇÕES DA EXPORTAÇÃO
+    // ======================================================
+
+    static getExportInfo(
+        blob,
+        fileName
+    ) {
+
+        const validated =
+            ExportManager.validateExport(
+                blob,
+                fileName
+            );
+
+
+        const info = {
+
+            fileName:
+                validated.fileName,
+
+            mimeType:
+                validated.blob.type ||
+                "audio/wav",
+
+            size:
+                validated.blob.size,
+
+            sizeMB:
+                Number(
+                    (
+                        validated.blob.size /
+                        1024 /
+                        1024
+                    ).toFixed(2)
+                )
+        };
+
 
         if (
-            environment.anchorDownload &&
-            environment.objectURL
+            typeof WavExporter !==
+            "undefined" &&
+            typeof WavExporter.getWavInfo ===
+            "function"
         ) {
 
             try {
 
-                diagnostic.attempts.push(
-                    "anchor-download"
-                );
-
-
-                const result =
-                    await this.saveWithAnchor(
-                        blob,
-                        fileName
-                    );
-
-
-                diagnostic.finalMethod =
-                    result.method;
-
-
-                diagnostic.success =
-                    true;
-
-
-                return {
-
-                    ...result,
-
-                    diagnostic:
-                        diagnostic
-                };
-
-
-            } catch (error) {
-
-                diagnostic.attempts.push(
-                    "anchor-download-failed"
-                );
-
-
-                diagnostic.lastError =
-                    error.message;
-
-
-                console.warn(
-                    "Download tradicional falhou:",
-                    error
-                );
-            }
-        }
-
-
-        // ==================================
-        // MÉTODO 3
-        // BLOB NAVIGATION
-        // ==================================
-
-        if (
-            environment.objectURL
-        ) {
-
-            try {
-
-                diagnostic.attempts.push(
-                    "blob-navigation"
-                );
-
-
-                const result =
-                    await this.saveWithBlobNavigation(
+                const wavInfo =
+                    WavExporter.getWavInfo(
                         blob
                     );
 
 
-                diagnostic.finalMethod =
-                    result.method;
-
-
-                diagnostic.success =
-                    true;
-
-
                 return {
 
-                    ...result,
+                    ...info,
 
-                    diagnostic:
-                        diagnostic
+                    wav:
+                        wavInfo
                 };
 
+            } catch (_) {
 
-            } catch (error) {
-
-                diagnostic.attempts.push(
-                    "blob-navigation-failed"
-                );
-
-
-                diagnostic.lastError =
-                    error.message;
-
-
-                console.error(
-                    "Navegação Blob falhou:",
-                    error
-                );
+                // Mantém as informações básicas.
             }
         }
 
 
-        // ==================================
-        // FALHA TOTAL
-        // ==================================
-
-        diagnostic.success =
-            false;
+        return info;
+    }
 
 
-        diagnostic.finalMethod =
-            "failed";
+    // ======================================================
+    // CRIAR NOME A PARTIR DO ORIGINAL
+    // ======================================================
+
+    static createOutputName(
+        originalFileName
+    ) {
+
+        if (
+            typeof originalFileName !==
+            "string" ||
+            !originalFileName.trim()
+        ) {
+
+            return (
+                "smoothvstudio-vocal.wav"
+            );
+        }
 
 
-        const finalError =
-            new Error(
-                "Nenhum método de exportação disponível neste ambiente."
+        const original =
+            originalFileName.trim();
+
+
+        const withoutExtension =
+            original.replace(
+                /\.[^/.]+$/,
+                ""
             );
 
 
-        diagnostic.error =
-            finalError.message;
+        if (
+            !withoutExtension
+        ) {
+
+            return (
+                "smoothvstudio-vocal.wav"
+            );
+        }
 
 
-        console.error(
-            "SmoothVStudio: falha total na exportação.",
-            diagnostic
+        return (
+            withoutExtension +
+            "-smoothvstudio.wav"
         );
+    }
+        // ======================================================
+    // RESULTADO PADRÃO DE FALHA
+    // ======================================================
+
+    static createFailureResult(
+        error,
+        method = "failed"
+    ) {
+
+        const normalizedError =
+            error instanceof Error
+                ? error
+                : new Error(
+                    String(
+                        error ||
+                        "Falha na exportação."
+                    )
+                );
 
 
         return {
@@ -858,21 +552,320 @@ class ExportManager {
                 false,
 
             method:
-                "failed",
+                method,
 
             error:
-                finalError,
-
-            diagnostic:
-                diagnostic
+                normalizedError
         };
     }
-}
 
 
-// ==========================================
-// DISPONIBILIZAR GLOBALMENTE
-// ==========================================
+    // ======================================================
+    // RESULTADO PADRÃO DE SUCESSO
+    // ======================================================
 
-window.ExportManager =
-    ExportManager;
+    static createSuccessResult(
+        method,
+        fileName,
+        blob
+    ) {
+
+        return {
+
+            success:
+                true,
+
+            method:
+                method,
+
+            fileName:
+                fileName,
+
+            size:
+                blob &&
+                Number.isFinite(
+                    blob.size
+                )
+                    ? blob.size
+                    : 0
+        };
+    }
+
+
+    // ======================================================
+    // EXPORTAÇÃO SEGURA
+    // ======================================================
+    //
+    // Variante que não lança erro de exportação para
+    // a camada da interface.
+    // ======================================================
+
+    static async tryExportWav(
+        blob,
+        fileName
+    ) {
+
+        try {
+
+            return await ExportManager.exportWav(
+                blob,
+                fileName
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "SmoothVStudio: exportação segura falhou.",
+                error
+            );
+
+
+            return ExportManager.createFailureResult(
+                error
+            );
+        }
+    }
+
+
+    // ======================================================
+    // VERIFICAR COMPARTILHAMENTO
+    // ======================================================
+
+    static canShare(
+        blob,
+        fileName
+    ) {
+
+        if (
+            typeof FileDownloader ===
+            "undefined"
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            typeof FileDownloader.canShareFile !==
+            "function"
+        ) {
+
+            return false;
+        }
+
+
+        try {
+
+            const file =
+                ExportManager.createFile(
+                    blob,
+                    fileName
+                );
+
+
+            return FileDownloader.canShareFile(
+                file
+            );
+
+        } catch (_) {
+
+            return false;
+        }
+    }
+        // ======================================================
+    // PREPARAR EXPORTAÇÃO
+    // ======================================================
+
+    static prepare(
+        blob,
+        fileName
+    ) {
+
+        const validated =
+            ExportManager.validateExport(
+                blob,
+                fileName
+            );
+
+
+        return {
+
+            blob:
+                validated.blob,
+
+            fileName:
+                validated.fileName,
+
+            file:
+                ExportManager.createFile(
+                    validated.blob,
+                    validated.fileName
+                )
+        };
+    }
+
+
+    // ======================================================
+    // OBTER TAMANHO
+    // ======================================================
+
+    static getSize(
+        blob
+    ) {
+
+        if (
+            !blob ||
+            !Number.isFinite(
+                blob.size
+            )
+        ) {
+
+            return 0;
+        }
+
+
+        return blob.size;
+    }
+
+
+    // ======================================================
+    // OBTER TAMANHO EM MB
+    // ======================================================
+
+    static getSizeMB(
+        blob
+    ) {
+
+        const size =
+            ExportManager.getSize(
+                blob
+            );
+
+
+        return Number(
+            (
+                size /
+                1024 /
+                1024
+            ).toFixed(2)
+        );
+    }
+
+
+    // ======================================================
+    // OBTER TIPO
+    // ======================================================
+
+    static getMimeType(
+        blob
+    ) {
+
+        if (
+            blob &&
+            typeof blob.type ===
+            "string" &&
+            blob.type
+        ) {
+
+            return blob.type;
+        }
+
+
+        return "audio/wav";
+    }
+
+
+    // ======================================================
+    // VERIFICAR DISPONIBILIDADE COMPLETA
+    // ======================================================
+
+    static getCapabilities() {
+
+        const downloader =
+            typeof FileDownloader !==
+            "undefined";
+
+
+        return {
+
+            export:
+                downloader &&
+                typeof FileDownloader.deliver ===
+                "function",
+
+            download:
+                downloader &&
+                typeof FileDownloader.download ===
+                "function",
+
+            share:
+                downloader &&
+                typeof FileDownloader.shareFile ===
+                "function",
+
+            shareFile:
+                downloader &&
+                typeof FileDownloader.canShareFile ===
+                "function"
+        };
+    }
+        // ======================================================
+    // EXPORTAÇÃO COM ARQUIVO
+    // ======================================================
+    //
+    // Mantém uma entrada simples para futuras chamadas
+    // que já possuam um File.
+    // ======================================================
+    
+    static async exportFile(
+        file
+    ) {
+        
+        if (
+            !file
+        ) {
+            
+            return ExportManager.createFailureResult(
+                new Error(
+                    "Nenhum arquivo foi fornecido."
+                )
+            );
+        }
+        
+        
+        const fileName =
+            ExportManager.normalizeFileName(
+                file.name
+            );
+        
+        
+        return ExportManager.exportWav(
+            file,
+            fileName
+        );
+    }
+    
+    
+    // ======================================================
+    // LIMPEZA
+    // ======================================================
+    //
+    // O ExportManager não mantém Object URLs.
+    // Portanto, não há recursos próprios para liberar.
+    // ======================================================
+    
+    static cleanup() {
+        
+        return true;
+    }
+    }
+    
+    
+    // ==========================================================
+    // DISPONIBILIZAÇÃO GLOBAL
+    // ==========================================================
+    
+    window.ExportManager =
+        ExportManager;
