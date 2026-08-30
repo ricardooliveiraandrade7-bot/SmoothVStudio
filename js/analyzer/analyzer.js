@@ -498,11 +498,6 @@ analyzeFrames(
             );
 
 
-        const remaining =
-            signal.length -
-            start;
-
-
         frame.set(
             signal.slice(
                 start,
