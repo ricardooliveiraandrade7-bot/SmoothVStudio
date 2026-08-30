@@ -1,304 +1,170 @@
-<!-- PARTE 1/6 --><!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<!DOCTYPE html>
+<html lang="pt-BR">
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
+<head>
 
-<meta
-    name="theme-color"
-    content="#101216"
->
+    <meta charset="UTF-8">
 
-<title>
-    SmoothVStudio
-</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<link
-    rel="stylesheet"
-    href="style.css"
->
+    <title>SmoothVStudio</title>
 
-</head><body><main class="app">
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 
-    <header class="header">
-
-        <h1>
-            SmoothVStudio
-        </h1>
-
-        <p>
-            Processamento vocal offline
-        </p>
-
-    </header>
+</head>
 
 
-    <section class="panel">
+<body>
 
-        <h2>
-            Áudio
-        </h2>
+    <main class="app-container">
 
-        <label
-            class="input-label"
-            for="audioFile"
-        >
-            Selecione seu vocal
-        </label>
+        <header class="app-header">
 
-        <input
-            id="audioFile"
-            class="audio-input"
-            type="file"
-            accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac"
-        >
+            <h1>SmoothVStudio</h1>
 
-        <div
-            id="fileName"
-            class="file-name"
-        >
-            Nenhum arquivo selecionado.
-        </div>
+            <p>
+                Vocal processing studio
+            </p>
 
-        <audio
-            id="originalPlayer"
-            controls
-            preload="metadata"
-        ></audio>
-
-        <div class="time-display">
-
-            <span id="originalCurrent">
-                00:00
-            </span>
-
-            <span id="originalDuration">
-                00:00
-            </span>
-
-        </div>
-
-    </section>
+        </header>
 
 
-    <section class="panel smoother-panel">
+        <section class="audio-section">
 
-        <div class="plugin-header">
+            <input
+                id="audioFileInput"
+                type="file"
+                accept="audio/*"
+            >
 
-            <div>
+            <div class="file-info">
 
-                <h2>
-                    Vocal Smoother
-                </h2>
-
-                <p>
-                    Processamento vocal offline
-                </p>
-
-            </div>
-
-        </div>
-
-        <button
-            id="processButton"
-            class="process-button"
-            type="button"
-            disabled
-        >
-            Processar Vocal
-        </button>
-
-        <div
-            id="processingStatus"
-            class="status"
-        >
-            Aguardando áudio.
-        </div>
-
-<!-- PARTE 2/6 -->        <div
-            id="processedSection"
-            class="hidden"
-        >
-
-            <h2>
-                Resultado
-            </h2>
-
-            <audio
-                id="processedPlayer"
-                controls
-                preload="metadata"
-            ></audio>
-
-            <div class="time-display">
-
-                <span id="processedCurrent">
-                    00:00
-                </span>
-
-                <span id="processedDuration">
-                    00:00
+                <span id="fileName">
+                    Nenhum arquivo selecionado
                 </span>
 
             </div>
 
-            <div class="comparison">
+
+            <div class="controls">
+
+                <button
+                    id="playButton"
+                    type="button"
+                    disabled
+                >
+                    Reproduzir
+                </button>
+
+
+                <button
+                    id="pauseButton"
+                    type="button"
+                    disabled
+                >
+                    Pausar
+                </button>
+
+
+                <button
+                    id="stopButton"
+                    type="button"
+                    disabled
+                >
+                    Parar
+                </button>
+
+            </div>
+
+
+            <div class="processing-controls">
+
+                <button
+                    id="processButton"
+                    type="button"
+                    disabled
+                >
+                    Processar
+                </button>
+
 
                 <button
                     id="bypassButton"
                     type="button"
+                    disabled
                 >
-                    Bypass: Original
+                    Bypass
                 </button>
+
+            </div>
+
+
+            <div class="export-controls">
 
                 <button
-                    id="reprocessButton"
+                    id="exportButton"
                     type="button"
+                    disabled
                 >
-                    Processar novamente
+                    Exportar WAV
+                </button>
+
+
+                <button
+                    id="shareButton"
+                    type="button"
+                    disabled
+                >
+                    Compartilhar
                 </button>
 
             </div>
 
-            <button
-                id="downloadButton"
-                class="download-button"
-                type="button"
-                disabled
-            >
-                Salvar WAV 24-bit
-            </button>
 
-            <button
-                id="shareButton"
-                class="share-button hidden"
-                type="button"
-            >
-                Compartilhar WAV
-            </button>
+            <div class="status">
 
-            <div
-                id="downloadStatus"
-                class="download-status"
-            ></div>
-
-        </div>
-
-    </section>
-
-
-    <section class="panel">
-
-        <h2>
-            Motor
-        </h2>
-
-        <div class="engine-info">
-
-            <div>
-
-                <span>
-                    Processamento
+                <span id="statusText">
+                    Pronto
                 </span>
-
-                <strong>
-                    Offline
-                </strong>
 
             </div>
 
-            <div>
+        </section>
 
-                <span>
-                    Exportação
-                </span>
+    </main>
 
-                <strong>
-                    WAV 24-bit
-                </strong>
 
-            </div>
+    <script
+        src="js/audio-engine.js"
+        defer
+    ></script>
 
-            <div>
+    <script
+        src="js/wav-exporter.js"
+        defer
+    ></script>
 
-                <span>
-                    Tratamento
-                </span>
+    <script
+        src="js/file-downloader.js"
+        defer
+    ></script>
 
-                <strong>
-                    Neutro
-                </strong>
+    <script
+        src="js/export/export-manager.js"
+        defer
+    ></script>
 
-            </div>
+    <script
+        src="js/app.js"
+        defer
+    ></script>
 
-        </div>
+</body>
 
-    </section>
-
-</main>
-
-<!-- PARTE 3/6 --><script
-    src="js/audio-engine.js"
-    defer
-></script>
-
-<script
-    src="js/wav-exporter.js"
-    defer
-></script>
-
-<script
-    src="js/file-downloader.js"
-    defer
-></script>
-
-<script
-    src="js/export/export-manager.js"
-    defer
-></script>
-
-<script
-    src="js/app.js"
-    defer
-></script>
-
-</body></html><!-- PARTE 4/6 --><!--
-    Os elementos abaixo pertencem exclusivamente
-    à interface básica do SmoothVStudio.
-
-    O processamento, a decodificação e a
-    exportação pertencem aos módulos JavaScript.
-
-    Nenhum Analyzer, sistema de decisão,
-    módulo DSP ou inteligência é carregado
-    por este arquivo.
---><!-- PARTE 5/6 --><!--
-    Ordem dos módulos:
-
-    1. AudioEngine
-       Responsável pelo áudio.
-
-    2. WavExporter
-       Responsável pela criação do WAV.
-
-    3. FileDownloader
-       Responsável pela entrega/compartilhamento.
-
-    4. ExportManager
-       Responsável pela coordenação da exportação.
-
-    5. App
-       Responsável pela interface e pelo fluxo
-       entre usuário e módulos.
---><!-- PARTE 6/6 --><!--
-    Esta estrutura é intencionalmente simples.
-
-    A futura camada de inteligência/DSP não deve
-    ser adicionada aqui antecipadamente.
-
-    Quando essa etapa for definida, ela deverá
-    entrar por uma arquitetura própria, sem
-    transformar o index.html novamente em um
-    ponto central de dependências.
--->
+</html>
