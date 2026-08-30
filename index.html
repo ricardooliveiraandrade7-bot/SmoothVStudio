@@ -1,170 +1,221 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
 
-<head>
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <meta charset="UTF-8">
+<title>SmoothVStudio</title>
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+<link
+    rel="stylesheet"
+    href="style.css"
+>
 
-    <title>SmoothVStudio</title>
+</head><body><main class="app-container">
 
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
+    <header class="app-header">
 
-</head>
+        <h1>SmoothVStudio</h1>
 
+        <p>
+            Vocal processing studio
+        </p>
 
-<body>
-
-    <main class="app-container">
-
-        <header class="app-header">
-
-            <h1>SmoothVStudio</h1>
-
-            <p>
-                Vocal processing studio
-            </p>
-
-        </header>
+    </header>
 
 
-        <section class="audio-section">
+    <section class="panel audio-section">
 
-            <input
-                id="audioFileInput"
-                type="file"
-                accept="audio/*"
+        <label
+            class="input-label"
+            for="audioFile"
+        >
+            Áudio
+        </label>
+
+        <input
+            id="audioFile"
+            class="audio-input"
+            type="file"
+            accept="audio/*"
+        >
+
+        <div
+            class="file-name"
+            id="fileName"
+        >
+            Nenhum arquivo selecionado
+        </div>
+
+
+        <div class="player-block">
+
+            <h2>Original</h2>
+
+            <audio
+                id="originalPlayer"
+                controls
+                preload="metadata"
+            ></audio>
+
+            <div class="time-display">
+
+                <span id="originalCurrent">
+                    00:00
+                </span>
+
+                <span id="originalDuration">
+                    00:00
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <div class="processing-controls">
+
+            <button
+                id="processButton"
+                class="process-button"
+                type="button"
+                disabled
             >
+                Processar
+            </button>
 
-            <div class="file-info">
+            <button
+                id="reprocessButton"
+                type="button"
+                disabled
+            >
+                Reprocessar
+            </button>
 
-                <span id="fileName">
-                    Nenhum arquivo selecionado
-                </span>
-
-            </div>
-
-
-            <div class="controls">
-
-                <button
-                    id="playButton"
-                    type="button"
-                    disabled
-                >
-                    Reproduzir
-                </button>
+        </div>
 
 
-                <button
-                    id="pauseButton"
-                    type="button"
-                    disabled
-                >
-                    Pausar
-                </button>
+        <div class="status">
+
+            <span id="processingStatus">
+                Aguardando áudio.
+            </span>
+
+        </div>
+
+    </section>
 
 
-                <button
-                    id="stopButton"
-                    type="button"
-                    disabled
-                >
-                    Parar
-                </button>
+    <section
+        id="processedSection"
+        class="panel processed-panel hidden"
+    >
 
-            </div>
+        <div class="plugin-header">
 
+            <div>
 
-            <div class="processing-controls">
+                <h2>Processado</h2>
 
-                <button
-                    id="processButton"
-                    type="button"
-                    disabled
-                >
-                    Processar
-                </button>
-
-
-                <button
-                    id="bypassButton"
-                    type="button"
-                    disabled
-                >
-                    Bypass
-                </button>
+                <p>
+                    Processamento neutro nesta fase.
+                </p>
 
             </div>
 
-
-            <div class="export-controls">
-
-                <button
-                    id="exportButton"
-                    type="button"
-                    disabled
-                >
-                    Exportar WAV
-                </button>
+        </div>
 
 
-                <button
-                    id="shareButton"
-                    type="button"
-                    disabled
-                >
-                    Compartilhar
-                </button>
-
-            </div>
+        <audio
+            id="processedPlayer"
+            controls
+            preload="metadata"
+        ></audio>
 
 
-            <div class="status">
+        <div class="time-display">
 
-                <span id="statusText">
-                    Pronto
-                </span>
+            <span id="processedCurrent">
+                00:00
+            </span>
 
-            </div>
+            <span id="processedDuration">
+                00:00
+            </span>
 
-        </section>
-
-    </main>
+        </div>
 
 
-    <script
-        src="js/audio-engine.js"
-        defer
-    ></script>
+        <div class="comparison">
 
-    <script
-        src="js/wav-exporter.js"
-        defer
-    ></script>
+            <button
+                id="bypassButton"
+                type="button"
+                disabled
+            >
+                Bypass: Original
+            </button>
 
-    <script
-        src="js/file-downloader.js"
-        defer
-    ></script>
+        </div>
 
-    <script
-        src="js/export/export-manager.js"
-        defer
-    ></script>
 
-    <script
-        src="js/app.js"
-        defer
-    ></script>
+        <div class="export-controls">
 
-</body>
+            <button
+                id="downloadButton"
+                class="download-button"
+                type="button"
+                disabled
+            >
+                Exportar WAV
+            </button>
 
-</html>
+            <button
+                id="shareButton"
+                class="share-button hidden"
+                type="button"
+            >
+                Compartilhar
+            </button>
+
+        </div>
+
+
+        <div class="download-status">
+
+            <span id="downloadStatus"></span>
+
+        </div>
+
+    </section>
+
+</main>
+
+
+<script
+    src="js/audio-engine.js"
+    defer
+></script>
+
+<script
+    src="js/wav-exporter.js"
+    defer
+></script>
+
+<script
+    src="js/file-downloader.js"
+    defer
+></script>
+
+<script
+    src="js/export/export-manager.js"
+    defer
+></script>
+
+<script
+    src="js/app.js"
+    defer
+></script>
+
+</body></html>

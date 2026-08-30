@@ -23,7 +23,7 @@ Helvetica,
 sans-serif;
 }
 
-.app {
+.app-container {
 width: 100%;
 max-width: 720px;
 margin: 0 auto;
@@ -31,17 +31,17 @@ margin: 0 auto;
 
 /* Cabeçalho */
 
-.header {
+.app-header {
 margin-bottom: 22px;
 }
 
-.header h1 {
+.app-header h1 {
 font-size: 30px;
 font-weight: 700;
 letter-spacing: -0.5px;
 }
 
-.header p {
+.app-header p {
 margin-top: 6px;
 color: #9da3ad;
 font-size: 14px;
@@ -109,6 +109,10 @@ white-space: nowrap;
 
 /* Players */
 
+.player-block {
+margin-top: 20px;
+}
+
 audio {
 display: block;
 width: 100%;
@@ -122,11 +126,7 @@ color: #8d949f;
 font-size: 12px;
 }
 
-/* Vocal Smoother */
-
-.smoother-panel {
-border-color: #454c58;
-}
+/* Cabeçalho do resultado */
 
 .plugin-header {
 display: flex;
@@ -144,7 +144,18 @@ color: #8f96a0;
 font-size: 13px;
 }
 
-/* Botões */
+/* Controles */
+
+.processing-controls {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 10px;
+margin-top: 18px;
+}
+
+.export-controls {
+margin-top: 15px;
+}
 
 button {
 min-height: 45px;
@@ -187,7 +198,6 @@ background: #ffffff;
 
 .download-button {
 width: 100%;
-margin-top: 14px;
 background: #d9d9d9;
 color: #111;
 }
@@ -224,36 +234,9 @@ text-align: center;
 
 .comparison {
 display: grid;
-grid-template-columns: 1fr 1fr;
+grid-template-columns: 1fr;
 gap: 10px;
 margin-top: 15px;
-}
-
-/* Informações do motor */
-
-.engine-info {
-display: grid;
-grid-template-columns: repeat(3, 1fr);
-gap: 10px;
-}
-
-.engine-info div {
-padding: 12px;
-background: #1c2026;
-border-radius: 8px;
-text-align: center;
-}
-
-.engine-info span {
-display: block;
-margin-bottom: 5px;
-color: #777f8a;
-font-size: 11px;
-}
-
-.engine-info strong {
-color: #cfd3d8;
-font-size: 12px;
 }
 
 /* Utilitário */
@@ -270,7 +253,7 @@ body {
     padding: 12px;
 }
 
-.header h1 {
+.app-header h1 {
     font-size: 25px;
 }
 
@@ -278,11 +261,7 @@ body {
     padding: 15px;
 }
 
-.comparison {
-    grid-template-columns: 1fr;
-}
-
-.engine-info {
+.processing-controls {
     grid-template-columns: 1fr;
 }
 
