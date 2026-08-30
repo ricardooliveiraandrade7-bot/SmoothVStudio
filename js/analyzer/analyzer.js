@@ -7,9 +7,22 @@ class VocalAnalyzer {
 
         this.options = {
 
-            frameSize: 2048,
+            /*
+             * FFT pequena e eficiente.
+             * 1024 pontos dão resolução suficiente
+             * para as bandas que realmente orientam
+             * o SmoothVStudio nesta etapa.
+             */
 
-            hopSize: 512,
+            frameSize: 1024,
+
+            /*
+             * Não analisamos todos os frames.
+             * O Analyzer seleciona pontos representativos
+             * ao longo de todo o áudio.
+             */
+
+            maxFrames: 32,
 
             minFrequency: 20,
 
@@ -18,10 +31,6 @@ class VocalAnalyzer {
             silenceDb: -60,
 
             vocalActivityDb: -45,
-
-            pitchMinHz: 70,
-
-            pitchMaxHz: 500,
 
             bodyLowHz: 120,
 
@@ -100,15 +109,7 @@ class VocalAnalyzer {
 
         const bands =
             this.analyzeBands(
-                frames,
-                audioBuffer.sampleRate
-            );
-
-
-        const harmonicity =
-            this.analyzeHarmonicity(
-                frames,
-                audioBuffer.sampleRate
+                frames
             );
 
 
@@ -128,8 +129,7 @@ class VocalAnalyzer {
             this.analyzeProcessingRisk(
                 signal,
                 dynamics,
-                spectrum,
-                harmonicity
+                spectrum
             );
 
 
@@ -140,15 +140,11 @@ class VocalAnalyzer {
 
                 signal,
 
-                frames,
-
                 dynamics,
 
                 spectrum,
 
                 bands,
-
-                harmonicity,
 
                 temporal,
 
@@ -188,7 +184,10 @@ class VocalAnalyzer {
             "number" ||
 
             typeof audioBuffer.numberOfChannels !==
-            "number"
+            "number" ||
+
+            typeof audioBuffer.getChannelData !==
+            "function"
         ) {
 
             throw new Error(
@@ -228,6 +227,30 @@ class VocalAnalyzer {
             new Float32Array(
                 length
             );
+
+
+        /*
+         * Para mono, evitamos uma cópia
+         * desnecessária sempre que possível.
+         */
+
+        if (
+            channels === 1
+        ) {
+
+            const source =
+                audioBuffer.getChannelData(
+                    0
+                );
+
+
+            mono.set(
+                source
+            );
+
+
+            return mono;
+        }
 
 
         for (
@@ -284,14 +307,19 @@ class VocalAnalyzer {
 
 
             const absolute =
-                Math.abs(sample);
-
-
-            peak =
-                Math.max(
-                    peak,
-                    absolute
+                Math.abs(
+                    sample
                 );
+
+
+            if (
+                absolute >
+                peak
+            ) {
+
+                peak =
+                    absolute;
+            }
 
 
             sum +=
@@ -349,12 +377,16 @@ class VocalAnalyzer {
             rms,
 
             rmsDb:
-                this.toDb(rms),
+                this.toDb(
+                    rms
+                ),
 
             peak,
 
             peakDb:
-                this.toDb(peak),
+                this.toDb(
+                    peak
+                ),
 
             crestFactor,
 
@@ -379,145 +411,153 @@ class VocalAnalyzer {
                     : 0
         };
     }
-
-
-analyzeFrames(
-    signal,
-    sampleRate
-) {
-
-    const frameSize =
-        this.options.frameSize;
-
-
-    const hopSize =
-        this.options.hopSize;
-
-
-    const frames = [];
-
-
-    if (
-        signal.length === 0
+        analyzeFrames(
+        signal,
+        sampleRate
     ) {
+
+        const frameSize =
+            this.options.frameSize;
+
+
+        const frameCount =
+            Math.max(
+                1,
+                this.options.maxFrames
+            );
+
+
+        const frames = [];
+
+
+        if (
+            signal.length === 0
+        ) {
+
+            return frames;
+        }
+
+
+        /*
+         * Para áudios curtos usamos um único frame.
+         */
+
+        if (
+            signal.length <=
+            frameSize
+        ) {
+
+            const frame =
+                new Float32Array(
+                    frameSize
+                );
+
+
+            frame.set(
+                signal
+            );
+
+
+            frames.push(
+                this.analyzeFrame(
+                    frame,
+                    sampleRate,
+                    0
+                )
+            );
+
+
+            return frames;
+        }
+
+
+        /*
+         * Seleção representativa:
+         *
+         * O Analyzer não percorre milhares
+         * de frames sobrepostos.
+         *
+         * Ele escolhe até 32 posições
+         * distribuídas por todo o áudio.
+         */
+
+        const maxStart =
+            signal.length -
+            frameSize;
+
+
+        const count =
+            Math.min(
+                frameCount,
+                Math.max(
+                    1,
+                    Math.floor(
+                        signal.length /
+                        frameSize
+                    )
+                )
+            );
+
+
+        for (
+            let index = 0;
+            index < count;
+            index++
+        ) {
+
+            const ratio =
+                count === 1
+
+                    ? 0.5
+
+                    : index /
+                      (count - 1);
+
+
+            const start =
+                Math.min(
+                    maxStart,
+                    Math.max(
+                        0,
+                        Math.round(
+                            ratio *
+                            maxStart
+                        )
+                    )
+                );
+
+
+            const frame =
+                new Float32Array(
+                    frameSize
+                );
+
+
+            for (
+                let i = 0;
+                i < frameSize;
+                i++
+            ) {
+
+                frame[i] =
+                    signal[
+                        start + i
+                    ];
+            }
+
+
+            frames.push(
+                this.analyzeFrame(
+                    frame,
+                    sampleRate,
+                    index
+                )
+            );
+        }
+
 
         return frames;
     }
-
-
-    let frameIndex = 0;
-
-
-    /*
-     * Áudio menor que um frame:
-     * cria um único frame preenchido
-     * com zeros apenas no restante.
-     */
-
-    if (
-        signal.length <
-        frameSize
-    ) {
-
-        const frame =
-            new Float32Array(
-                frameSize
-            );
-
-
-        frame.set(
-            signal
-        );
-
-
-        frames.push(
-            this.analyzeFrame(
-                frame,
-                sampleRate,
-                frameIndex
-            )
-        );
-
-
-        return frames;
-    }
-
-
-    /*
-     * Primeiro processamos todos os
-     * frames completos.
-     */
-
-    let start = 0;
-
-
-    for (
-        ;
-        start + frameSize <=
-        signal.length;
-        start += hopSize
-    ) {
-
-        const frame =
-            signal.slice(
-                start,
-                start + frameSize
-            );
-
-
-        frames.push(
-            this.analyzeFrame(
-                frame,
-                sampleRate,
-                frameIndex
-            )
-        );
-
-
-        frameIndex++;
-    }
-
-
-    /*
-     * Se ainda restaram amostras depois
-     * do último frame completo, elas também
-     * precisam entrar na análise.
-     *
-     * O restante do frame é preenchido com
-     * zeros para manter o tamanho exigido
-     * pela FFT.
-     */
-
-    if (
-        start < signal.length
-    ) {
-
-        const frame =
-            new Float32Array(
-                frameSize
-            );
-
-
-        frame.set(
-            signal.slice(
-                start,
-                signal.length
-            )
-        );
-
-
-        frames.push(
-            this.analyzeFrame(
-                frame,
-                sampleRate,
-                frameIndex
-            )
-        );
-    }
-
-
-    return frames;
-}
 
 
     analyzeFrame(
@@ -556,15 +596,15 @@ analyzeFrames(
             );
 
 
-        const spectral =
-            this.calculateSpectralFeatures(
+        const bands =
+            this.calculateBandEnergies(
                 spectrum,
                 sampleRate
             );
 
 
-        const bandEnergy =
-            this.calculateBandEnergies(
+        const spectral =
+            this.calculateSpectralFeatures(
                 spectrum,
                 sampleRate
             );
@@ -575,68 +615,25 @@ analyzeFrames(
             index:
                 frameIndex,
 
-            signal:
-                frame,
-
             rms,
 
             rmsDb:
-                this.toDb(rms),
+                this.toDb(
+                    rms
+                ),
 
             peak,
 
             peakDb:
-                this.toDb(peak),
-
-            spectrum,
+                this.toDb(
+                    peak
+                ),
 
             spectral,
 
-            bandEnergy
+            bandEnergy:
+                bands
         };
-    }
-        applyHannWindow(
-        signal
-    ) {
-
-        const output =
-            new Float32Array(
-                signal.length
-            );
-
-
-        const denominator =
-            signal.length - 1;
-
-
-        for (
-            let i = 0;
-            i < signal.length;
-            i++
-        ) {
-
-            const window =
-                denominator > 0
-
-                    ? 0.5 -
-                      0.5 *
-                      Math.cos(
-                          2 *
-                          Math.PI *
-                          i /
-                          denominator
-                      )
-
-                    : 1;
-
-
-            output[i] =
-                signal[i] *
-                window;
-        }
-
-
-        return output;
     }
 
 
@@ -683,13 +680,20 @@ analyzeFrames(
             i++
         ) {
 
-            peak =
-                Math.max(
-                    peak,
-                    Math.abs(
-                        signal[i]
-                    )
+            const absolute =
+                Math.abs(
+                    signal[i]
                 );
+
+
+            if (
+                absolute >
+                peak
+            ) {
+
+                peak =
+                    absolute;
+            }
         }
 
 
@@ -697,7 +701,98 @@ analyzeFrames(
     }
 
 
-    calculateSpectrum(
+    removeMean(
+        signal
+    ) {
+
+        const output =
+            new Float32Array(
+                signal.length
+            );
+
+
+        let mean = 0;
+
+
+        for (
+            let i = 0;
+            i < signal.length;
+            i++
+        ) {
+
+            mean +=
+                signal[i];
+        }
+
+
+        mean /=
+            Math.max(
+                1,
+                signal.length
+            );
+
+
+        for (
+            let i = 0;
+            i < signal.length;
+            i++
+        ) {
+
+            output[i] =
+                signal[i] -
+                mean;
+        }
+
+
+        return output;
+    }
+
+
+    applyHannWindow(
+        signal
+    ) {
+
+        const output =
+            new Float32Array(
+                signal.length
+            );
+
+
+        const denominator =
+            signal.length -
+            1;
+
+
+        for (
+            let i = 0;
+            i < signal.length;
+            i++
+        ) {
+
+            const window =
+                denominator > 0
+
+                    ? 0.5 -
+                      0.5 *
+                      Math.cos(
+                          2 *
+                          Math.PI *
+                          i /
+                          denominator
+                      )
+
+                    : 1;
+
+
+            output[i] =
+                signal[i] *
+                window;
+        }
+
+
+        return output;
+    }
+        calculateSpectrum(
         signal
     ) {
 
@@ -706,11 +801,15 @@ analyzeFrames(
 
 
         const real =
-            new Float64Array(n);
+            new Float32Array(
+                n
+            );
 
 
         const imag =
-            new Float64Array(n);
+            new Float32Array(
+                n
+            );
 
 
         for (
@@ -737,7 +836,7 @@ analyzeFrames(
 
 
         const magnitude =
-            new Float64Array(
+            new Float32Array(
                 bins
             );
 
@@ -762,10 +861,6 @@ analyzeFrames(
         return {
 
             magnitude,
-
-            real,
-
-            imag,
 
             fftSize:
                 n
@@ -850,11 +945,15 @@ analyzeFrames(
 
 
             const wLenReal =
-                Math.cos(angle);
+                Math.cos(
+                    angle
+                );
 
 
             const wLenImag =
-                Math.sin(angle);
+                Math.sin(
+                    angle
+                );
 
 
             const half =
@@ -867,9 +966,11 @@ analyzeFrames(
                 i += length
             ) {
 
-                let wReal = 1;
+                let wReal =
+                    1;
 
-                let wImag = 0;
+                let wImag =
+                    0;
 
 
                 for (
@@ -964,18 +1065,20 @@ analyzeFrames(
             spectrum.fftSize;
 
 
-        let total = 0;
-
-        let weighted = 0;
-
-        let weightedSquared = 0;
-
-
-        let arithmetic =
+        let total =
             0;
 
+        let weighted =
+            0;
 
-        let logSum = 0;
+        let weightedSquared =
+            0;
+
+        let logSum =
+            0;
+
+        let count =
+            0;
 
 
         for (
@@ -995,7 +1098,10 @@ analyzeFrames(
                 this.options.minFrequency ||
 
                 frequency >
-                this.options.maxFrequency
+                Math.min(
+                    this.options.maxFrequency,
+                    sampleRate / 2
+                )
             ) {
 
                 continue;
@@ -1022,57 +1128,92 @@ analyzeFrames(
                 value;
 
 
-            arithmetic +=
-                value;
-
-
             logSum +=
-                Math.log(value);
+                Math.log(
+                    value
+                );
+
+
+            count++;
+        }
+
+
+        if (
+            total <=
+            1e-12 ||
+            count === 0
+        ) {
+
+            return {
+
+                centroid: 0,
+
+                spread: 0,
+
+                flatness: 0,
+
+                entropy: 0,
+
+                rolloff: 0,
+
+                slope: 0,
+
+                contrast: 0,
+
+                flux: 0
+            };
         }
 
 
         const centroid =
-            total > 0
-
-                ? weighted /
-                  total
-
-                : 0;
+            weighted /
+            total;
 
 
         const variance =
-            total > 0
-
-                ? Math.max(
-                    0,
-                    weightedSquared /
-                    total -
-                    centroid *
-                    centroid
-                )
-
-                : 0;
+            Math.max(
+                0,
+                weightedSquared /
+                total -
+                centroid *
+                centroid
+            );
 
 
         const flatness =
-            arithmetic > 0
+            Math.exp(
+                logSum /
+                count
+            ) /
+            (
+                total /
+                count
+            );
 
-                ? Math.exp(
-                    logSum /
-                    Math.max(
-                        1,
-                        magnitude.length
-                    )
-                ) /
-                  (
-                      arithmetic /
-                      Math.max(
-                          1,
-                          magnitude.length
-                      )
-                  )
 
-                : 0;
+        const rolloff =
+            this.calculateRolloff(
+                magnitude,
+                sampleRate,
+                fftSize,
+                0.85
+            );
+
+
+        const entropy =
+            this.calculateSpectralEntropy(
+                magnitude,
+                sampleRate,
+                fftSize
+            );
+
+
+        const slope =
+            this.calculateSpectralSlope(
+                magnitude,
+                sampleRate,
+                fftSize
+            );
 
 
         return {
@@ -1091,135 +1232,29 @@ analyzeFrames(
                     1
                 ),
 
-            entropy:
-                this.calculateSpectralEntropy(
-                    magnitude,
-                    sampleRate,
-                    fftSize
-                ),
+            entropy,
 
-            rolloff:
-                this.calculateRolloff(
-                    magnitude,
-                    sampleRate,
-                    fftSize,
-                    0.85
-                ),
+            rolloff,
 
-            slope:
-                this.calculateSpectralSlope(
-                    magnitude,
-                    sampleRate,
-                    fftSize
-                ),
+            slope,
+
+            /*
+             * Mantemos o campo para compatibilidade
+             * com o perfil anterior.
+             *
+             * A versão leve não calcula o contraste
+             * pesado antigo.
+             */
 
             contrast:
-                this.calculateSpectralContrast(
+                this.calculateSimpleContrast(
                     magnitude,
                     sampleRate,
                     fftSize
-                )
+                ),
+
+            flux: 0
         };
-    }
-        calculateSpectralEntropy(
-        magnitude,
-        sampleRate,
-        fftSize
-    ) {
-
-        let total = 0;
-
-        const values = [];
-
-
-        for (
-            let i = 1;
-            i < magnitude.length;
-            i++
-        ) {
-
-            const frequency =
-                i *
-                sampleRate /
-                fftSize;
-
-
-            if (
-                frequency <
-                this.options.minFrequency ||
-
-                frequency >
-                this.options.maxFrequency
-            ) {
-
-                continue;
-            }
-
-
-            const value =
-                magnitude[i];
-
-
-            total +=
-                value;
-
-
-            values.push(
-                value
-            );
-        }
-
-
-        if (
-            total <= 1e-12 ||
-            values.length === 0
-        ) {
-
-            return 0;
-        }
-
-
-        let entropy = 0;
-
-
-        for (
-            const value of values
-        ) {
-
-            const probability =
-                value /
-                total;
-
-
-            if (
-                probability > 0
-            ) {
-
-                entropy -=
-                    probability *
-                    Math.log2(
-                        probability
-                    );
-            }
-        }
-
-
-        const maximum =
-            Math.log2(
-                values.length
-            );
-
-
-        return maximum > 0
-
-            ? this.clamp(
-                entropy /
-                maximum,
-                0,
-                1
-            )
-
-            : 0;
     }
 
 
@@ -1230,7 +1265,15 @@ analyzeFrames(
         percentage
     ) {
 
-        let total = 0;
+        let total =
+            0;
+
+
+        const maximum =
+            Math.min(
+                this.options.maxFrequency,
+                sampleRate / 2
+            );
 
 
         for (
@@ -1250,7 +1293,7 @@ analyzeFrames(
                 this.options.minFrequency &&
 
                 frequency <=
-                this.options.maxFrequency
+                maximum
             ) {
 
                 total +=
@@ -1260,7 +1303,8 @@ analyzeFrames(
 
 
         if (
-            total <= 1e-12
+            total <=
+            1e-12
         ) {
 
             return 0;
@@ -1272,7 +1316,8 @@ analyzeFrames(
             percentage;
 
 
-        let accumulated = 0;
+        let accumulated =
+            0;
 
 
         for (
@@ -1292,7 +1337,7 @@ analyzeFrames(
                 this.options.minFrequency ||
 
                 frequency >
-                this.options.maxFrequency
+                maximum
             ) {
 
                 continue;
@@ -1313,25 +1358,20 @@ analyzeFrames(
         }
 
 
-        return this.options.maxFrequency;
+        return maximum;
     }
-
-
-    calculateSpectralSlope(
+        calculateSpectralEntropy(
         magnitude,
         sampleRate,
         fftSize
     ) {
 
-        let sumX = 0;
+        let total =
+            0;
 
-        let sumY = 0;
 
-        let sumXY = 0;
-
-        let sumXX = 0;
-
-        let count = 0;
+        let count =
+            0;
 
 
         for (
@@ -1351,7 +1391,146 @@ analyzeFrames(
                 this.options.minFrequency ||
 
                 frequency >
-                this.options.maxFrequency
+                Math.min(
+                    this.options.maxFrequency,
+                    sampleRate / 2
+                )
+            ) {
+
+                continue;
+            }
+
+
+            total +=
+                magnitude[i];
+
+
+            count++;
+        }
+
+
+        if (
+            total <=
+            1e-12 ||
+            count === 0
+        ) {
+
+            return 0;
+        }
+
+
+        let entropy =
+            0;
+
+
+        for (
+            let i = 1;
+            i < magnitude.length;
+            i++
+        ) {
+
+            const frequency =
+                i *
+                sampleRate /
+                fftSize;
+
+
+            if (
+                frequency <
+                this.options.minFrequency ||
+
+                frequency >
+                Math.min(
+                    this.options.maxFrequency,
+                    sampleRate / 2
+                )
+            ) {
+
+                continue;
+            }
+
+
+            const probability =
+                magnitude[i] /
+                total;
+
+
+            if (
+                probability >
+                0
+            ) {
+
+                entropy -=
+                    probability *
+                    Math.log2(
+                        probability
+                    );
+            }
+        }
+
+
+        const maximum =
+            Math.log2(
+                count
+            );
+
+
+        return maximum > 0
+
+            ? this.clamp(
+                entropy /
+                maximum,
+                0,
+                1
+            )
+
+            : 0;
+    }
+
+
+    calculateSpectralSlope(
+        magnitude,
+        sampleRate,
+        fftSize
+    ) {
+
+        let sumX =
+            0;
+
+        let sumY =
+            0;
+
+        let sumXY =
+            0;
+
+        let sumXX =
+            0;
+
+        let count =
+            0;
+
+
+        for (
+            let i = 1;
+            i < magnitude.length;
+            i++
+        ) {
+
+            const frequency =
+                i *
+                sampleRate /
+                fftSize;
+
+
+            if (
+                frequency <
+                200 ||
+
+                frequency >
+                Math.min(
+                    16000,
+                    sampleRate / 2
+                )
             ) {
 
                 continue;
@@ -1370,9 +1549,11 @@ analyzeFrames(
                 );
 
 
-            sumX += x;
+            sumX +=
+                x;
 
-            sumY += y;
+            sumY +=
+                y;
 
             sumXY +=
                 x * y;
@@ -1412,204 +1593,63 @@ analyzeFrames(
     }
 
 
-    calculateSpectralContrast(
+    calculateSimpleContrast(
         magnitude,
         sampleRate,
         fftSize
     ) {
 
-        const bands = [
-
-            [80, 160],
-
-            [160, 315],
-
-            [315, 630],
-
-            [630, 1250],
-
-            [1250, 2500],
-
-            [2500, 5000],
-
-            [5000, 10000],
-
-            [10000, 16000]
-        ];
+        const low =
+            this.calculateBandEnergy(
+                magnitude,
+                sampleRate,
+                fftSize,
+                250,
+                2500
+            );
 
 
-        const contrasts = [];
+        const high =
+            this.calculateBandEnergy(
+                magnitude,
+                sampleRate,
+                fftSize,
+                2500,
+                12000
+            );
 
 
-        for (
-            const range of bands
+        if (
+            low <=
+            1e-12
         ) {
 
-            const values = [];
-
-
-            for (
-                let i = 1;
-                i < magnitude.length;
-                i++
-            ) {
-
-                const frequency =
-                    i *
-                    sampleRate /
-                    fftSize;
-
-
-                if (
-                    frequency >=
-                    range[0] &&
-
-                    frequency <=
-                    range[1]
-                ) {
-
-                    values.push(
-                        magnitude[i]
-                    );
-                }
-            }
-
-
-            if (
-                values.length < 4
-            ) {
-
-                continue;
-            }
-
-
-            values.sort(
-                (
-                    a,
-                    b
-                ) =>
-                    a - b
-            );
-
-
-            const low =
-                values[
-                    Math.floor(
-                        values.length *
-                        0.10
-                    )
-                ] +
-                1e-12;
-
-
-            const high =
-                values[
-                    Math.min(
-                        values.length - 1,
-
-                        Math.floor(
-                            values.length *
-                            0.90
-                        )
-                    )
-                ] +
-                1e-12;
-
-
-            contrasts.push(
-                this.toDb(
-                    high /
-                    low
-                )
-            );
+            return 0;
         }
 
 
-        return contrasts.length > 0
-
-            ? this.mean(
-                contrasts
-            )
-
-            : 0;
+        return this.clamp(
+            this.toDb(
+                Math.sqrt(
+                    (
+                        high +
+                        1e-12
+                    ) /
+                    (
+                        low +
+                        1e-12
+                    )
+                )
+            ),
+            -40,
+            40
+        );
     }
 
 
     calculateBandEnergies(
         spectrum,
         sampleRate
-    ) {
-
-        const definitions = {
-
-            sub:
-                [20, 60],
-
-            deepBass:
-                [60, 120],
-
-            body:
-                [120, 250],
-
-            bodyLowMid:
-                [250, 500],
-
-            lowMid:
-                [500, 1000],
-
-            intelligibility:
-                [1000, 2000],
-
-            presence:
-                [2000, 3000],
-
-            aggression:
-                [3000, 5000],
-
-            harshness:
-                [5000, 8000],
-
-            brilliance:
-                [8000, 12000],
-
-            air:
-                [12000, 16000],
-
-            ultraAir:
-                [16000, 20000]
-        };
-
-
-        const result = {};
-
-
-        for (
-            const name in definitions
-        ) {
-
-            const range =
-                definitions[name];
-
-
-            result[name] =
-                this.calculateBandEnergy(
-                    spectrum,
-                    sampleRate,
-                    range[0],
-                    range[1]
-                );
-        }
-
-
-        return result;
-    }
-
-
-    calculateBandEnergy(
-        spectrum,
-        sampleRate,
-        minFrequency,
-        maxFrequency
     ) {
 
         const magnitude =
@@ -1620,11 +1660,158 @@ analyzeFrames(
             spectrum.fftSize;
 
 
+        return {
+
+            sub:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    20,
+                    60
+                ),
+
+            deepBass:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    60,
+                    120
+                ),
+
+            body:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    120,
+                    250
+                ),
+
+            bodyLowMid:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    250,
+                    500
+                ),
+
+            lowMid:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    500,
+                    1000
+                ),
+
+            intelligibility:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    1000,
+                    2000
+                ),
+
+            presence:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    2000,
+                    3000
+                ),
+
+            aggression:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    3000,
+                    5000
+                ),
+
+            harshness:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    5000,
+                    8000
+                ),
+
+            brilliance:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    8000,
+                    12000
+                ),
+
+            air:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    12000,
+                    16000
+                ),
+
+            ultraAir:
+                this.calculateBandEnergy(
+                    magnitude,
+                    sampleRate,
+                    fftSize,
+                    16000,
+                    Math.min(
+                        20000,
+                        sampleRate / 2
+                    )
+                )
+        };
+    }
+
+
+    calculateBandEnergy(
+        magnitude,
+        sampleRate,
+        fftSize,
+        minFrequency,
+        maxFrequency
+    ) {
+
+        const minimum =
+            Math.max(
+                minFrequency,
+                0
+            );
+
+
+        const maximum =
+            Math.min(
+                maxFrequency,
+                sampleRate / 2
+            );
+
+
+        if (
+            maximum <=
+            minimum
+        ) {
+
+            return 0;
+        }
+
+
         const minBin =
             Math.max(
                 1,
                 Math.floor(
-                    minFrequency *
+                    minimum *
                     fftSize /
                     sampleRate
                 )
@@ -1634,16 +1821,16 @@ analyzeFrames(
         const maxBin =
             Math.min(
                 magnitude.length - 1,
-
                 Math.ceil(
-                    maxFrequency *
+                    maximum *
                     fftSize /
                     sampleRate
                 )
             );
 
 
-        let energy = 0;
+        let energy =
+            0;
 
 
         for (
@@ -1670,9 +1857,6 @@ analyzeFrames(
 
             return {
 
-                magnitude:
-                    new Float64Array(0),
-
                 spectral: {
 
                     centroid: 0,
@@ -1695,106 +1879,52 @@ analyzeFrames(
         }
 
 
-        const length =
-            frames[0]
-                .spectrum
-                .magnitude
-                .length;
+        let centroid =
+            0;
 
+        let spread =
+            0;
 
-        const magnitude =
-            new Float64Array(
-                length
-            );
+        let flatness =
+            0;
 
+        let entropy =
+            0;
 
-        let centroid = 0;
+        let rolloff =
+            0;
 
-        let spread = 0;
+        let slope =
+            0;
 
-        let flatness = 0;
-
-        let entropy = 0;
-
-        let rolloff = 0;
-
-        let slope = 0;
-
-        let contrast = 0;
-
-        let flux = 0;
-
-        let fluxCount = 0;
-
-
-        let previous =
-            null;
+        let contrast =
+            0;
 
 
         for (
             const frame of frames
         ) {
 
-            const current =
-                frame.spectrum.magnitude;
-
-
-            for (
-                let i = 0;
-                i < length;
-                i++
-            ) {
-
-                magnitude[i] +=
-                    current[i];
-            }
-
-
             centroid +=
                 frame.spectral.centroid;
-
 
             spread +=
                 frame.spectral.spread;
 
-
             flatness +=
                 frame.spectral.flatness;
-
 
             entropy +=
                 frame.spectral.entropy;
 
-
             rolloff +=
                 frame.spectral.rolloff;
-
 
             slope +=
                 frame.spectral.slope;
 
-
             contrast +=
                 frame.spectral.contrast;
-
-
-            if (
-                previous
-            ) {
-
-                flux +=
-                    this.calculateSpectralFlux(
-                        previous,
-                        current
-                    );
-
-
-                fluxCount++;
-            }
-
-
-            previous =
-                current;
         }
 
 
@@ -1802,20 +1932,7 @@ analyzeFrames(
             frames.length;
 
 
-        for (
-            let i = 0;
-            i < length;
-            i++
-        ) {
-
-            magnitude[i] /=
-                count;
-        }
-
-
         return {
-
-            magnitude,
 
             spectral: {
 
@@ -1847,60 +1964,9 @@ analyzeFrames(
                     contrast /
                     count,
 
-                flux:
-                    fluxCount > 0
-
-                        ? flux /
-                          fluxCount
-
-                        : 0
+                flux: 0
             }
         };
-    }
-
-
-    calculateSpectralFlux(
-        previous,
-        current
-    ) {
-
-        const length =
-            Math.min(
-                previous.length,
-                current.length
-            );
-
-
-        let sum = 0;
-
-
-        for (
-            let i = 1;
-            i < length;
-            i++
-        ) {
-
-            const increase =
-                Math.max(
-                    0,
-                    current[i] -
-                    previous[i]
-                );
-
-
-            sum +=
-                increase *
-                increase;
-        }
-
-
-        return Math.sqrt(
-            sum /
-            Math.max(
-                1,
-                length
-            )
-        );
     }
 
 
@@ -1953,7 +2019,9 @@ analyzeFrames(
             ) {
 
                 totals[name] +=
-                    frame.bandEnergy[name];
+                    frame.bandEnergy[
+                        name
+                    ];
             }
         }
 
@@ -1981,7 +2049,8 @@ analyzeFrames(
             1e-12;
 
 
-        const normalized = {};
+        const normalized =
+            {};
 
 
         for (
@@ -2085,18 +2154,22 @@ analyzeFrames(
         ];
 
 
-        const raw = {};
+        const raw =
+            {};
 
-        const normalized = {};
+        const normalized =
+            {};
 
 
         for (
             const name of names
         ) {
 
-            raw[name] = 0;
+            raw[name] =
+                0;
 
-            normalized[name] = 0;
+            normalized[name] =
+                0;
         }
 
 
@@ -2136,7 +2209,9 @@ analyzeFrames(
             1
         );
     }
-        analyzeDynamics(
+
+
+    analyzeDynamics(
         frames
     ) {
 
@@ -2186,7 +2261,9 @@ analyzeFrames(
 
 
         const sorted =
-            [...rmsValues].sort(
+            [
+                ...rmsValues
+            ].sort(
                 (
                     a,
                     b
@@ -2210,7 +2287,9 @@ analyzeFrames(
             active.length > 0
 
                 ? this.percentile(
-                    [...active].sort(
+                    [
+                        ...active
+                    ].sort(
                         (
                             a,
                             b
@@ -2227,7 +2306,9 @@ analyzeFrames(
             active.length > 0
 
                 ? this.percentile(
-                    [...active].sort(
+                    [
+                        ...active
+                    ].sort(
                         (
                             a,
                             b
@@ -2240,12 +2321,22 @@ analyzeFrames(
                 : 0;
 
 
+        const meanRms =
+            this.mean(
+                rmsValues
+            );
+
+
+        const meanPeak =
+            this.mean(
+                peakValues
+            );
+
+
         return {
 
             rmsMean:
-                this.mean(
-                    rmsValues
-                ),
+                meanRms,
 
             rmsMedian:
                 this.median(
@@ -2281,722 +2372,37 @@ analyzeFrames(
                     : 0,
 
             crestFactor:
-                this.mean(
-                    peakValues
-                ) /
+                meanPeak /
                 Math.max(
-                    this.mean(
-                        rmsValues
-                    ),
+                    meanRms,
                     1e-8
                 ),
 
             crestFactorDb:
                 this.toDb(
-                    this.mean(
-                        peakValues
-                    ) /
+                    meanPeak /
                     Math.max(
-                        this.mean(
-                            rmsValues
-                        ),
+                        meanRms,
                         1e-8
                     )
                 ),
 
             activity:
-                rmsValues.length > 0
-
-                    ? active.length /
-                      rmsValues.length
-
-                    : 0,
+                active.length /
+                rmsValues.length,
 
             silenceRatio:
-                rmsValues.length > 0
-
-                    ? 1 -
-                      active.length /
-                      rmsValues.length
-
-                    : 1,
+                1 -
+                (
+                    active.length /
+                    rmsValues.length
+                ),
 
             frameCount:
                 frames.length
         };
     }
-
-
-    analyzeHarmonicity(
-        frames,
-        sampleRate
-    ) {
-
-        const periodicityValues = [];
-
-        const pitchValues = [];
-
-        const hnrValues = [];
-
-        const cppValues = [];
-
-
-        for (
-            const frame of frames
-        ) {
-
-            if (
-                frame.rms <=
-                1e-6
-            ) {
-
-                continue;
-            }
-
-
-            const periodicity =
-                this.estimatePeriodicity(
-                    frame.signal,
-                    sampleRate
-                );
-
-
-            const pitch =
-                this.estimatePitch(
-                    frame.signal,
-                    sampleRate
-                );
-
-
-            const hnr =
-                this.estimateHnr(
-                    periodicity
-                );
-
-
-            const cpp =
-                this.estimateCpp(
-                    frame.signal,
-                    sampleRate
-                );
-
-
-            periodicityValues.push(
-                periodicity
-            );
-
-
-            hnrValues.push(
-                hnr
-            );
-
-
-            cppValues.push(
-                cpp
-            );
-
-
-            if (
-                pitch > 0
-            ) {
-
-                pitchValues.push(
-                    pitch
-                );
-            }
-        }
-
-
-        const voiced =
-            periodicityValues.filter(
-                value =>
-                    value >= 0.45
-            );
-
-
-        return {
-
-            hnrDb:
-                this.robustMean(
-                    hnrValues
-                ),
-
-            cppDb:
-                this.robustMean(
-                    cppValues
-                ),
-
-            periodicity:
-                this.robustMean(
-                    periodicityValues
-                ),
-
-            voicedRatio:
-                periodicityValues.length > 0
-
-                    ? voiced.length /
-                      periodicityValues.length
-
-                    : 0,
-
-            pitchEstimateHz:
-                this.robustMean(
-                    pitchValues
-                )
-        };
-    }
-
-
-    estimatePeriodicity(
-        signal,
-        sampleRate
-    ) {
-
-        const centered =
-            this.removeMean(
-                signal
-            );
-
-
-        const minLag =
-            Math.floor(
-                sampleRate /
-                this.options.pitchMaxHz
-            );
-
-
-        const maxLag =
-            Math.min(
-                Math.floor(
-                    sampleRate /
-                    this.options.pitchMinHz
-                ),
-
-                centered.length - 2
-            );
-
-
-        if (
-            maxLag <= minLag
-        ) {
-
-            return 0;
-        }
-
-
-        let energy = 0;
-
-
-        for (
-            let i = 0;
-            i < centered.length;
-            i++
-        ) {
-
-            energy +=
-                centered[i] *
-                centered[i];
-        }
-
-
-        if (
-            energy <= 1e-12
-        ) {
-
-            return 0;
-        }
-
-
-        let best =
-            0;
-
-
-        for (
-            let lag = minLag;
-            lag <= maxLag;
-            lag++
-        ) {
-
-            let correlation = 0;
-
-            let lagEnergy = 0;
-
-
-            for (
-                let i = 0;
-                i + lag <
-                centered.length;
-                i++
-            ) {
-
-                correlation +=
-                    centered[i] *
-                    centered[i + lag];
-
-
-                lagEnergy +=
-                    centered[i + lag] *
-                    centered[i + lag];
-            }
-
-
-            const denominator =
-                Math.sqrt(
-                    energy *
-                    Math.max(
-                        lagEnergy,
-                        1e-12
-                    )
-                );
-
-
-            if (
-                denominator <=
-                0
-            ) {
-
-                continue;
-            }
-
-
-            const normalized =
-                correlation /
-                denominator;
-
-
-            best =
-                Math.max(
-                    best,
-                    normalized
-                );
-        }
-
-
-        return this.clamp(
-            best,
-            0,
-            1
-        );
-    }
-
-
-    estimatePitch(
-        signal,
-        sampleRate
-    ) {
-
-        const centered =
-            this.removeMean(
-                signal
-            );
-
-
-        const minLag =
-            Math.floor(
-                sampleRate /
-                this.options.pitchMaxHz
-            );
-
-
-        const maxLag =
-            Math.min(
-                Math.floor(
-                    sampleRate /
-                    this.options.pitchMinHz
-                ),
-
-                centered.length - 2
-            );
-
-
-        let best =
-            0;
-
-
-        let bestLag =
-            0;
-
-
-        let energy = 0;
-
-
-        for (
-            let i = 0;
-            i < centered.length;
-            i++
-        ) {
-
-            energy +=
-                centered[i] *
-                centered[i];
-        }
-
-
-        if (
-            energy <= 1e-12
-        ) {
-
-            return 0;
-        }
-
-
-        for (
-            let lag = minLag;
-            lag <= maxLag;
-            lag++
-        ) {
-
-            let correlation = 0;
-
-            let lagEnergy = 0;
-
-
-            for (
-                let i = 0;
-                i + lag <
-                centered.length;
-                i++
-            ) {
-
-                correlation +=
-                    centered[i] *
-                    centered[i + lag];
-
-
-                lagEnergy +=
-                    centered[i + lag] *
-                    centered[i + lag];
-            }
-
-
-            const denominator =
-                Math.sqrt(
-                    energy *
-                    Math.max(
-                        lagEnergy,
-                        1e-12
-                    )
-                );
-
-
-            const value =
-                denominator > 0
-
-                    ? correlation /
-                      denominator
-
-                    : 0;
-
-
-            if (
-                value >
-                best
-            ) {
-
-                best =
-                    value;
-
-                bestLag =
-                    lag;
-            }
-        }
-
-
-        if (
-            best < 0.45 ||
-            bestLag <= 0
-        ) {
-
-            return 0;
-        }
-
-
-        return sampleRate /
-            bestLag;
-    }
-
-
-    estimateHnr(
-        periodicity
-    ) {
-
-        const periodic =
-            this.clamp(
-                periodicity,
-                1e-6,
-                0.999999
-            );
-
-
-        return 10 *
-            Math.log10(
-                periodic /
-                (
-                    1 -
-                    periodic
-                )
-            );
-    }
-        estimateCpp(
-        signal,
-        sampleRate
-    ) {
-
-        const frame =
-            this.removeMean(
-                signal
-            );
-
-
-        const windowed =
-            this.applyHannWindow(
-                frame
-            );
-
-
-        const spectrum =
-            this.calculateSpectrum(
-                windowed
-            );
-
-
-        const magnitude =
-            spectrum.magnitude;
-
-
-        const n =
-            spectrum.fftSize;
-
-
-        const logSpectrum =
-            new Float64Array(
-                n
-            );
-
-
-        /*
-         * Construímos o espectro logarítmico
-         * completo usando a simetria da FFT.
-         */
-
-        logSpectrum[0] =
-            Math.log(
-                magnitude[0] +
-                1e-12
-            );
-
-
-        for (
-            let i = 1;
-            i < magnitude.length;
-            i++
-        ) {
-
-            const value =
-                Math.log(
-                    magnitude[i] +
-                    1e-12
-                );
-
-
-            logSpectrum[i] =
-                value;
-
-
-            const mirror =
-                n - i;
-
-
-            if (
-                mirror >= 0 &&
-                mirror < n
-            ) {
-
-                logSpectrum[mirror] =
-                    value;
-            }
-        }
-
-
-        const cepstrum =
-            this.realInverseTransform(
-                logSpectrum
-            );
-
-
-        const minQuefrency =
-            Math.floor(
-                sampleRate /
-                this.options.pitchMaxHz
-            );
-
-
-        const maxQuefrency =
-            Math.min(
-                Math.floor(
-                    sampleRate /
-                    this.options.pitchMinHz
-                ),
-
-                Math.floor(
-                    cepstrum.length /
-                    2
-                )
-            );
-
-
-        if (
-            maxQuefrency <=
-            minQuefrency
-        ) {
-
-            return 0;
-        }
-
-
-        let peak =
-            -Infinity;
-
-
-        for (
-            let i = minQuefrency;
-            i <= maxQuefrency;
-            i++
-        ) {
-
-            peak =
-                Math.max(
-                    peak,
-                    cepstrum[i]
-                );
-        }
-
-
-        let sum = 0;
-
-        let count = 0;
-
-
-        for (
-            let i = minQuefrency;
-            i <= maxQuefrency;
-            i++
-        ) {
-
-            sum +=
-                cepstrum[i];
-
-            count++;
-        }
-
-
-        const mean =
-            count > 0
-
-                ? sum /
-                  count
-
-                : 0;
-
-
-        /*
-         * CPP = proeminência do pico cepstral.
-         *
-         * A unidade interna é log-amplitude.
-         */
-
-        return Math.max(
-            0,
-            peak - mean
-        );
-    }
-
-
-    realInverseTransform(
-        realInput
-    ) {
-
-        const n =
-            realInput.length;
-
-
-        const real =
-            new Float64Array(
-                n
-            );
-
-
-        const imag =
-            new Float64Array(
-                n
-            );
-
-
-        for (
-            let i = 0;
-            i < n;
-            i++
-        ) {
-
-            real[i] =
-                realInput[i];
-        }
-
-
-        this.inverseFft(
-            real,
-            imag
-        );
-
-
-        return real;
-    }
-
-
-    inverseFft(
-        real,
-        imag
-    ) {
-
-        const n =
-            real.length;
-
-
-        for (
-            let i = 0;
-            i < n;
-            i++
-        ) {
-
-            imag[i] =
-                -imag[i];
-        }
-
-
-        this.fft(
-            real,
-            imag
-        );
-
-
-        for (
-            let i = 0;
-            i < n;
-            i++
-        ) {
-
-            real[i] /=
-                n;
-
-
-            imag[i] =
-                -imag[i] /
-                n;
-        }
-    }
-
-
-    analyzeTemporalBehavior(
+        analyzeTemporalBehavior(
         frames
     ) {
 
@@ -3021,18 +2427,11 @@ analyzeFrames(
         }
 
 
-        const totalEnergy =
-            frames.map(
-                frame =>
-                    this.sumBandEnergy(
-                        frame.bandEnergy
-                    )
-            );
+        const harshRatios =
+            [];
 
-
-        const harshRatios = [];
-
-        const sibilanceRatios = [];
+        const sibilanceRatios =
+            [];
 
         const rmsValues =
             frames.map(
@@ -3042,34 +2441,28 @@ analyzeFrames(
 
 
         for (
-            let i = 0;
-            i < frames.length;
-            i++
+            const frame of frames
         ) {
 
+            const bands =
+                frame.bandEnergy;
+
+
             const total =
-                totalEnergy[i] +
+                this.sumBandEnergy(
+                    bands
+                ) +
                 1e-12;
 
 
             const harsh =
-                frames[i]
-                    .bandEnergy
-                    .aggression +
-
-                frames[i]
-                    .bandEnergy
-                    .harshness;
+                bands.aggression +
+                bands.harshness;
 
 
             const sibilance =
-                frames[i]
-                    .bandEnergy
-                    .harshness +
-
-                frames[i]
-                    .bandEnergy
-                    .brilliance;
+                bands.harshness +
+                bands.brilliance;
 
 
             harshRatios.push(
@@ -3085,25 +2478,58 @@ analyzeFrames(
         }
 
 
+        const harshMedian =
+            this.median(
+                [
+                    ...harshRatios
+                ].sort(
+                    (
+                        a,
+                        b
+                    ) =>
+                        a - b
+                )
+            );
+
+
+        const sibilanceMedian =
+            this.median(
+                [
+                    ...sibilanceRatios
+                ].sort(
+                    (
+                        a,
+                        b
+                    ) =>
+                        a - b
+                )
+            );
+
+
+        let harshEvents =
+            0;
+
+        let sibilanceEvents =
+            0;
+
+        let transients =
+            0;
+
+
         const harshThreshold =
-            this.robustThreshold(
-                harshRatios,
-                0.75
+            Math.max(
+                0.08,
+                harshMedian *
+                1.35
             );
 
 
         const sibilanceThreshold =
-            this.robustThreshold(
-                sibilanceRatios,
-                0.82
+            Math.max(
+                0.12,
+                sibilanceMedian *
+                1.40
             );
-
-
-        let harshEvents = 0;
-
-        let sibilanceEvents = 0;
-
-        let transients = 0;
 
 
         for (
@@ -3167,7 +2593,7 @@ analyzeFrames(
                     this.robustMean(
                         harshRatios
                     ) *
-                    4,
+                    5,
                     0,
                     1
                 ),
@@ -3211,7 +2637,8 @@ analyzeFrames(
         bandEnergy
     ) {
 
-        let total = 0;
+        let total =
+            0;
 
 
         for (
@@ -3227,54 +2654,7 @@ analyzeFrames(
     }
 
 
-    robustThreshold(
-        values,
-        percentile
-    ) {
-
-        if (
-            values.length === 0
-        ) {
-
-            return 0;
-        }
-
-
-        const sorted =
-            [...values].sort(
-                (
-                    a,
-                    b
-                ) =>
-                    a - b
-            );
-
-
-        const median =
-            this.median(
-                sorted
-            );
-
-
-        const upper =
-            this.percentile(
-                sorted,
-                percentile
-            );
-
-
-        return Math.max(
-            median +
-            (
-                upper -
-                median
-            ) *
-            0.60,
-
-            1e-8
-        );
-    }
-        analyzeEnvironment(
+    analyzeEnvironment(
         frames
     ) {
 
@@ -3358,9 +2738,11 @@ analyzeFrames(
                 : 0;
 
 
-        let tailSum = 0;
+        let tailEnergy =
+            0;
 
-        let tailCount = 0;
+        let tailCount =
+            0;
 
 
         for (
@@ -3390,36 +2772,37 @@ analyzeFrames(
                 currentInactive
             ) {
 
-                tailSum +=
+                tailEnergy +=
                     rms[i] /
                     (
                         rms[i - 1] +
                         1e-12
                     );
 
-
                 tailCount++;
             }
         }
 
 
-        const tailEnergy =
+        if (
             tailCount > 0
+        ) {
 
-                ? this.clamp(
-                    tailSum /
+            tailEnergy =
+                this.clamp(
+                    tailEnergy /
                     tailCount,
                     0,
                     1
-                )
-
-                : 0;
+                );
+        }
 
 
         const roomEvidence =
             this.clamp(
                 residualEnergy *
                 0.55 +
+
                 tailEnergy *
                 0.45,
                 0,
@@ -3432,7 +2815,8 @@ analyzeFrames(
             activity,
 
             silenceRatio:
-                1 - activity,
+                1 -
+                activity,
 
             residualEnergy,
 
@@ -3450,8 +2834,7 @@ analyzeFrames(
     analyzeProcessingRisk(
         signal,
         dynamics,
-        spectrum,
-        harmonicity
+        spectrum
     ) {
 
         const clipping =
@@ -3488,28 +2871,30 @@ analyzeFrames(
             );
 
 
-        const periodicityAnomaly =
-            this.normalizeRange(
-                harmonicity.periodicity,
-                0,
-                0.20
-            );
-
-
         return {
 
             overall:
                 this.weightedScore([
 
-                    [clipping, 0.30],
+                    [
+                        clipping,
+                        0.40
+                    ],
 
-                    [compression, 0.25],
+                    [
+                        compression,
+                        0.30
+                    ],
 
-                    [lowCrest, 0.20],
+                    [
+                        lowCrest,
+                        0.20
+                    ],
 
-                    [flatness, 0.15],
-
-                    [periodicityAnomaly, 0.10]
+                    [
+                        flatness,
+                        0.10
+                    ]
                 ]),
 
             clipping,
@@ -3521,7 +2906,8 @@ analyzeFrames(
             spectral:
                 flatness,
 
-            periodicityAnomaly
+            periodicityAnomaly:
+                0
         };
     }
 
@@ -3542,8 +2928,6 @@ analyzeFrames(
 
             bands,
 
-            harmonicity,
-
             temporal,
 
             environment,
@@ -3563,7 +2947,7 @@ analyzeFrames(
                     bands.normalized
                         .harshness,
 
-                    0.30
+                    0.45
                 ],
 
                 [
@@ -3576,18 +2960,6 @@ analyzeFrames(
                 [
 
                     temporal.harshnessDensity,
-
-                    0.15
-                ],
-
-                [
-
-                    this.normalizeRange(
-                        spectrum.spectral
-                            .contrast,
-                        5,
-                        35
-                    ),
 
                     0.15
                 ]
@@ -3604,7 +2976,7 @@ analyzeFrames(
                     bands.normalized
                         .brilliance,
 
-                    0.30
+                    0.45
                 ],
 
                 [
@@ -3618,15 +2990,7 @@ analyzeFrames(
 
                     temporal.sibilanceDensity,
 
-                    0.25
-                ],
-
-                [
-
-                    1 -
-                    harmonicity.periodicity,
-
-                    0.10
+                    0.20
                 ]
             ]);
 
@@ -3635,7 +2999,7 @@ analyzeFrames(
             this.calculateFeatureConfidence(
                 signal,
                 temporal.frameCount,
-                temporal.harshnessScore
+                harshness
             );
 
 
@@ -3643,7 +3007,7 @@ analyzeFrames(
             this.calculateFeatureConfidence(
                 signal,
                 temporal.frameCount,
-                temporal.sibilanceScore
+                sibilance
             );
 
 
@@ -3688,16 +3052,13 @@ analyzeFrames(
         return {
 
             version:
-                "1.2.0",
-
+                "2.0.0",
 
             analyzer:
                 "SmoothVStudio VocalAnalyzer",
 
-
             analysisMode:
-                "offline-multiframe",
-
+                "offline-representative-frames",
 
             signal: {
 
@@ -3871,22 +3232,30 @@ analyzeFrames(
             },
 
 
+            /*
+             * Mantemos harmonicity por compatibilidade
+             * com consumidores futuros.
+             *
+             * As análises caras foram retiradas da
+             * primeira versão rápida.
+             */
+
             harmonicity: {
 
                 hnrDb:
-                    harmonicity.hnrDb,
+                    0,
 
                 cppDb:
-                    harmonicity.cppDb,
+                    0,
 
                 periodicity:
-                    harmonicity.periodicity,
+                    0,
 
                 voicedRatio:
-                    harmonicity.voicedRatio,
+                    0,
 
                 pitchEstimateHz:
-                    harmonicity.pitchEstimateHz
+                    0
             },
 
 
@@ -3978,7 +3347,9 @@ analyzeFrames(
             }
         };
     }
-        calculateFeatureConfidence(
+
+
+    calculateFeatureConfidence(
         signal,
         frameCount,
         evidence
@@ -3995,8 +3366,8 @@ analyzeFrames(
         const frames =
             this.normalizeRange(
                 frameCount,
-                20,
-                200
+                4,
+                32
             );
 
 
@@ -4072,8 +3443,8 @@ analyzeFrames(
         const frames =
             this.normalizeRange(
                 dynamics.frameCount,
-                20,
-                200
+                4,
+                32
             );
 
 
@@ -4178,7 +3549,12 @@ analyzeFrames(
         }
 
 
-        let sum = 0;
+        let sum =
+            0;
+
+
+        let count =
+            0;
 
 
         for (
@@ -4193,12 +3569,18 @@ analyzeFrames(
 
                 sum +=
                     value;
+
+                count++;
             }
         }
 
 
-        return sum /
-            values.length;
+        return count > 0
+
+            ? sum /
+              count
+
+            : 0;
     }
 
 
@@ -4299,14 +3681,18 @@ analyzeFrames(
 
 
         return (
-            sortedValues[lower] *
+            sortedValues[
+                lower
+            ] *
             (
                 1 -
                 weight
             )
         ) +
         (
-            sortedValues[upper] *
+            sortedValues[
+                upper
+            ] *
             weight
         );
     }
@@ -4317,6 +3703,7 @@ analyzeFrames(
     ) {
 
         if (
+            !values ||
             values.length === 0
         ) {
 
@@ -4330,7 +3717,8 @@ analyzeFrames(
             );
 
 
-        let sum = 0;
+        let sum =
+            0;
 
 
         for (
@@ -4357,9 +3745,11 @@ analyzeFrames(
         values
     ) {
 
-        let total = 0;
+        let total =
+            0;
 
-        let weight = 0;
+        let weight =
+            0;
 
 
         for (
@@ -4450,53 +3840,6 @@ analyzeFrames(
                     1e-12
                 )
             );
-    }
-
-
-    removeMean(
-        signal
-    ) {
-
-        const output =
-            new Float32Array(
-                signal.length
-            );
-
-
-        let mean = 0;
-
-
-        for (
-            let i = 0;
-            i < signal.length;
-            i++
-        ) {
-
-            mean +=
-                signal[i];
-        }
-
-
-        mean /=
-            Math.max(
-                1,
-                signal.length
-            );
-
-
-        for (
-            let i = 0;
-            i < signal.length;
-            i++
-        ) {
-
-            output[i] =
-                signal[i] -
-                mean;
-        }
-
-
-        return output;
     }
 
 
