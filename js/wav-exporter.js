@@ -1,320 +1,611 @@
-// ==========================================
-// SMOOTHVSTUDIO
-// WAV EXPORTER
-// V0.2
-// ==========================================
-//
-// Responsável exclusivamente pela criação
-// e validação básica dos arquivos WAV.
-//
-// O processamento DSP permanece no
-// AudioEngine.
-//
-// ==========================================
-
+"use strict";
 
 class WavExporter {
 
-
-    // ======================================
-    // VALIDAR AUDIOBUFFER
-    // ======================================
-
-    static validateAudioBuffer(
-        audioBuffer
-    ) {
-
-        if (
-            !audioBuffer
-        ) {
-
-            throw new Error(
-                "Nenhum áudio processado."
-            );
+    static validateAudioBuffer(audioBuffer) {
+        if (!audioBuffer) {
+            throw new Error("Nenhum áudio processado.");
         }
 
-
-        if (
-            !Number.isFinite(
-                audioBuffer.sampleRate
-            ) ||
-
-            audioBuffer.sampleRate <= 0
-        ) {
-
-            throw new Error(
-                "Sample rate inválido no áudio processado."
-            );
+        if (!Number.isFinite(audioBuffer.sampleRate) ||
+            audioBuffer.sampleRate <= 0) {
+            throw new Error("Sample rate inválido.");
         }
 
-
-        if (
-            !Number.isFinite(
-                audioBuffer.length
-            ) ||
-
-            audioBuffer.length <= 0
-        ) {
-
-            throw new Error(
-                "O áudio processado não possui amostras válidas."
-            );
+        if (!Number.isInteger(audioBuffer.numberOfChannels) ||
+            audioBuffer.numberOfChannels <= 0) {
+            throw new Error("Número de canais inválido.");
         }
 
-
-        if (
-            !Number.isFinite(
-                audioBuffer.duration
-            ) ||
-
-            audioBuffer.duration <= 0
-        ) {
-
-            throw new Error(
-                "A duração do áudio processado é inválida."
-            );
+        if (!Number.isInteger(audioBuffer.length) ||
+            audioBuffer.length <= 0) {
+            throw new Error("Áudio sem amostras válidas.");
         }
 
-
-        if (
-            !Number.isFinite(
-                audioBuffer.numberOfChannels
-            ) ||
-
-            audioBuffer.numberOfChannels <= 0
-        ) {
-
-            throw new Error(
-                "O áudio processado não possui canais válidos."
-            );
+        if (typeof audioBuffer.getChannelData !== "function") {
+            throw new Error("AudioBuffer inválido.");
         }
-
-
-        /*
-         * Verificação leve dos dados.
-         *
-         * Não percorremos todas as amostras.
-         * Isso evita custo desnecessário em
-         * aparelhos móveis.
-         *
-         * Verificamos pontos distribuídos
-         * pelo áudio para detectar valores
-         * NaN ou Infinity.
-         */
-
-        const channelsToCheck =
-            Math.min(
-                audioBuffer.numberOfChannels,
-                2
-            );
-
-
-        const pointsToCheck = [
-            0,
-            Math.floor(
-                audioBuffer.length * 0.25
-            ),
-            Math.floor(
-                audioBuffer.length * 0.5
-            ),
-            Math.floor(
-                audioBuffer.length * 0.75
-            ),
-            audioBuffer.length - 1
-        ];
-
 
         for (
             let channel = 0;
-            channel < channelsToCheck;
+            channel < audioBuffer.numberOfChannels;
             channel++
         ) {
+            const data = audioBuffer.getChannelData(channel);
 
-            const data =
-                audioBuffer.getChannelData(
-                    channel
-                );
-
-
-            for (
-                const index of pointsToCheck
-            ) {
-
-                const sample =
-                    data[index];
-
-
-                if (
-                    !Number.isFinite(
-                        sample
-                    )
-                ) {
-
-                    throw new Error(
-                        "O áudio processado contém amostras inválidas."
-                    );
-                }
+            if (!data || data.length !== audioBuffer.length) {
+                throw new Error("Dados de canal inválidos.");
             }
         }
 
-
         return true;
     }
 
 
-    // ======================================
-    // VALIDAR BLOB WAV
-    // ======================================
-
-    static validateBlob(
-        blob
-    ) {
-
-        if (
-            !blob
-        ) {
-
-            throw new Error(
-                "O WAV não foi gerado."
-            );
+    static clampSample(sample) {
+        if (!Number.isFinite(sample)) {
+            return 0;
         }
 
-
-        if (
-            !(blob instanceof Blob)
-        ) {
-
-            throw new Error(
-                "O resultado da exportação não é um Blob válido."
-            );
+        if (sample > 1) {
+            return 1;
         }
 
-
-        /*
-         * Um WAV PCM possui pelo menos
-         * um cabeçalho RIFF/WAVE.
-         *
-         * 44 bytes é o tamanho mínimo
-         * esperado para um WAV PCM simples.
-         */
-
-        if (
-            !Number.isFinite(
-                blob.size
-            ) ||
-
-            blob.size < 44
-        ) {
-
-            throw new Error(
-                "O WAV gerado possui tamanho inválido."
-            );
+        if (sample < -1) {
+            return -1;
         }
 
-
-        /*
-         * O MIME pode variar dependendo
-         * do navegador, portanto não
-         * rejeitamos um Blob sem MIME.
-         *
-         * Porém, se existir, deve ser WAV.
-         */
-
-        if (
-            blob.type &&
-
-            blob.type !==
-            "audio/wav" &&
-
-            blob.type !==
-            "audio/x-wav"
-        ) {
-
-            throw new Error(
-                "O WAV gerado possui um tipo MIME inesperado."
-            );
-        }
-
-
-        return true;
+        return sample;
     }
 
 
-    // ======================================
-    // CRIAR BLOB WAV
-    // ======================================
+    static floatTo24Bit(sample) {
+        const clamped =
+            WavExporter.clampSample(sample);
 
-    static createBlob(
-        audioBuffer
-    ) {
+        let value;
 
-        // ==============================
-        // VALIDAR ORIGEM
-        // ==============================
+        if (clamped < 0) {
+            value = Math.round(
+                clamped * 8388608
+            );
+        } else {
+            value = Math.round(
+                clamped * 8388607
+            );
+        }
 
+        if (value > 8388607) {
+            value = 8388607;
+        }
+
+        if (value < -8388608) {
+            value = -8388608;
+        }
+
+        return value;
+    }
+
+
+    static writeUint16(view, offset, value) {
+        view.setUint16(
+            offset,
+            value,
+            true
+        );
+    }
+
+
+    static writeUint32(view, offset, value) {
+        view.setUint32(
+            offset,
+            value,
+            true
+        );
+    }
+        static writeString(view, offset, text) {
+        for (
+            let index = 0;
+            index < text.length;
+            index++
+        ) {
+            view.setUint8(
+                offset + index,
+                text.charCodeAt(index)
+            );
+        }
+    }
+
+
+    static writeInt24(view, offset, value) {
+        let unsignedValue;
+
+        if (value < 0) {
+            unsignedValue =
+                value + 16777216;
+        } else {
+            unsignedValue =
+                value;
+        }
+
+        view.setUint8(
+            offset,
+            unsignedValue & 0xff
+        );
+
+        view.setUint8(
+            offset + 1,
+            (unsignedValue >> 8) & 0xff
+        );
+
+        view.setUint8(
+            offset + 2,
+            (unsignedValue >> 16) & 0xff
+        );
+    }
+
+
+    static calculateWavSize(audioBuffer) {
+        const bytesPerSample = 3;
+
+        const blockAlign =
+            audioBuffer.numberOfChannels *
+            bytesPerSample;
+
+        const dataSize =
+            audioBuffer.length *
+            blockAlign;
+
+        const headerSize = 44;
+
+        return {
+            bytesPerSample,
+            blockAlign,
+            dataSize,
+            totalSize:
+                headerSize +
+                dataSize
+        };
+    }
+
+
+    static createBlob(audioBuffer) {
         WavExporter.validateAudioBuffer(
             audioBuffer
         );
 
-
-        // ==============================
-        // GERAR WAV
-        // ==============================
-
-        const blob =
-            AudioEngine.bufferToWav(
+        const sizes =
+            WavExporter.calculateWavSize(
                 audioBuffer
             );
 
+        const arrayBuffer =
+            new ArrayBuffer(
+                sizes.totalSize
+            );
 
-        // ==============================
-        // VALIDAR RESULTADO
-        // ==============================
+        const view =
+            new DataView(
+                arrayBuffer
+            );
+
+        WavExporter.writeString(
+            view,
+            0,
+            "RIFF"
+        );
+
+        WavExporter.writeUint32(
+            view,
+            4,
+            sizes.totalSize - 8
+        );
+
+        WavExporter.writeString(
+            view,
+            8,
+            "WAVE"
+        );
+
+        WavExporter.writeString(
+            view,
+            12,
+            "fmt "
+        );
+
+        WavExporter.writeUint32(
+            view,
+            16,
+            16
+        );
+
+        WavExporter.writeUint16(
+            view,
+            20,
+            1
+        );
+
+        WavExporter.writeUint16(
+            view,
+            22,
+            audioBuffer.numberOfChannels
+        );
+                WavExporter.writeUint32(
+            view,
+            24,
+            audioBuffer.sampleRate
+        );
+
+        const byteRate =
+            audioBuffer.sampleRate *
+            sizes.blockAlign;
+
+        WavExporter.writeUint32(
+            view,
+            28,
+            byteRate
+        );
+
+        WavExporter.writeUint16(
+            view,
+            32,
+            sizes.blockAlign
+        );
+
+        WavExporter.writeUint16(
+            view,
+            34,
+            24
+        );
+
+        WavExporter.writeString(
+            view,
+            36,
+            "data"
+        );
+
+        WavExporter.writeUint32(
+            view,
+            40,
+            sizes.dataSize
+        );
+
+        let offset = 44;
+
+        const channelData = [];
+
+        for (
+            let channel = 0;
+            channel < audioBuffer.numberOfChannels;
+            channel++
+        ) {
+            channelData[channel] =
+                audioBuffer.getChannelData(
+                    channel
+                );
+        }
+
+        for (
+            let sampleIndex = 0;
+            sampleIndex < audioBuffer.length;
+            sampleIndex++
+        ) {
+            for (
+                let channel = 0;
+                channel < audioBuffer.numberOfChannels;
+                channel++
+            ) {
+                const sample =
+                    channelData[channel][
+                        sampleIndex
+                    ];
+
+                const pcmValue =
+                    WavExporter.floatTo24Bit(
+                        sample
+                    );
+
+                WavExporter.writeInt24(
+                    view,
+                    offset,
+                    pcmValue
+                );
+
+                offset += 3;
+            }
+        }
+
+        const blob =
+            new Blob(
+                [arrayBuffer],
+                {
+                    type: "audio/wav"
+                }
+            );
 
         WavExporter.validateBlob(
             blob
         );
 
-
         return blob;
     }
 
 
-    // ======================================
-    // CRIAR OBJETO FILE
-    // ======================================
-
     static createFile(
         audioBuffer,
-        fileName =
-            "smoothvstudio-vocal.wav"
+        fileName = "smoothvstudio-vocal.wav"
     ) {
-
         const blob =
             WavExporter.createBlob(
                 audioBuffer
             );
 
-
         return new File(
-            [
-                blob
-            ],
+            [blob],
             fileName,
             {
-                type:
-                    "audio/wav"
+                type: "audio/wav"
+            }
+        );
+    }
+        static validateBlob(blob) {
+        if (!blob) {
+            throw new Error(
+                "O WAV não foi gerado."
+            );
+        }
+        
+        if (!(blob instanceof Blob)) {
+            throw new Error(
+                "Resultado WAV inválido."
+            );
+        }
+        
+        if (blob.size < 44) {
+            throw new Error(
+                "Tamanho WAV inválido."
+            );
+        }
+        
+        return true;
+    }
+    
+    
+    static async validateWavBlob(blob) {
+        WavExporter.validateBlob(blob);
+        
+        const header =
+            await blob
+            .slice(0, 44)
+            .arrayBuffer();
+        
+        const view =
+            new DataView(header);
+        
+        const riff =
+            String.fromCharCode(
+                view.getUint8(0),
+                view.getUint8(1),
+                view.getUint8(2),
+                view.getUint8(3)
+            );
+        
+        const wave =
+            String.fromCharCode(
+                view.getUint8(8),
+                view.getUint8(9),
+                view.getUint8(10),
+                view.getUint8(11)
+            );
+        
+        const audioFormat =
+            view.getUint16(
+                20,
+                true
+            );
+        
+        const bitsPerSample =
+            view.getUint16(
+                34,
+                true
+            );
+        
+        const dataTag =
+            String.fromCharCode(
+                view.getUint8(36),
+                view.getUint8(37),
+                view.getUint8(38),
+                view.getUint8(39)
+            );
+        
+        if (riff !== "RIFF") {
+            throw new Error(
+                "Cabeçalho RIFF inválido."
+            );
+        }
+        
+        if (wave !== "WAVE") {
+            throw new Error(
+                "Cabeçalho WAVE inválido."
+            );
+        }
+        
+        if (audioFormat !== 1) {
+            throw new Error(
+                "O WAV não está em PCM."
+            );
+        }
+        
+        if (bitsPerSample !== 24) {
+            throw new Error(
+                "O WAV não está em 24-bit."
+            );
+        }
+        
+        if (dataTag !== "data") {
+            throw new Error(
+                "Chunk data inválido."
+            );
+        }
+        
+        return true;
+    }
+    
+    
+    static async createValidatedBlob(
+        audioBuffer
+    ) {
+        const blob =
+            WavExporter.createBlob(
+                audioBuffer
+            );
+        
+        await WavExporter.validateWavBlob(
+            blob
+        );
+        
+        return blob;
+    }
+        static async createValidatedFile(
+        audioBuffer,
+        fileName = "smoothvstudio-vocal.wav"
+    ) {
+        const blob =
+            await WavExporter.createValidatedBlob(
+                audioBuffer
+            );
+
+        return new File(
+            [blob],
+            fileName,
+            {
+                type: "audio/wav"
             }
         );
     }
 
 
-}
+    static getWavInfo(audioBuffer) {
+        WavExporter.validateAudioBuffer(
+            audioBuffer
+        );
+
+        const sizes =
+            WavExporter.calculateWavSize(
+                audioBuffer
+            );
+
+        return {
+            format: "PCM",
+            bitDepth: 24,
+            sampleRate:
+                audioBuffer.sampleRate,
+            numberOfChannels:
+                audioBuffer.numberOfChannels,
+            numberOfSamples:
+                audioBuffer.length,
+            duration:
+                audioBuffer.duration,
+            bytesPerSample:
+                sizes.bytesPerSample,
+            blockAlign:
+                sizes.blockAlign,
+            byteRate:
+                audioBuffer.sampleRate *
+                sizes.blockAlign,
+            dataSize:
+                sizes.dataSize,
+            totalSize:
+                sizes.totalSize
+        };
+    }
 
 
-// ==========================================
-// DISPONIBILIZAR GLOBALMENTE
-// ==========================================
+    static validateStructure(
+        audioBuffer
+    ) {
+        WavExporter.validateAudioBuffer(
+            audioBuffer
+        );
 
-window.WavExporter =
-    WavExporter;
+        const sizes =
+            WavExporter.calculateWavSize(
+                audioBuffer
+            );
+
+        if (sizes.bytesPerSample !== 3) {
+            throw new Error(
+                "Profundidade PCM inválida."
+            );
+        }
+
+        if (
+            sizes.blockAlign !==
+            audioBuffer.numberOfChannels * 3
+        ) {
+            throw new Error(
+                "Block align inválido."
+            );
+        }
+
+        if (
+            sizes.dataSize !==
+            audioBuffer.length *
+            audioBuffer.numberOfChannels *
+            3
+        ) {
+            throw new Error(
+                "Tamanho dos dados inválido."
+            );
+        }
+
+        return true;
+    }
+
+
+    static getExtension() {
+        return ".wav";
+    }
+
+
+    static getMimeType() {
+        return "audio/wav";
+    }
+        static getBitDepth() {
+        return 24;
+    }
+    
+    
+    static getFormat() {
+        return "PCM";
+    }
+    
+    
+    static getFormatDescription() {
+        return "WAV PCM 24-bit";
+    }
+    
+    
+    static supportsFile() {
+        return (
+            typeof File ===
+            "function"
+        );
+    }
+    
+    
+    static supportsBlob() {
+        return (
+            typeof Blob ===
+            "function"
+        );
+    }
+    }
+    
+    
+    // ==========================================================
+    // DISPONIBILIZAÇÃO GLOBAL
+    // ==========================================================
+    
+    window.WavExporter =
+        WavExporter;
