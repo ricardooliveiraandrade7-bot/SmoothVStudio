@@ -1,41 +1,9 @@
-// ==========================================================
-// PARTE 1/8
-// SMOOTHVSTUDIO
-// APP CONTROLLER
-// ==========================================================
-//
-// Responsabilidade:
-//
-// - controlar a interface;
-// - receber o arquivo escolhido;
-// - solicitar a decodificação ao AudioEngine;
-// - solicitar o processamento;
-// - atualizar os players;
-// - controlar bypass e reprocessamento;
-// - solicitar a exportação;
-// - solicitar compartilhamento.
-//
-// O processamento de áudio não pertence a este arquivo.
-// A criação do WAV não pertence a este arquivo.
-// A entrega do arquivo não pertence a este arquivo.
-//
-// ==========================================================
-
-
 "use strict";
 
-
-// ==========================================================
-// MOTOR
-// ==========================================================
 
 const audioEngine =
     new AudioEngine();
 
-
-// ==========================================================
-// ELEMENTOS DA INTERFACE
-// ==========================================================
 
 const audioFile =
     document.getElementById(
@@ -118,10 +86,6 @@ const processedDuration =
     );
 
 
-// ==========================================================
-// ESTADO DA INTERFACE
-// ==========================================================
-
 let originalURL =
     null;
 
@@ -147,24 +111,20 @@ let processing =
     false;
 
 
-// ==========================================================
-// FORMATAÇÃO DE TEMPO
-// ==========================================================
-
 function formatTime(
     seconds
 ) {
-
+    
     if (
         !Number.isFinite(
             seconds
         )
     ) {
-
+        
         return "00:00";
     }
-
-
+    
+    
     const totalSeconds =
         Math.max(
             0,
@@ -172,31 +132,31 @@ function formatTime(
                 seconds
             )
         );
-
-
+    
+    
     const minutes =
         Math.floor(
             totalSeconds / 60
         );
-
-
+    
+    
     const remainingSeconds =
         totalSeconds % 60;
-
-
+    
+    
     return (
         String(minutes)
-            .padStart(
-                2,
-                "0"
-            )
-
+        .padStart(
+            2,
+            "0"
+        )
+        
         +
-
+        
         ":"
-
+        
         +
-
+        
         String(
             remainingSeconds
         ).padStart(
@@ -207,148 +167,126 @@ function formatTime(
 }
 
 
-// ==========================================================
-// LIBERAR URL ORIGINAL
-// ==========================================================
-
 function releaseOriginalURL() {
-
+    
     if (
         !originalURL
     ) {
-
+        
         return;
     }
-
-
+    
+    
     try {
-
+        
         URL.revokeObjectURL(
             originalURL
         );
-
+        
     } catch (_) {}
-
-
+    
+    
     originalURL =
         null;
 }
 
 
-// ==========================================================
-// LIBERAR URL PROCESSADA
-// ==========================================================
-
 function releaseProcessedURL() {
-
+    
     if (
         !processedURL
     ) {
-
+        
         return;
     }
-
-
+    
+    
     try {
-
+        
         URL.revokeObjectURL(
             processedURL
         );
-
+        
     } catch (_) {}
-
-
+    
+    
     processedURL =
         null;
 }
 
 
-// ==========================================================
-// LIMPAR RESULTADO
-// ==========================================================
-
 function clearProcessedOutput() {
-
+    
     releaseProcessedURL();
-
-
+    
+    
     currentWavBlob =
         null;
-
+    
     currentWavFile =
         null;
-
+    
     currentOutputName =
         null;
-
+    
     bypassActive =
         false;
-
-
+    
+    
     processedPlayer.pause();
-
+    
     processedPlayer.removeAttribute(
         "src"
     );
-
+    
     processedPlayer.load();
-
-
+    
+    
     processedSection.classList.add(
         "hidden"
     );
-
-
+    
+    
     downloadButton.disabled =
         true;
-
-
+    
+    
     shareButton.classList.add(
         "hidden"
     );
-
-
+    
+    
     bypassButton.textContent =
         "Bypass: Original";
-
-
+    
+    
     downloadStatus.textContent =
         "";
 }
 
 
-// ==========================================================
-// NOME DO ARQUIVO DE SAÍDA
-// ==========================================================
-
 function createOutputName() {
-
+    
     if (
         !currentFile ||
         !currentFile.name
     ) {
-
+        
         return "smoothvstudio-vocal.wav";
     }
-
-
+    
+    
     const name =
         currentFile.name.replace(
             /\.[^/.]+$/,
             ""
         );
-
-
+    
+    
     return (
         `${name}-smoothvstudio.wav`
     );
 }
-
-
-// ==========================================================
-// ATUALIZAR DURAÇÃO DO PLAYER ORIGINAL
-// ==========================================================
-
 function updateOriginalDuration() {
 
     originalDuration.textContent =
@@ -358,10 +296,6 @@ function updateOriginalDuration() {
 }
 
 
-// ==========================================================
-// ATUALIZAR DURAÇÃO DO PLAYER PROCESSADO
-// ==========================================================
-
 function updateProcessedDuration() {
 
     processedDuration.textContent =
@@ -369,15 +303,7 @@ function updateProcessedDuration() {
             processedPlayer.duration
         );
 }
-// ==========================================================
-// PARTE 2/8
-// CONTROLE DOS PLAYERS
-// ==========================================================
 
-
-// ==========================================================
-// TEMPO ATUAL — ORIGINAL
-// ==========================================================
 
 originalPlayer.addEventListener(
     "timeupdate",
@@ -391,19 +317,11 @@ originalPlayer.addEventListener(
 );
 
 
-// ==========================================================
-// DURAÇÃO — ORIGINAL
-// ==========================================================
-
 originalPlayer.addEventListener(
     "loadedmetadata",
     updateOriginalDuration
 );
 
-
-// ==========================================================
-// TEMPO ATUAL — PROCESSADO
-// ==========================================================
 
 processedPlayer.addEventListener(
     "timeupdate",
@@ -417,19 +335,11 @@ processedPlayer.addEventListener(
 );
 
 
-// ==========================================================
-// DURAÇÃO — PROCESSADO
-// ==========================================================
-
 processedPlayer.addEventListener(
     "loadedmetadata",
     updateProcessedDuration
 );
 
-
-// ==========================================================
-// RESETAR TEMPOS
-// ==========================================================
 
 function resetPlayerTimes() {
 
@@ -446,10 +356,6 @@ function resetPlayerTimes() {
         "00:00";
 }
 
-
-// ==========================================================
-// ATUALIZAR PLAYER ORIGINAL
-// ==========================================================
 
 function loadOriginalPlayer(
     file
@@ -474,10 +380,6 @@ function loadOriginalPlayer(
 }
 
 
-// ==========================================================
-// ATUALIZAR PLAYER PROCESSADO
-// ==========================================================
-
 function loadProcessedPlayer(
     blob
 ) {
@@ -497,10 +399,6 @@ function loadProcessedPlayer(
     processedPlayer.load();
 }
 
-
-// ==========================================================
-// OBTER FILE DO WAV
-// ==========================================================
 
 function getCurrentWavFile() {
 
@@ -545,10 +443,6 @@ function getCurrentWavFile() {
     return currentWavFile;
 }
 
-
-// ==========================================================
-// ATUALIZAR DISPONIBILIDADE DE COMPARTILHAMENTO
-// ==========================================================
 
 function updateShareAvailability() {
 
@@ -612,10 +506,6 @@ function updateShareAvailability() {
 }
 
 
-// ==========================================================
-// ESTADO INICIAL
-// ==========================================================
-
 function initializeInterface() {
 
     processButton.disabled =
@@ -650,21 +540,7 @@ function initializeInterface() {
 }
 
 
-// ==========================================================
-// INICIALIZAÇÃO
-// ==========================================================
-
 initializeInterface();
-// ==========================================================
-// PARTE 3/8
-// SELEÇÃO E CARREGAMENTO DO ÁUDIO
-// ==========================================================
-
-
-// ==========================================================
-// SELEÇÃO DO ARQUIVO
-// ==========================================================
-
 audioFile.addEventListener(
     "change",
     async event => {
@@ -748,6 +624,7 @@ audioFile.addEventListener(
             currentFile =
                 null;
             
+            
             currentOutputName =
                 null;
             
@@ -783,10 +660,6 @@ audioFile.addEventListener(
     }
 );
 
-
-// ==========================================================
-// PROCESSAMENTO
-// ==========================================================
 
 async function processAudio() {
     
@@ -841,14 +714,6 @@ async function processAudio() {
     
     try {
         
-        /*
-         * O AudioEngine é responsável por
-         * executar o processamento.
-         *
-         * O app não conhece nem implementa
-         * o tratamento de áudio.
-         */
-        
         const processedBuffer =
             await audioEngine.process();
         
@@ -862,12 +727,6 @@ async function processAudio() {
             );
         }
         
-        
-        /*
-         * O WavExporter é responsável
-         * exclusivamente pela criação
-         * e validação do WAV.
-         */
         
         currentWavBlob =
             WavExporter.createBlob(
@@ -949,16 +808,6 @@ async function processAudio() {
     processing =
         false;
 }
-// ==========================================================
-// PARTE 4/8
-// PROCESSAMENTO E REPROCESSAMENTO
-// ==========================================================
-
-
-// ==========================================================
-// BOTÃO PROCESSAR
-// ==========================================================
-
 processButton.addEventListener(
     "click",
     async () => {
@@ -967,10 +816,6 @@ processButton.addEventListener(
     }
 );
 
-
-// ==========================================================
-// BOTÃO REPROCESSAR
-// ==========================================================
 
 reprocessButton.addEventListener(
     "click",
@@ -991,10 +836,6 @@ reprocessButton.addEventListener(
     }
 );
 
-
-// ==========================================================
-// BYPASS
-// ==========================================================
 
 bypassButton.addEventListener(
     "click",
@@ -1034,13 +875,6 @@ bypassButton.addEventListener(
         }
         
         
-        /*
-         * O bypass não altera o áudio.
-         *
-         * Ele apenas alterna o player
-         * entre o resultado e o original.
-         */
-        
         processedPlayer.pause();
         
         
@@ -1065,10 +899,6 @@ bypassButton.addEventListener(
 );
 
 
-// ==========================================================
-// RESTAURAR RESULTADO APÓS BYPASS
-// ==========================================================
-
 processedPlayer.addEventListener(
     "ended",
     () => {
@@ -1082,49 +912,6 @@ processedPlayer.addEventListener(
     }
 );
 
-
-// ==========================================================
-// GARANTIR QUE O PLAYER PROCESSADO
-// VOLTE PARA O RESULTADO QUANDO
-// O USUÁRIO DESATIVAR O BYPASS
-// ==========================================================
-
-function restoreProcessedPlayer() {
-    
-    if (
-        !processedURL
-    ) {
-        
-        return;
-    }
-    
-    
-    processedPlayer.pause();
-    
-    
-    processedPlayer.src =
-        processedURL;
-    
-    
-    processedPlayer.load();
-    
-    
-    bypassActive =
-        false;
-    
-    
-    bypassButton.textContent =
-        "Bypass: Original";
-}
-// ==========================================================
-// PARTE 5/8
-// EXPORTAÇÃO
-// ==========================================================
-
-
-// ==========================================================
-// EXPORTAR WAV
-// ==========================================================
 
 downloadButton.addEventListener(
     "click",
@@ -1160,7 +947,7 @@ downloadButton.addEventListener(
             
             
             downloadStatus.textContent =
-                "Preparando WAV...";
+                "Preparando WAV.";
             
             
             const result =
@@ -1176,40 +963,18 @@ downloadButton.addEventListener(
                 result.success
             ) {
                 
-                switch (
-                    result.method
+                if (
+                    result.method ===
+                    "share"
                 ) {
                     
-                    case "file-system-access":
-                        
-                        downloadStatus.textContent =
-                            "WAV salvo com sucesso.";
-                        
-                        break;
-                        
-                        
-                    case "anchor-download":
-                        
-                        downloadStatus.textContent =
-                            "Download solicitado.";
-                        
-                        break;
-                        
-                        
-                    case "blob-navigation":
-                        
-                        downloadStatus.textContent =
-                            "O WAV foi aberto pelo navegador.";
-                        
-                        break;
-                        
-                        
-                    default:
-                        
-                        downloadStatus.textContent =
-                            "Exportação iniciada.";
-                        
-                        break;
+                    downloadStatus.textContent =
+                        "Compartilhamento iniciado.";
+                    
+                } else {
+                    
+                    downloadStatus.textContent =
+                        "Download solicitado.";
                 }
                 
                 
@@ -1250,124 +1015,110 @@ downloadButton.addEventListener(
         }
     }
 );
-
-
-// ==========================================================
-// COMPARTILHAR WAV
-// ==========================================================
-
 shareButton.addEventListener(
     "click",
     async () => {
-        
+
         if (
             !currentWavBlob
         ) {
-            
+
             downloadStatus.textContent =
                 "Nenhum WAV processado disponível.";
-            
+
             return;
         }
-        
-        
+
+
         if (
             typeof FileDownloader ===
             "undefined"
         ) {
-            
+
             downloadStatus.textContent =
                 "Módulo de compartilhamento não carregado.";
-            
+
             return;
         }
-        
-        
+
+
         if (
             typeof FileDownloader.shareFile !==
             "function"
         ) {
-            
+
             downloadStatus.textContent =
                 "Compartilhamento não disponível.";
-            
+
             return;
         }
-        
-        
+
+
         const file =
             getCurrentWavFile();
-        
-        
+
+
         if (
             !file
         ) {
-            
+
             downloadStatus.textContent =
                 "Não foi possível preparar o WAV.";
-            
+
             return;
         }
-        
-        
+
+
         try {
-            
+
             shareButton.disabled =
                 true;
-            
-            
+
+
             downloadStatus.textContent =
                 "Abrindo compartilhamento...";
-            
-            
+
+
             await FileDownloader.shareFile(
                 file
             );
-            
-            
+
+
             downloadStatus.textContent =
                 "Compartilhamento concluído.";
-            
-            
+
+
         } catch (error) {
-            
+
             console.error(
                 "SmoothVStudio: erro no compartilhamento.",
                 error
             );
-            
-            
+
+
             if (
                 error &&
                 error.name ===
                 "AbortError"
             ) {
-                
+
                 downloadStatus.textContent =
                     "Compartilhamento cancelado.";
-                
+
             } else {
-                
+
                 downloadStatus.textContent =
                     "Não foi possível compartilhar o WAV.";
             }
-            
+
         } finally {
-            
+
             shareButton.disabled =
                 false;
         }
     }
 );
-// ==========================================================
-// PARTE 6/8
-// LIMPEZA E NOVO ARQUIVO
-// ==========================================================
 
-
-// ==========================================================
-// LIMPAR ESTADO COMPLETO
-// ==========================================================
 
 function resetApplicationState() {
 
@@ -1422,65 +1173,6 @@ function resetApplicationState() {
 }
 
 
-// ==========================================================
-// LIMPAR RESULTADO QUANDO UM NOVO
-// ARQUIVO FOR ESCOLHIDO
-// ==========================================================
-//
-// A função já é utilizada no evento
-// change do input.
-//
-// Mantemos uma função separada para
-// que o ciclo de vida permaneça claro.
-// ==========================================================
-
-function prepareForNewFile() {
-
-    clearProcessedOutput();
-
-    releaseOriginalURL();
-
-    resetPlayerTimes();
-}
-
-
-// ==========================================================
-// EVITAR RESULTADO ANTIGO
-// ==========================================================
-//
-// O arquivo atualmente carregado
-// sempre representa a origem.
-//
-// O resultado anterior nunca deve
-// ser reutilizado como nova origem.
-// ==========================================================
-
-function ensureOriginalSource() {
-
-    if (
-        !audioEngine.originalBuffer
-    ) {
-
-        throw new Error(
-            "Áudio original indisponível."
-        );
-    }
-
-
-    return (
-        audioEngine.originalBuffer
-    );
-}
-
-
-// ==========================================================
-// EXPOSIÇÃO MÍNIMA DE ESTADO
-// ==========================================================
-//
-// Útil para diagnóstico futuro sem
-// expor objetos internos desnecessários.
-// ==========================================================
-
 function getApplicationState() {
 
     return {
@@ -1509,10 +1201,6 @@ function getApplicationState() {
 }
 
 
-// ==========================================================
-// DISPONIBILIZAR DIAGNÓSTICO
-// ==========================================================
-
 window.SmoothVStudioApp =
     {
 
@@ -1520,17 +1208,7 @@ window.SmoothVStudioApp =
             getApplicationState
 
     };
-    // ==========================================================
-// PARTE 7/8
-// SEGURANÇA DE CICLO DE VIDA
-// ==========================================================
-
-
-// ==========================================================
-// LIMPEZA AO SAIR DA PÁGINA
-// ==========================================================
-
-window.addEventListener(
+    window.addEventListener(
     "pagehide",
     () => {
         
@@ -1540,10 +1218,6 @@ window.addEventListener(
     }
 );
 
-
-// ==========================================================
-// LIMPEZA ANTES DE DESCARREGAR
-// ==========================================================
 
 window.addEventListener(
     "beforeunload",
@@ -1556,25 +1230,13 @@ window.addEventListener(
 );
 
 
-// ==========================================================
-// PROTEÇÃO CONTRA ARQUIVO INVÁLIDO
-// ==========================================================
-
 audioFile.addEventListener(
     "cancel",
     () => {
         
-        /*
-         * Cancelar o seletor não altera
-         * o áudio atualmente carregado.
-         */
     }
 );
 
-
-// ==========================================================
-// VERIFICAÇÃO BÁSICA DOS ELEMENTOS
-// ==========================================================
 
 const requiredElements = [
     
@@ -1616,10 +1278,6 @@ for (
 }
 
 
-// ==========================================================
-// VERIFICAÇÃO DOS MÓDULOS
-// ==========================================================
-
 if (
     typeof AudioEngine ===
     "undefined"
@@ -1644,74 +1302,5 @@ if (
 }
 
 
-// ==========================================================
-// FIM DA INICIALIZAÇÃO
-// ==========================================================
-
 processingStatus.textContent =
     "Aguardando áudio.";
-    // ==========================================================
-// PARTE 8/8
-// NOTAS DE ARQUITETURA
-// ==========================================================
-//
-// Este arquivo deliberadamente NÃO contém:
-//
-// - Analyzer;
-// - Sibilance;
-// - Harshness;
-// - Dynamics;
-// - Tone;
-// - Body;
-// - Saturation;
-// - Decision Pipeline;
-// - Treatment Plan;
-// - bridges de DSP;
-// - presets;
-// - inteligência;
-// - machine learning.
-//
-// O controlador somente coordena a interface
-// e chama os módulos responsáveis.
-//
-// Responsabilidades:
-//
-// AudioEngine
-//     ↓
-// áudio / processamento
-//
-// WavExporter
-//     ↓
-// criação e validação WAV
-//
-// ExportManager
-//     ↓
-// coordenação da exportação
-//
-// FileDownloader
-//     ↓
-// download / compartilhamento
-//
-// app.js
-//     ↓
-// interface e fluxo
-//
-// ==========================================================
-//
-// O reprocessamento sempre solicita ao
-// AudioEngine uma nova execução a partir
-// do áudio original.
-//
-// Nenhum resultado processado é utilizado
-// como nova origem.
-//
-// ==========================================================
-//
-// O bypass pertence à apresentação:
-//
-// ele alterna o que o usuário escuta
-// entre o original e o resultado.
-//
-// Ele não altera o processamento.
-//
-// ==========================================================
