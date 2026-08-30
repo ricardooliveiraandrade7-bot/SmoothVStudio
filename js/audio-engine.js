@@ -16,6 +16,12 @@ class AudioEngine {
         
         this.sampleRate =
             44100;
+            
+        this.analyzer =
+    new VocalAnalyzer();
+
+this.vocalProfile =
+    null;
     }
     
     
@@ -129,13 +135,22 @@ class AudioEngine {
         this.sampleRate =
             audioBuffer.sampleRate;
         
-        
+        this.vocalProfile =
+    null;
+    
+    
         return audioBuffer;
     }
         getOriginalBuffer() {
 
         return this.originalBuffer;
     }
+
+
+getVocalProfile() {
+    
+    return this.vocalProfile;
+}
 
 
     getProcessedBuffer() {
@@ -155,6 +170,12 @@ class AudioEngine {
             );
         }
 
+
+this.vocalProfile =
+    this.analyzer.analyze(
+        this.originalBuffer
+    );
+    
 
         const processed =
             this.cloneAudioBuffer(
@@ -251,8 +272,8 @@ class AudioEngine {
         this.originalBuffer =
             null;
 
-        this.processedBuffer =
-            null;
+        this.vocalProfile =
+    null;
     }
 
 
@@ -263,6 +284,9 @@ class AudioEngine {
 
         this.processedBuffer =
             null;
+            
+            this.vocalProfile =
+    null;
 
         this.sampleRate =
             44100;
