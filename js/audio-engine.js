@@ -1,246 +1,150 @@
-// ==========================================================
-// PARTE 1/6
-// SMOOTHVSTUDIO
-// AUDIO ENGINE
-// ==========================================================
-//
-// Responsabilidade:
-//
-// - criar o AudioContext;
-// - decodificar arquivos de áudio;
-// - manter o áudio original;
-// - executar o processamento neutro;
-// - manter o resultado processado.
-//
-// Este arquivo NÃO contém:
-//
-// - Analyzer;
-// - inteligência;
-// - machine learning;
-// - DSP;
-// - presets;
-// - Vocal Smoother;
-// - tratamento de voz;
-// - exportação WAV;
-// - download;
-// - compartilhamento.
-//
-// ==========================================================
-
-
 "use strict";
 
 
-// ==========================================================
-// AUDIO ENGINE
-// ==========================================================
-
 class AudioEngine {
-
-
-    // ======================================================
-    // CONSTRUTOR
-    // ======================================================
-
+    
     constructor() {
-
+        
         this.audioContext =
             null;
-
-
+        
         this.originalBuffer =
             null;
-
-
+        
         this.processedBuffer =
             null;
-
-
+        
         this.sampleRate =
             44100;
     }
-
-
-    // ======================================================
-    // CRIAR AUDIO CONTEXT
-    // ======================================================
-
+    
+    
     createContext() {
-
+        
         if (
             this.audioContext
         ) {
-
+            
             return this.audioContext;
         }
-
-
+        
+        
         const AudioContextClass =
             window.AudioContext ||
             window.webkitAudioContext;
-
-
+        
+        
         if (
             !AudioContextClass
         ) {
-
+            
             throw new Error(
                 "Web Audio API não disponível."
             );
         }
-
-
+        
+        
         this.audioContext =
             new AudioContextClass();
-
-
+        
+        
         return this.audioContext;
     }
-
-
-    // ======================================================
-    // GARANTIR QUE O CONTEXTO ESTEJA ATIVO
-    // ======================================================
-
+    
+    
     async resumeContext() {
-
+        
         const context =
             this.createContext();
-
-
+        
+        
         if (
             context.state ===
             "suspended"
         ) {
-
+            
             await context.resume();
         }
-
-
+        
+        
         return context;
     }
-
-
-    // ======================================================
-    // DECODIFICAR ARQUIVO
-    // ======================================================
-
+    
+    
     async decodeFile(
         file
     ) {
-
+        
         if (
             !file
         ) {
-
+            
             throw new Error(
                 "Nenhum arquivo foi selecionado."
             );
         }
-
-
+        
+        
         const context =
             await this.resumeContext();
-
-
+        
+        
         const arrayBuffer =
             await file.arrayBuffer();
-
-
+        
+        
         if (
             !arrayBuffer ||
             arrayBuffer.byteLength === 0
         ) {
-
+            
             throw new Error(
                 "O arquivo de áudio está vazio."
             );
         }
-
-
+        
+        
         const audioBuffer =
             await context.decodeAudioData(
                 arrayBuffer
             );
-
-
+        
+        
         if (
             !audioBuffer
         ) {
-
+            
             throw new Error(
                 "Não foi possível decodificar o áudio."
             );
         }
-
-
+        
+        
         this.originalBuffer =
             audioBuffer;
-
-
+        
         this.processedBuffer =
             null;
-
-
+        
         this.sampleRate =
             audioBuffer.sampleRate;
-
-
+        
+        
         return audioBuffer;
     }
-
-
-    // ======================================================
-    // OBTER ÁUDIO ORIGINAL
-    // ======================================================
-
-    getOriginalBuffer() {
+        getOriginalBuffer() {
 
         return this.originalBuffer;
     }
 
 
-    // ======================================================
-    // OBTER ÁUDIO PROCESSADO
-    // ======================================================
-
     getProcessedBuffer() {
 
         return this.processedBuffer;
     }
-}
-
-// ==========================================================
-// PARTE 2/6
-// PROCESSAMENTO NEUTRO
-// ==========================================================
 
 
-// ==========================================================
-// PROCESSAR
-// ==========================================================
-//
-// Nesta fase o processamento é propositalmente neutro.
-//
-// Nenhuma alteração de:
-//
-// - volume;
-// - equalização;
-// - dinâmica;
-// - frequência;
-// - harmônicos;
-// - sibilância;
-// - aspereza;
-// - tonalidade;
-//
-// é aplicada.
-//
-// O método cria uma cópia independente do áudio original.
-//
-// ==========================================================
-
-AudioEngine.prototype.process =
-    async function() {
+    async process() {
 
         if (
             !this.originalBuffer
@@ -252,13 +156,9 @@ AudioEngine.prototype.process =
         }
 
 
-        const original =
-            this.originalBuffer;
-
-
         const processed =
             this.cloneAudioBuffer(
-                original
+                this.originalBuffer
             );
 
 
@@ -267,22 +167,10 @@ AudioEngine.prototype.process =
 
 
         return processed;
-    };
+    }
 
 
-// ==========================================================
-// CLONAR AUDIOBUFFER
-// ==========================================================
-//
-// A cópia é criada em um novo AudioBuffer.
-//
-// Isso é importante porque o resultado não deve apontar
-// para os mesmos arrays de dados do áudio original.
-//
-// ==========================================================
-
-AudioEngine.prototype.cloneAudioBuffer =
-    function(
+    cloneAudioBuffer(
         source
     ) {
 
@@ -310,7 +198,8 @@ AudioEngine.prototype.cloneAudioBuffer =
 
         for (
             let channel = 0;
-            channel < source.numberOfChannels;
+            channel <
+            source.numberOfChannels;
             channel++
         ) {
 
@@ -333,46 +222,54 @@ AudioEngine.prototype.cloneAudioBuffer =
 
 
         return clone;
-    };
+    }
 
 
-// ==========================================================
-// VERIFICAR SE EXISTE ÁUDIO ORIGINAL
-// ==========================================================
-
-AudioEngine.prototype.hasOriginal =
-    function() {
+    hasOriginal() {
 
         return Boolean(
             this.originalBuffer
         );
-    };
+    }
 
 
-// ==========================================================
-// VERIFICAR SE EXISTE RESULTADO
-// ==========================================================
-
-AudioEngine.prototype.hasProcessed =
-    function() {
+    hasProcessed() {
 
         return Boolean(
             this.processedBuffer
         );
-    };
+    }
+        clearProcessed() {
 
-// ==========================================================
-// PARTE 3/6
-// ESTADO E INFORMAÇÕES DO ÁUDIO
-// ==========================================================
+        this.processedBuffer =
+            null;
+    }
 
 
-// ==========================================================
-// OBTER SAMPLE RATE
-// ==========================================================
+    clearOriginal() {
 
-AudioEngine.prototype.getSampleRate =
-    function() {
+        this.originalBuffer =
+            null;
+
+        this.processedBuffer =
+            null;
+    }
+
+
+    reset() {
+
+        this.originalBuffer =
+            null;
+
+        this.processedBuffer =
+            null;
+
+        this.sampleRate =
+            44100;
+    }
+
+
+    getSampleRate() {
 
         if (
             this.originalBuffer
@@ -385,15 +282,10 @@ AudioEngine.prototype.getSampleRate =
 
 
         return this.sampleRate;
-    };
+    }
 
 
-// ==========================================================
-// OBTER NÚMERO DE CANAIS
-// ==========================================================
-
-AudioEngine.prototype.getNumberOfChannels =
-    function() {
+    getNumberOfChannels() {
 
         if (
             !this.originalBuffer
@@ -406,15 +298,10 @@ AudioEngine.prototype.getNumberOfChannels =
         return (
             this.originalBuffer.numberOfChannels
         );
-    };
+    }
 
 
-// ==========================================================
-// OBTER NÚMERO DE AMOSTRAS
-// ==========================================================
-
-AudioEngine.prototype.getLength =
-    function() {
+    getLength() {
 
         if (
             !this.originalBuffer
@@ -427,15 +314,10 @@ AudioEngine.prototype.getLength =
         return (
             this.originalBuffer.length
         );
-    };
+    }
 
 
-// ==========================================================
-// OBTER DURAÇÃO
-// ==========================================================
-
-AudioEngine.prototype.getDuration =
-    function() {
+    getDuration() {
 
         if (
             !this.originalBuffer
@@ -448,15 +330,10 @@ AudioEngine.prototype.getDuration =
         return (
             this.originalBuffer.duration
         );
-    };
+    }
 
 
-// ==========================================================
-// OBTER INFORMAÇÕES
-// ==========================================================
-
-AudioEngine.prototype.getAudioInfo =
-    function() {
+    getAudioInfo() {
 
         if (
             !this.originalBuffer
@@ -480,232 +357,132 @@ AudioEngine.prototype.getAudioInfo =
             duration:
                 this.originalBuffer.duration
         };
-    };
-
-
-// ==========================================================
-// LIMPAR RESULTADO
-// ==========================================================
-
-AudioEngine.prototype.clearProcessed =
-    function() {
-
-        this.processedBuffer =
-            null;
-    };
-
-
-// ==========================================================
-// LIMPAR ÁUDIO ORIGINAL
-// ==========================================================
-
-AudioEngine.prototype.clearOriginal =
-    function() {
-
-        this.originalBuffer =
-            null;
-
-        this.processedBuffer =
-            null;
-    };
-
-
-// ==========================================================
-// LIMPAR ESTADO COMPLETO
-// ==========================================================
-
-AudioEngine.prototype.reset =
-    function() {
-
-        this.originalBuffer =
-            null;
-
-        this.processedBuffer =
-            null;
-
-        this.sampleRate =
-            44100;
-    };
-
-// ==========================================================
-// PARTE 4/6
-// VALIDAÇÃO
-// ==========================================================
-
-
-// ==========================================================
-// VALIDAR BUFFER
-// ==========================================================
-
-AudioEngine.prototype.validateBuffer =
-    function(
+    }
+        validateBuffer(
         buffer
     ) {
-
+        
         if (
             !buffer
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             typeof buffer.numberOfChannels !==
             "number"
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             typeof buffer.length !==
             "number"
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             typeof buffer.sampleRate !==
             "number"
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             buffer.numberOfChannels <= 0
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             buffer.length <= 0
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             buffer.sampleRate <= 0
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         return true;
-    };
-
-
-// ==========================================================
-// VALIDAR ÁUDIO ORIGINAL
-// ==========================================================
-
-AudioEngine.prototype.validateOriginal =
-    function() {
-
+    }
+    
+    
+    validateOriginal() {
+        
         return this.validateBuffer(
             this.originalBuffer
         );
-    };
-
-
-// ==========================================================
-// VALIDAR ÁUDIO PROCESSADO
-// ==========================================================
-
-AudioEngine.prototype.validateProcessed =
-    function() {
-
+    }
+    
+    
+    validateProcessed() {
+        
         return this.validateBuffer(
             this.processedBuffer
         );
-    };
-
-
-// ==========================================================
-// COMPARAR ESTRUTURA
-// ==========================================================
-//
-// Verifica se original e processado possuem a mesma estrutura.
-//
-// Nesta fase, como o processamento é neutro, eles devem ter:
-//
-// - mesmo sample rate;
-// - mesmo número de canais;
-// - mesmo número de amostras.
-//
-// ==========================================================
-
-AudioEngine.prototype.hasSameStructure =
-    function(
+    }
+    
+    
+    hasSameStructure(
         original,
         processed
     ) {
-
+        
         if (
             !this.validateBuffer(
                 original
             )
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         if (
             !this.validateBuffer(
                 processed
             )
         ) {
-
+            
             return false;
         }
-
-
+        
+        
         return (
-
+            
             original.sampleRate ===
             processed.sampleRate
-
+            
             &&
-
+            
             original.numberOfChannels ===
             processed.numberOfChannels
-
+            
             &&
-
+            
             original.length ===
             processed.length
         );
-    };
-
-// ==========================================================
-// PARTE 5/6
-// CONTROLE DO RESULTADO
-// ==========================================================
-
-
-// ==========================================================
-// DEFINIR RESULTADO PROCESSADO
-// ==========================================================
-//
-// Mantido como método separado para que futuras etapas
-// possam inserir um processamento real sem alterar a
-// interface pública do motor.
-//
-// ==========================================================
-
-AudioEngine.prototype.setProcessedBuffer =
-    function(
+    }
+        setProcessedBuffer(
         buffer
     ) {
 
@@ -726,15 +503,10 @@ AudioEngine.prototype.setProcessedBuffer =
 
 
         return this.processedBuffer;
-    };
+    }
 
 
-// ==========================================================
-// RETORNAR RESULTADO
-// ==========================================================
-
-AudioEngine.prototype.getOutputBuffer =
-    function() {
+    getOutputBuffer() {
 
         if (
             !this.processedBuffer
@@ -745,41 +517,26 @@ AudioEngine.prototype.getOutputBuffer =
 
 
         return this.processedBuffer;
-    };
+    }
 
 
-// ==========================================================
-// VERIFICAR PRONTO PARA PROCESSAR
-// ==========================================================
-
-AudioEngine.prototype.isReady =
-    function() {
+    isReady() {
 
         return (
             this.validateOriginal()
         );
-    };
+    }
 
 
-// ==========================================================
-// VERIFICAR PRONTO PARA EXPORTAR
-// ==========================================================
-
-AudioEngine.prototype.isReadyForExport =
-    function() {
+    isReadyForExport() {
 
         return (
             this.validateProcessed()
         );
-    };
+    }
 
 
-// ==========================================================
-// ESTADO DO MOTOR
-// ==========================================================
-
-AudioEngine.prototype.getState =
-    function() {
+    getState() {
 
         return {
 
@@ -801,49 +558,9 @@ AudioEngine.prototype.getState =
             duration:
                 this.getDuration()
         };
-    };
+    }
+}
 
-// ==========================================================
-// PARTE 6/6
-// DISPONIBILIZAÇÃO GLOBAL
-// ==========================================================
-
-
-// ==========================================================
-// EXPOR AUDIO ENGINE
-// ==========================================================
-//
-// O app.js utiliza:
-//
-//     new AudioEngine()
-//
-// Portanto a classe precisa estar disponível no escopo
-// global da aplicação.
-//
-// ==========================================================
 
 window.AudioEngine =
     AudioEngine;
-
-
-// ==========================================================
-// FIM DO AUDIO ENGINE
-// ==========================================================
-//
-// A cadeia atual fica:
-//
-// Arquivo
-//    ↓
-// decodeFile()
-//    ↓
-// originalBuffer
-//    ↓
-// process()
-//    ↓
-// cópia neutra
-//    ↓
-// processedBuffer
-//
-// Nenhum DSP é executado.
-//
-// ==========================================================
