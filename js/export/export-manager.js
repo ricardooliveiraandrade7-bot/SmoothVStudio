@@ -4,10 +4,6 @@
 class ExportManager {
 
 
-    // ======================================================
-    // VALIDAR ENTRADA
-    // ======================================================
-
     static validateExport(
         blob,
         fileName
@@ -57,23 +53,17 @@ class ExportManager {
         }
 
 
-        const normalizedName =
-            ExportManager.normalizeFileName(
-                fileName
-            );
-
-
         return {
+
             blob,
+
             fileName:
-                normalizedName
+                ExportManager.normalizeFileName(
+                    fileName
+                )
         };
     }
 
-
-    // ======================================================
-    // NORMALIZAR NOME
-    // ======================================================
 
     static normalizeFileName(
         fileName
@@ -121,37 +111,17 @@ class ExportManager {
     }
 
 
-    // ======================================================
-    // VERIFICAR DISPONIBILIDADE
-    // ======================================================
-
     static canExport() {
 
-        if (
-            typeof FileDownloader ===
-            "undefined"
-        ) {
+        return (
+            typeof FileDownloader !==
+            "undefined" &&
 
-            return false;
-        }
-
-
-        if (
-            typeof FileDownloader.deliver !==
+            typeof FileDownloader.deliver ===
             "function"
-        ) {
-
-            return false;
-        }
-
-
-        return true;
+        );
     }
 
-
-    // ======================================================
-    // CRIAR ARQUIVO
-    // ======================================================
 
     static createFile(
         blob,
@@ -188,17 +158,7 @@ class ExportManager {
             }
         );
     }
-        // ======================================================
-    // EXPORTAR WAV
-    // ======================================================
-    //
-    // Recebe o Blob já criado pelo WavExporter.
-    //
-    // O ExportManager não cria o WAV.
-    // Apenas coordena sua entrega.
-    // ======================================================
-
-    static async exportWav(
+        static async exportWav(
         blob,
         fileName
     ) {
@@ -277,7 +237,6 @@ class ExportManager {
                     validated.blob.size
             };
 
-
         } catch (
             error
         ) {
@@ -292,14 +251,6 @@ class ExportManager {
         }
     }
 
-
-    // ======================================================
-    // COMPARTILHAR WAV
-    // ======================================================
-    //
-    // Mantido aqui como ponto de coordenação futura.
-    // A operação real continua no FileDownloader.
-    // ======================================================
 
     static async shareWav(
         blob,
@@ -362,16 +313,7 @@ class ExportManager {
                 validated.fileName
         };
     }
-        // ======================================================
-    // VALIDAR WAV
-    // ======================================================
-    //
-    // Esta função valida somente a presença do arquivo.
-    //
-    // A validação estrutural do WAV pertence ao WavExporter.
-    // ======================================================
-
-    static validateWav(
+        static validateWav(
         blob
     ) {
 
@@ -382,18 +324,9 @@ class ExportManager {
             "function"
         ) {
 
-            try {
-
-                WavExporter.validateBlob(
-                    blob
-                );
-
-            } catch (
-                error
-            ) {
-
-                throw error;
-            }
+            WavExporter.validateBlob(
+                blob
+            );
         }
 
 
@@ -406,10 +339,6 @@ class ExportManager {
         return true;
     }
 
-
-    // ======================================================
-    // INFORMAÇÕES DA EXPORTAÇÃO
-    // ======================================================
 
     static getExportInfo(
         blob,
@@ -455,23 +384,19 @@ class ExportManager {
 
             try {
 
-                const wavInfo =
-                    WavExporter.getWavInfo(
-                        blob
-                    );
-
-
                 return {
 
                     ...info,
 
                     wav:
-                        wavInfo
+                        WavExporter.getWavInfo(
+                            blob
+                        )
                 };
 
             } catch (_) {
 
-                // Mantém as informações básicas.
+                return info;
             }
         }
 
@@ -479,10 +404,6 @@ class ExportManager {
         return info;
     }
 
-
-    // ======================================================
-    // CRIAR NOME A PARTIR DO ORIGINAL
-    // ======================================================
 
     static createOutputName(
         originalFileName
@@ -526,81 +447,7 @@ class ExportManager {
             "-smoothvstudio.wav"
         );
     }
-        // ======================================================
-    // RESULTADO PADRÃO DE FALHA
-    // ======================================================
-
-    static createFailureResult(
-        error,
-        method = "failed"
-    ) {
-
-        const normalizedError =
-            error instanceof Error
-                ? error
-                : new Error(
-                    String(
-                        error ||
-                        "Falha na exportação."
-                    )
-                );
-
-
-        return {
-
-            success:
-                false,
-
-            method:
-                method,
-
-            error:
-                normalizedError
-        };
-    }
-
-
-    // ======================================================
-    // RESULTADO PADRÃO DE SUCESSO
-    // ======================================================
-
-    static createSuccessResult(
-        method,
-        fileName,
-        blob
-    ) {
-
-        return {
-
-            success:
-                true,
-
-            method:
-                method,
-
-            fileName:
-                fileName,
-
-            size:
-                blob &&
-                Number.isFinite(
-                    blob.size
-                )
-                    ? blob.size
-                    : 0
-        };
-    }
-
-
-    // ======================================================
-    // EXPORTAÇÃO SEGURA
-    // ======================================================
-    //
-    // Variante que não lança erro de exportação para
-    // a camada da interface.
-    // ======================================================
-
-    static async tryExportWav(
+        static async tryExportWav(
         blob,
         fileName
     ) {
@@ -622,16 +469,31 @@ class ExportManager {
             );
 
 
-            return ExportManager.createFailureResult(
-                error
-            );
+            const normalizedError =
+                error instanceof Error
+                    ? error
+                    : new Error(
+                        String(
+                            error ||
+                            "Falha na exportação."
+                        )
+                    );
+
+
+            return {
+
+                success:
+                    false,
+
+                method:
+                    "failed",
+
+                error:
+                    normalizedError
+            };
         }
     }
 
-
-    // ======================================================
-    // VERIFICAR COMPARTILHAMENTO
-    // ======================================================
 
     static canShare(
         blob,
@@ -674,9 +536,7 @@ class ExportManager {
             return false;
         }
     }
-        // ======================================================
-    // PREPARAR EXPORTAÇÃO
-    // ======================================================
+
 
     static prepare(
         blob,
@@ -705,167 +565,8 @@ class ExportManager {
                 )
         };
     }
+}
 
 
-    // ======================================================
-    // OBTER TAMANHO
-    // ======================================================
-
-    static getSize(
-        blob
-    ) {
-
-        if (
-            !blob ||
-            !Number.isFinite(
-                blob.size
-            )
-        ) {
-
-            return 0;
-        }
-
-
-        return blob.size;
-    }
-
-
-    // ======================================================
-    // OBTER TAMANHO EM MB
-    // ======================================================
-
-    static getSizeMB(
-        blob
-    ) {
-
-        const size =
-            ExportManager.getSize(
-                blob
-            );
-
-
-        return Number(
-            (
-                size /
-                1024 /
-                1024
-            ).toFixed(2)
-        );
-    }
-
-
-    // ======================================================
-    // OBTER TIPO
-    // ======================================================
-
-    static getMimeType(
-        blob
-    ) {
-
-        if (
-            blob &&
-            typeof blob.type ===
-            "string" &&
-            blob.type
-        ) {
-
-            return blob.type;
-        }
-
-
-        return "audio/wav";
-    }
-
-
-    // ======================================================
-    // VERIFICAR DISPONIBILIDADE COMPLETA
-    // ======================================================
-
-    static getCapabilities() {
-
-        const downloader =
-            typeof FileDownloader !==
-            "undefined";
-
-
-        return {
-
-            export:
-                downloader &&
-                typeof FileDownloader.deliver ===
-                "function",
-
-            download:
-                downloader &&
-                typeof FileDownloader.download ===
-                "function",
-
-            share:
-                downloader &&
-                typeof FileDownloader.shareFile ===
-                "function",
-
-            shareFile:
-                downloader &&
-                typeof FileDownloader.canShareFile ===
-                "function"
-        };
-    }
-        // ======================================================
-    // EXPORTAÇÃO COM ARQUIVO
-    // ======================================================
-    //
-    // Mantém uma entrada simples para futuras chamadas
-    // que já possuam um File.
-    // ======================================================
-    
-    static async exportFile(
-        file
-    ) {
-        
-        if (
-            !file
-        ) {
-            
-            return ExportManager.createFailureResult(
-                new Error(
-                    "Nenhum arquivo foi fornecido."
-                )
-            );
-        }
-        
-        
-        const fileName =
-            ExportManager.normalizeFileName(
-                file.name
-            );
-        
-        
-        return ExportManager.exportWav(
-            file,
-            fileName
-        );
-    }
-    
-    
-    // ======================================================
-    // LIMPEZA
-    // ======================================================
-    //
-    // O ExportManager não mantém Object URLs.
-    // Portanto, não há recursos próprios para liberar.
-    // ======================================================
-    
-    static cleanup() {
-        
-        return true;
-    }
-    }
-    
-    
-    // ==========================================================
-    // DISPONIBILIZAÇÃO GLOBAL
-    // ==========================================================
-    
-    window.ExportManager =
-        ExportManager;
+window.ExportManager =
+    ExportManager;
