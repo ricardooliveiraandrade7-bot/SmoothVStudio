@@ -19,6 +19,9 @@ class AudioEngine {
             
         this.analyzer =
     new VocalAnalyzer();
+    
+    this.vocalSoftener =
+    new VocalSoftener();
 
 this.vocalProfile =
     null;
@@ -175,16 +178,22 @@ this.vocalProfile =
     this.analyzer.analyze(
         this.originalBuffer
     );
-    
-
-        const processed =
-            this.cloneAudioBuffer(
-                this.originalBuffer
-            );
 
 
-        this.processedBuffer =
-            processed;
+const processed =
+    this.cloneAudioBuffer(
+        this.originalBuffer
+    );
+
+
+this.vocalSoftener.process(
+    processed,
+    this.vocalProfile
+);
+
+
+this.processedBuffer =
+    processed;
 
 
         return processed;

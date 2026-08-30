@@ -325,6 +325,46 @@ originalPlayer.addEventListener(
 );
 
 
+originalPlayer.addEventListener(
+    "error",
+    () => {
+        const mediaError =
+            originalPlayer.error;
+
+        console.error(
+            "SmoothVStudio: erro no player original.",
+            {
+                code:
+                    mediaError
+                    ? mediaError.code
+                    : null,
+                message:
+                    mediaError
+                    ? mediaError.message
+                    : null,
+                src:
+                    originalPlayer.currentSrc,
+                file:
+                    currentFile
+                    ? currentFile.name
+                    : null,
+                type:
+                    currentFile
+                    ? currentFile.type
+                    : null,
+                size:
+                    currentFile
+                    ? currentFile.size
+                    : null
+            }
+        );
+
+        processingStatus.textContent =
+            "O player original não conseguiu carregar este áudio.";
+    }
+);
+
+
 processedPlayer.addEventListener(
     "timeupdate",
     () => {
