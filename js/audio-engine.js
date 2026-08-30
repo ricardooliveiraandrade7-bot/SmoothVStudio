@@ -268,13 +268,16 @@ this.vocalProfile =
 
 
     clearOriginal() {
-
-        this.originalBuffer =
-            null;
-
-        this.vocalProfile =
-    null;
-    }
+    
+    this.originalBuffer =
+        null;
+    
+    this.processedBuffer =
+        null;
+    
+    this.vocalProfile =
+        null;
+}
 
 
     reset() {
