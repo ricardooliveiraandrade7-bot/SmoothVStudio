@@ -250,6 +250,8 @@ function clearProcessedOutput() {
     downloadButton.disabled =
         true;
     
+    bypassButton.disabled =
+    true;
     
     shareButton.classList.add(
         "hidden"
@@ -765,6 +767,8 @@ async function processAudio() {
         reprocessButton.disabled =
             false;
         
+        bypassButton.disabled =
+    false;
         
         bypassActive =
             false;
@@ -1208,99 +1212,4 @@ window.SmoothVStudioApp =
             getApplicationState
 
     };
-    window.addEventListener(
-    "pagehide",
-    () => {
-        
-        releaseOriginalURL();
-        
-        releaseProcessedURL();
-    }
-);
-
-
-window.addEventListener(
-    "beforeunload",
-    () => {
-        
-        releaseOriginalURL();
-        
-        releaseProcessedURL();
-    }
-);
-
-
-audioFile.addEventListener(
-    "cancel",
-    () => {
-        
-    }
-);
-
-
-const requiredElements = [
     
-    audioFile,
-    fileName,
-    originalPlayer,
-    processedPlayer,
-    processButton,
-    processingStatus,
-    processedSection,
-    bypassButton,
-    reprocessButton,
-    downloadButton,
-    shareButton,
-    downloadStatus,
-    originalCurrent,
-    originalDuration,
-    processedCurrent,
-    processedDuration
-    
-];
-
-
-for (
-    const element of
-        requiredElements
-) {
-    
-    if (
-        !element
-    ) {
-        
-        console.error(
-            "SmoothVStudio: elemento da interface não encontrado."
-        );
-        
-        break;
-    }
-}
-
-
-if (
-    typeof AudioEngine ===
-    "undefined"
-) {
-    
-    processButton.disabled =
-        true;
-    
-    
-    processingStatus.textContent =
-        "Motor de áudio indisponível.";
-}
-
-
-if (
-    typeof WavExporter ===
-    "undefined"
-) {
-    
-    downloadButton.disabled =
-        true;
-}
-
-
-processingStatus.textContent =
-    "Aguardando áudio.";
