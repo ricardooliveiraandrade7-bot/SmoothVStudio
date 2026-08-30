@@ -336,6 +336,18 @@ processedPlayer.addEventListener(
     }
 );
 
+processedPlayer.addEventListener(
+    "play",
+    () => {
+        
+        if (
+            !originalPlayer.paused
+        ) {
+            
+            originalPlayer.pause();
+        }
+    }
+);
 
 processedPlayer.addEventListener(
     "loadedmetadata",
@@ -843,62 +855,117 @@ reprocessButton.addEventListener(
 
 bypassButton.addEventListener(
     "click",
-    () => {
-        
+    async () => {
+
         if (
             !currentWavBlob
         ) {
-            
+
             return;
         }
-        
-        
+
+
+        const currentTime =
+            processedPlayer.currentTime;
+
+        const wasPlaying =
+            !processedPlayer.paused &&
+            !processedPlayer.ended;
+
+
+        processedPlayer.pause();
+
+
         if (
             bypassActive
         ) {
-            
-            processedPlayer.pause();
-            
-            
+
             processedPlayer.src =
                 processedURL;
-            
-            
+
             processedPlayer.load();
-            
-            
+
+
             bypassActive =
                 false;
-            
-            
+
             bypassButton.textContent =
                 "Bypass: Original";
-            
-            
-            return;
+
+        } else {
+
+            if (
+                originalURL
+            ) {
+
+                processedPlayer.src =
+                    originalURL;
+
+                processedPlayer.load();
+            }
+
+
+            bypassActive =
+                true;
+
+            bypassButton.textContent =
+                "Bypass: Processado";
         }
-        
-        
-        processedPlayer.pause();
-        
-        
+
+
+        const restorePlayback =
+            () => {
+
+                try {
+
+                    processedPlayer.currentTime =
+                        currentTime;
+
+                } catch (_) {}
+
+
+                if (
+                    wasPlaying
+                ) {
+
+                    const playPromise =
+                        processedPlayer.play();
+
+                    if (
+                        playPromise &&
+                        typeof playPromise.catch ===
+                        "function"
+                    ) {
+
+                        playPromise.catch(
+                            error => {
+                                console.warn(
+                                    "SmoothVStudio: reprodução após Bypass não pôde ser retomada.",
+                                    error
+                                );
+                            }
+                        );
+                    }
+                }
+            };
+
+
         if (
-            originalURL
+            processedPlayer.readyState >= 1
         ) {
-            
-            processedPlayer.src =
-                originalURL;
-            
-            processedPlayer.load();
+
+            restorePlayback();
+
+        } else {
+
+            processedPlayer.addEventListener(
+                "loadedmetadata",
+                restorePlayback,
+                {
+                    once: true
+                }
+            );
         }
-        
-        
-        bypassActive =
-            true;
-        
-        
-        bypassButton.textContent =
-            "Bypass: Processado";
     }
 );
 
