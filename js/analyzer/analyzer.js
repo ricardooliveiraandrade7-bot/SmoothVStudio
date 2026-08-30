@@ -381,93 +381,148 @@ class VocalAnalyzer {
     }
 
 
-    analyzeFrames(
-        signal,
-        sampleRate
+analyzeFrames(
+    signal,
+    sampleRate
+) {
+
+    const frameSize =
+        this.options.frameSize;
+
+
+    const hopSize =
+        this.options.hopSize;
+
+
+    const frames = [];
+
+
+    if (
+        signal.length === 0
     ) {
 
-        const frameSize =
-            this.options.frameSize;
+        return frames;
+    }
 
 
-        const hopSize =
-            this.options.hopSize;
+    let frameIndex = 0;
 
 
-        const frames = [];
+    /*
+     * Áudio menor que um frame:
+     * cria um único frame preenchido
+     * com zeros apenas no restante.
+     */
 
+    if (
+        signal.length <
+        frameSize
+    ) {
 
-        if (
-            signal.length === 0
-        ) {
-
-            return frames;
-        }
-
-
-        if (
-            signal.length <
-            frameSize
-        ) {
-
-            const frame =
-                new Float32Array(
-                    frameSize
-                );
-
-
-            frame.set(
-                signal
+        const frame =
+            new Float32Array(
+                frameSize
             );
 
 
-            frames.push(
-                this.analyzeFrame(
-                    frame,
-                    sampleRate,
-                    0
-                )
-            );
+        frame.set(
+            signal
+        );
 
 
-            return frames;
-        }
-
-
-        let frameIndex = 0;
-
-
-        for (
-            let start = 0;
-
-            start + frameSize <=
-            signal.length;
-
-            start += hopSize
-        ) {
-
-            const frame =
-                signal.slice(
-                    start,
-                    start + frameSize
-                );
-
-
-            frames.push(
-                this.analyzeFrame(
-                    frame,
-                    sampleRate,
-                    frameIndex
-                )
-            );
-
-
-            frameIndex++;
-        }
+        frames.push(
+            this.analyzeFrame(
+                frame,
+                sampleRate,
+                frameIndex
+            )
+        );
 
 
         return frames;
     }
+
+
+    /*
+     * Primeiro processamos todos os
+     * frames completos.
+     */
+
+    let start = 0;
+
+
+    for (
+        ;
+        start + frameSize <=
+        signal.length;
+        start += hopSize
+    ) {
+
+        const frame =
+            signal.slice(
+                start,
+                start + frameSize
+            );
+
+
+        frames.push(
+            this.analyzeFrame(
+                frame,
+                sampleRate,
+                frameIndex
+            )
+        );
+
+
+        frameIndex++;
+    }
+
+
+    /*
+     * Se ainda restaram amostras depois
+     * do último frame completo, elas também
+     * precisam entrar na análise.
+     *
+     * O restante do frame é preenchido com
+     * zeros para manter o tamanho exigido
+     * pela FFT.
+     */
+
+    if (
+        start < signal.length
+    ) {
+
+        const frame =
+            new Float32Array(
+                frameSize
+            );
+
+
+        const remaining =
+            signal.length -
+            start;
+
+
+        frame.set(
+            signal.slice(
+                start,
+                signal.length
+            )
+        );
+
+
+        frames.push(
+            this.analyzeFrame(
+                frame,
+                sampleRate,
+                frameIndex
+            )
+        );
+    }
+
+
+    return frames;
+}
 
 
     analyzeFrame(
