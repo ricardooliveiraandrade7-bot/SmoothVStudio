@@ -4,24 +4,12 @@
 class FileDownloader {
     
     
-    // ======================================================
-    // VALIDAR ARQUIVO
-    // ======================================================
-    
     static validateFile(
         file
     ) {
         
-        if (!file) {
-            
-            throw new Error(
-                "Nenhum arquivo foi fornecido."
-            );
-        }
-        
-        
         if (
-            typeof file !== "object"
+            !file
         ) {
             
             throw new Error(
@@ -31,7 +19,30 @@ class FileDownloader {
         
         
         if (
-            typeof file.size === "number" &&
+            typeof Blob ===
+            "undefined"
+        ) {
+            
+            throw new Error(
+                "A API Blob não está disponível neste ambiente."
+            );
+        }
+        
+        
+        if (
+            !(file instanceof Blob)
+        ) {
+            
+            throw new Error(
+                "O objeto fornecido não é um arquivo ou Blob válido."
+            );
+        }
+        
+        
+        if (
+            !Number.isFinite(
+                file.size
+            ) ||
             file.size <= 0
         ) {
             
@@ -45,10 +56,6 @@ class FileDownloader {
     }
     
     
-    // ======================================================
-    // CRIAR BLOB URL
-    // ======================================================
-    
     static createBlobURL(
         file
     ) {
@@ -61,7 +68,6 @@ class FileDownloader {
         if (
             typeof URL ===
             "undefined" ||
-            
             typeof URL.createObjectURL !==
             "function"
         ) {
@@ -78,10 +84,6 @@ class FileDownloader {
     }
     
     
-    // ======================================================
-    // LIBERAR BLOB URL
-    // ======================================================
-    
     static revokeBlobURL(
         url
     ) {
@@ -97,7 +99,6 @@ class FileDownloader {
         if (
             typeof URL ===
             "undefined" ||
-            
             typeof URL.revokeObjectURL !==
             "function"
         ) {
@@ -106,15 +107,15 @@ class FileDownloader {
         }
         
         
-        URL.revokeObjectURL(
-            url
-        );
+        try {
+            
+            URL.revokeObjectURL(
+                url
+            );
+            
+        } catch (_) {}
     }
     
-    
-    // ======================================================
-    // VALIDAR NOME
-    // ======================================================
     
     static normalizeFileName(
         fileName,
@@ -145,11 +146,7 @@ class FileDownloader {
         
         return normalized;
     }
-        // ======================================================
-    // DOWNLOAD POR ANCHOR
-    // ======================================================
-
-    static downloadWithAnchor(
+        static downloadWithAnchor(
         file,
         fileName
     ) {
@@ -222,10 +219,6 @@ class FileDownloader {
     }
 
 
-    // ======================================================
-    // VERIFICAR SHARE API
-    // ======================================================
-
     static canShareFile(
         file
     ) {
@@ -269,24 +262,18 @@ class FileDownloader {
 
             return navigator.canShare(
                 {
-                    files: [file]
+                    files: [
+                        file
+                    ]
                 }
             );
 
-        } catch (
-            error
-        ) {
+        } catch (_) {
 
             return false;
         }
     }
-
-
-    // ======================================================
-    // COMPARTILHAR ARQUIVO
-    // ======================================================
-
-    static async shareFile(
+        static async shareFile(
         file,
         fileName
     ) {
@@ -308,15 +295,43 @@ class FileDownloader {
 
         const normalizedName =
             FileDownloader.normalizeFileName(
-                fileName
+                fileName ||
+                file.name
             );
+
+
+        let shareFile =
+            file;
+
+
+        if (
+            !(file instanceof File) ||
+            file.name !==
+            normalizedName
+        ) {
+
+            shareFile =
+                new File(
+                    [
+                        file
+                    ],
+                    normalizedName,
+                    {
+                        type:
+                            file.type ||
+                            "application/octet-stream"
+                    }
+                );
+        }
 
 
         try {
 
             await navigator.share(
                 {
-                    files: [file],
+                    files: [
+                        shareFile
+                    ],
                     title:
                         normalizedName
                 }
@@ -342,15 +357,7 @@ class FileDownloader {
             throw error;
         }
     }
-        // ======================================================
-    // DOWNLOAD
-    // ======================================================
-    //
-    // Este método representa exclusivamente a entrega
-    // tradicional do arquivo ao navegador.
-    //
-    // Não decide sobre processamento ou exportação.
-    // ======================================================
+
 
     static download(
         file,
@@ -362,26 +369,11 @@ class FileDownloader {
             fileName
         );
     }
-
-
-    // ======================================================
-    // ENTREGA
-    // ======================================================
-    //
-    // mode:
-    //
-    // "download"
-    // "share"
-    // "auto"
-    //
-    // "auto" tenta compartilhamento primeiro quando
-    // disponível e utiliza download como alternativa.
-    // ======================================================
-
-    static async deliver(
+        static async deliver(
         file,
         fileName,
-        mode = "auto"
+        mode =
+            "auto"
     ) {
 
         FileDownloader.validateFile(
@@ -418,6 +410,7 @@ class FileDownloader {
 
 
             return {
+
                 action:
                     "share",
 
@@ -439,6 +432,7 @@ class FileDownloader {
 
 
             return {
+
                 action:
                     "download",
 
@@ -457,9 +451,7 @@ class FileDownloader {
                 "Modo de entrega inválido."
             );
         }
-                // ==================================================
-        // AUTO
-        // ==================================================
+
 
         if (
             FileDownloader.canShareFile(
@@ -481,6 +473,7 @@ class FileDownloader {
                 ) {
 
                     return {
+
                         action:
                             "share",
 
@@ -489,13 +482,7 @@ class FileDownloader {
                     };
                 }
 
-            } catch (
-                error
-            ) {
-
-                // Se o compartilhamento falhar,
-                // o download tradicional será tentado.
-            }
+            } catch (_) {}
         }
 
 
@@ -506,6 +493,7 @@ class FileDownloader {
 
 
         return {
+
             action:
                 "download",
 
@@ -513,289 +501,8 @@ class FileDownloader {
                 true
         };
     }
+}
 
 
-    // ======================================================
-    // VERIFICAR SUPORTE A DOWNLOAD
-    // ======================================================
-
-    static canDownload() {
-
-        if (
-            typeof document ===
-            "undefined"
-        ) {
-
-            return false;
-        }
-
-
-        return (
-            typeof document.createElement ===
-            "function"
-        );
-    }
-
-
-    // ======================================================
-    // VERIFICAR SUPORTE A BLOB URL
-    // ======================================================
-
-    static canCreateBlobURL() {
-
-        return (
-
-            typeof URL !==
-            "undefined"
-
-            &&
-
-            typeof URL.createObjectURL ===
-            "function"
-        );
-    }
-
-
-    // ======================================================
-    // VERIFICAR AMBIENTE
-    // ======================================================
-
-    static getCapabilities() {
-
-        return {
-
-            download:
-                FileDownloader.canDownload(),
-
-            blobURL:
-                FileDownloader.canCreateBlobURL(),
-
-            share:
-                typeof navigator !==
-                "undefined" &&
-
-                typeof navigator.share ===
-                "function",
-
-            fileShare:
-                typeof navigator !==
-                "undefined" &&
-
-                typeof navigator.share ===
-                "function" &&
-
-                typeof navigator.canShare ===
-                "function"
-        };
-    }
-        // ======================================================
-    // CRIAR FILE A PARTIR DE BLOB
-    // ======================================================
-    //
-    // Utilitário simples para manter a conversão de Blob
-    // para File centralizada.
-    // ======================================================
-
-    static blobToFile(
-        blob,
-        fileName =
-            "smoothvstudio-vocal.wav"
-    ) {
-
-        if (
-            !blob
-        ) {
-
-            throw new Error(
-                "Blob inválido."
-            );
-        }
-
-
-        if (
-            !(blob instanceof Blob)
-        ) {
-
-            throw new Error(
-                "O objeto fornecido não é um Blob."
-            );
-        }
-
-
-        const normalizedName =
-            FileDownloader.normalizeFileName(
-                fileName
-            );
-
-
-        return new File(
-            [
-                blob
-            ],
-            normalizedName,
-            {
-                type:
-                    blob.type ||
-                    "application/octet-stream"
-            }
-        );
-    }
-
-
-    // ======================================================
-    // OBTER TAMANHO
-    // ======================================================
-
-    static getFileSize(
-        file
-    ) {
-
-        FileDownloader.validateFile(
-            file
-        );
-
-
-        return Number(
-            file.size
-        );
-    }
-
-
-    // ======================================================
-    // OBTER TIPO
-    // ======================================================
-
-    static getFileType(
-        file
-    ) {
-
-        FileDownloader.validateFile(
-            file
-        );
-
-
-        if (
-            typeof file.type ===
-            "string"
-        ) {
-
-            return file.type;
-        }
-
-
-        return "";
-    }
-
-
-    // ======================================================
-    // OBTER NOME
-    // ======================================================
-
-    static getFileName(
-        file,
-        fallback =
-            "smoothvstudio-vocal.wav"
-    ) {
-
-        if (
-            file &&
-            typeof file.name ===
-            "string" &&
-            file.name.trim()
-        ) {
-
-            return file.name.trim();
-        }
-
-
-        return FileDownloader.normalizeFileName(
-            "",
-            fallback
-        );
-    }
-        // ======================================================
-    // DOWNLOAD DE BLOB
-    // ======================================================
-    
-    static downloadBlob(
-        blob,
-        fileName
-    ) {
-        
-        if (
-            !(blob instanceof Blob)
-        ) {
-            
-            throw new Error(
-                "O objeto fornecido não é um Blob."
-            );
-        }
-        
-        
-        const normalizedName =
-            FileDownloader.normalizeFileName(
-                fileName
-            );
-        
-        
-        return FileDownloader.downloadWithAnchor(
-            blob,
-            normalizedName
-        );
-    }
-    
-    
-    // ======================================================
-    // COMPARTILHAR BLOB
-    // ======================================================
-    
-    static async shareBlob(
-        blob,
-        fileName
-    ) {
-        
-        if (
-            !(blob instanceof Blob)
-        ) {
-            
-            throw new Error(
-                "O objeto fornecido não é um Blob."
-            );
-        }
-        
-        
-        const file =
-            FileDownloader.blobToFile(
-                blob,
-                fileName
-            );
-        
-        
-        return FileDownloader.shareFile(
-            file,
-            file.name
-        );
-    }
-    
-    
-    // ======================================================
-    // LIBERAR RECURSOS
-    // ======================================================
-    
-    static revoke(
-        url
-    ) {
-        
-        FileDownloader.revokeBlobURL(
-            url
-        );
-    }
-    }
-    
-    
-    // ==========================================================
-    // DISPONIBILIZAÇÃO GLOBAL
-    // ==========================================================
-    
-    window.FileDownloader =
-        FileDownloader;
+window.FileDownloader =
+    FileDownloader;
