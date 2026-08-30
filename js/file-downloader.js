@@ -501,3 +501,8 @@ class FileDownloader {
                 true
         };
     }
+}
+
+
+window.FileDownloader =
+    FileDownloader;
