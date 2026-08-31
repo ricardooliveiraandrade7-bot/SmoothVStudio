@@ -170,8 +170,7 @@ const processed =
 
 
 this.vocalSoftener.process(
-    processed,
-    this.vocalProfile
+    processed
 );
 
 
