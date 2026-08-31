@@ -20,12 +20,12 @@ class VocalSoftener {
 
                 {
                     frequency: 1400,
-                    q: 6.0
+                    q: 4.0
                 },
 
                 {
                     frequency: 1700,
-                    q: 6.0
+                    q: 4.0
                 },
 
                 {
@@ -45,7 +45,7 @@ class VocalSoftener {
 
                 {
                     frequency: 3000,
-                    q: 3.8
+                    q: 4.8
                 },
 
                 {
@@ -79,7 +79,7 @@ class VocalSoftener {
 
             tapeSpeedIps: 15,
 
-            tapeStartHz: 750,
+            tapeStartHz: 90,
 
             tapeHeadBumpCenterHz: 210,
 

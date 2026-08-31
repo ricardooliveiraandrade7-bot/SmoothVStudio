@@ -18,6 +18,9 @@ class AudioEngine {
             44100;
             
     
+    this.eqSignature =
+    new EQSignature();
+    
     this.vocalSoftener =
     new VocalSoftener();
 
@@ -181,6 +184,9 @@ const vocalSoftenerProfile =
         this.originalBuffer
     );
 
+this.eqSignature.process(
+    processed
+);
 
 this.vocalSoftener.process(
     processed,
