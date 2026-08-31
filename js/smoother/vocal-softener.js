@@ -45,17 +45,17 @@ class VocalSoftener {
 
                 {
                     frequency: 3000,
-                    q: 1.8
+                    q: 3.8
                 },
 
                 {
                     frequency: 3500,
-                    q: 1.8
+                    q: 3.8
                 },
 
                 {
                     frequency: 4000,
-                    q: 1.8
+                    q: 3.8
                 }
             ],
 
@@ -64,11 +64,11 @@ class VocalSoftener {
 
             dynamicRatio: 2.5,
 
-            dynamicAttackMs: 6,
+            dynamicAttackMs: 18,
 
-            dynamicReleaseMs: 90,
+            dynamicReleaseMs: 120,
 
-            dynamicMaxReductionDb: 3,
+            dynamicMaxReductionDb: 5,
 
 
             /*
@@ -79,23 +79,23 @@ class VocalSoftener {
 
             tapeSpeedIps: 15,
 
-            tapeStartHz: 1250,
+            tapeStartHz: 750,
 
-            tapeHeadBumpCenterHz: 95,
+            tapeHeadBumpCenterHz: 210,
 
             tapeHeadBumpGainDb: 1.25,
 
-            tapeHighRolloffStartHz: 6500,
+            tapeHighRolloffStartHz: 8000,
 
-            tapeHighRolloffDb: -0.7,
+            tapeHighRolloffDb: -1.5,
 
             tapeBias: 1.18,
 
             tapeFlux: 1.25,
 
-            tapeDrive: 1.55,
+            tapeDrive: 3.55,
 
-            tapeMix: 0.50,
+            tapeMix: 0.75,
 
             tapeOddHarmonicAmount: 0.78,
 
