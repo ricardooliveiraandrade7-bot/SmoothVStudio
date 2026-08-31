@@ -17,14 +17,9 @@ class AudioEngine {
         this.sampleRate =
             44100;
             
-        this.analyzer =
-    new VocalAnalyzer();
     
     this.vocalSoftener =
     new VocalSoftener();
-
-this.vocalProfile =
-    null;
     }
     
     
@@ -138,8 +133,7 @@ this.vocalProfile =
         this.sampleRate =
             audioBuffer.sampleRate;
         
-        this.vocalProfile =
-    null;
+
     
     
         return audioBuffer;
@@ -148,12 +142,6 @@ this.vocalProfile =
 
         return this.originalBuffer;
     }
-
-
-getVocalProfile() {
-    
-    return this.vocalProfile;
-}
 
 
     getProcessedBuffer() {
@@ -173,11 +161,6 @@ getVocalProfile() {
             );
         }
 
-
-this.vocalProfile =
-    this.analyzer.analyze(
-        this.originalBuffer
-    );
 
 
 const processed =
@@ -284,8 +267,6 @@ this.processedBuffer =
     this.processedBuffer =
         null;
     
-    this.vocalProfile =
-        null;
 }
 
 
@@ -296,9 +277,6 @@ this.processedBuffer =
 
         this.processedBuffer =
             null;
-            
-            this.vocalProfile =
-    null;
 
         this.sampleRate =
             44100;

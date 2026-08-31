@@ -7,20 +7,18 @@ class VocalSoftener {
 
         this.options = {
 
-            enabled:
-                true,
+            enabled: true,
 
             /*
-             * COMPRESSOR MULTIBANDA
+             * EQ DINÂMICO MULTIBANDA
              *
-             * Cada banda trabalha de forma
-             * independente.
-             *
-             * As cinco primeiras são estreitas.
+             * As cinco primeiras regiões são estreitas.
              * As três últimas são moderadas.
+             *
+             * A redução máxima de cada banda é 3 dB.
              */
 
-            compressorBands: [
+            dynamicBands: [
 
                 {
                     frequency: 1400,
@@ -64,61 +62,46 @@ class VocalSoftener {
             ],
 
             /*
-             * Primeira versão propositalmente audível.
+             * Primeira versão deliberadamente audível.
              */
 
-            compressorThresholdDb:
-                -24,
+            dynamicThresholdDb: -28,
 
-            compressorRatio:
-                3.0,
+            dynamicRatio: 2.5,
 
-            compressorAttackMs:
-                7,
+            dynamicAttackMs: 6,
 
-            compressorReleaseMs:
-                90,
+            dynamicReleaseMs: 90,
 
-            compressorMaxReductionDb:
-                3,
+            dynamicMaxReductionDb: 3,
 
 
             /*
              * TAPE SATURATOR
              *
-             * Somente acima de 1000 Hz.
+             * Atua somente a partir de 1 kHz.
              */
 
-            tapeStartHz:
-                1000,
+            tapeStartHz: 1000,
 
-            tapeDrive:
-                2.2,
+            tapeDrive: 2.2,
 
-            tapeMix:
-                0.70,
+            tapeMix: 0.70,
 
 
             /*
              * UPWARD EXPANDER
-             *
-             * Recupera microdinâmica.
              */
 
-            upwardThresholdDb:
-                -32,
+            upwardThresholdDb: -32,
 
-            upwardRatio:
-                1.45,
+            upwardRatio: 1.45,
 
-            upwardMaxBoostDb:
-                5,
+            upwardMaxBoostDb: 5,
 
-            upwardAttackMs:
-                12,
+            upwardAttackMs: 12,
 
-            upwardReleaseMs:
-                110,
+            upwardReleaseMs: 110,
 
             ...options
         };
@@ -144,11 +127,11 @@ class VocalSoftener {
 
 
         /*
-         * O Analyzer NÃO controla a ativação.
+         * O Analyzer não pode bloquear
+         * a atuação do Softener.
          *
-         * O perfil é recebido para manter a
-         * integração preparada, mas nenhuma
-         * condição dele pode neutralizar o Softener.
+         * O perfil é recebido e preservado
+         * para futuras evoluções.
          */
 
         void vocalProfile;
@@ -166,7 +149,7 @@ class VocalSoftener {
                 );
 
 
-            this.applyMultibandCompression(
+            this.applyDynamicMultibandEQ(
                 data,
                 audioBuffer.sampleRate
             );
@@ -189,13 +172,13 @@ class VocalSoftener {
     }
 
 
-    applyMultibandCompression(
+    applyDynamicMultibandEQ(
         data,
         sampleRate
     ) {
 
         for (
-            const band of this.options.compressorBands
+            const band of this.options.dynamicBands
         ) {
 
             const filter =
@@ -206,33 +189,24 @@ class VocalSoftener {
                 );
 
 
-            let x1 =
-                0;
+            let x1 = 0;
+            let x2 = 0;
+            let y1 = 0;
+            let y2 = 0;
 
-            let x2 =
-                0;
-
-            let y1 =
-                0;
-
-            let y2 =
-                0;
+            let envelope = 0;
 
 
-            let envelope =
-                0;
-
-
-            const attackCoefficient =
+            const attack =
                 this.timeCoefficient(
-                    this.options.compressorAttackMs,
+                    this.options.dynamicAttackMs,
                     sampleRate
                 );
 
 
-            const releaseCoefficient =
+            const release =
                 this.timeCoefficient(
-                    this.options.compressorReleaseMs,
+                    this.options.dynamicReleaseMs,
                     sampleRate
                 );
 
@@ -258,17 +232,10 @@ class VocalSoftener {
                     );
 
 
-                x1 =
-                    filtered.x1;
-
-                x2 =
-                    filtered.x2;
-
-                y1 =
-                    filtered.y1;
-
-                y2 =
-                    filtered.y2;
+                x1 = filtered.x1;
+                x2 = filtered.x2;
+                y1 = filtered.y1;
+                y2 = filtered.y2;
 
 
                 const bandSignal =
@@ -286,63 +253,54 @@ class VocalSoftener {
                 ) {
 
                     envelope =
-                        attackCoefficient *
-                        envelope
-                        +
+                        attack * envelope +
                         (
-                            1 -
-                            attackCoefficient
-                        ) *
-                        magnitude;
+                            1 - attack
+                        ) * magnitude;
 
                 } else {
 
                     envelope =
-                        releaseCoefficient *
-                        envelope
-                        +
+                        release * envelope +
                         (
-                            1 -
-                            releaseCoefficient
-                        ) *
-                        magnitude;
+                            1 - release
+                        ) * magnitude;
                 }
 
 
-                const envelopeDb =
+                const levelDb =
                     this.linearToDb(
                         envelope
                     );
 
 
-                let reductionDb =
-                    0;
-
-
                 if (
-                    envelopeDb >
-                    this.options.compressorThresholdDb
+                    levelDb <=
+                    this.options.dynamicThresholdDb
                 ) {
 
-                    const overThresholdDb =
-                        envelopeDb -
-                        this.options.compressorThresholdDb;
-
-
-                    reductionDb =
-                        overThresholdDb -
-                        (
-                            overThresholdDb /
-                            this.options.compressorRatio
-                        );
-
-
-                    reductionDb =
-                        Math.min(
-                            reductionDb,
-                            this.options.compressorMaxReductionDb
-                        );
+                    continue;
                 }
+
+
+                const excessDb =
+                    levelDb -
+                    this.options.dynamicThresholdDb;
+
+
+                let reductionDb =
+                    excessDb -
+                    (
+                        excessDb /
+                        this.options.dynamicRatio
+                    );
+
+
+                reductionDb =
+                    Math.min(
+                        reductionDb,
+                        this.options.dynamicMaxReductionDb
+                    );
 
 
                 if (
@@ -360,10 +318,8 @@ class VocalSoftener {
 
 
                 /*
-                 * Somente a energia daquela região
+                 * Apenas a região detectada
                  * é reduzida.
-                 *
-                 * O restante do vocal permanece intacto.
                  */
 
                 data[i] =
@@ -371,8 +327,7 @@ class VocalSoftener {
                     (
                         bandSignal *
                         (
-                            gain -
-                            1
+                            gain - 1
                         )
                     );
             }
@@ -392,17 +347,10 @@ class VocalSoftener {
             );
 
 
-        let x1 =
-            0;
-
-        let x2 =
-            0;
-
-        let y1 =
-            0;
-
-        let y2 =
-            0;
+        let x1 = 0;
+        let x2 = 0;
+        let y1 = 0;
+        let y2 = 0;
 
 
         const drive =
@@ -443,26 +391,15 @@ class VocalSoftener {
                 );
 
 
-            x1 =
-                filtered.x1;
-
-            x2 =
-                filtered.x2;
-
-            y1 =
-                filtered.y1;
-
-            y2 =
-                filtered.y2;
+            x1 = filtered.x1;
+            x2 = filtered.x2;
+            y1 = filtered.y1;
+            y2 = filtered.y2;
 
 
             const highFrequency =
                 filtered.output;
 
-
-            /*
-             * Saturação suave não linear.
-             */
 
             const saturated =
                 Math.tanh(
@@ -471,7 +408,7 @@ class VocalSoftener {
                 );
 
 
-            const processedHighFrequency =
+            const processed =
                 highFrequency +
                 (
                     saturated -
@@ -480,18 +417,10 @@ class VocalSoftener {
                 mix;
 
 
-            /*
-             * Somente a diferença criada pela
-             * saturação é reinserida.
-             *
-             * Frequências abaixo de 1 kHz
-             * permanecem sem saturação.
-             */
-
             data[i] =
                 input +
                 (
-                    processedHighFrequency -
+                    processed -
                     highFrequency
                 );
         }
@@ -503,18 +432,17 @@ class VocalSoftener {
         sampleRate
     ) {
 
-        let envelope =
-            0;
+        let envelope = 0;
 
 
-        const attackCoefficient =
+        const attack =
             this.timeCoefficient(
                 this.options.upwardAttackMs,
                 sampleRate
             );
 
 
-        const releaseCoefficient =
+        const release =
             this.timeCoefficient(
                 this.options.upwardReleaseMs,
                 sampleRate
@@ -542,42 +470,29 @@ class VocalSoftener {
             ) {
 
                 envelope =
-                    attackCoefficient *
-                    envelope
-                    +
+                    attack * envelope +
                     (
-                        1 -
-                        attackCoefficient
-                    ) *
-                    magnitude;
+                        1 - attack
+                    ) * magnitude;
 
             } else {
 
                 envelope =
-                    releaseCoefficient *
-                    envelope
-                    +
+                    release * envelope +
                     (
-                        1 -
-                        releaseCoefficient
-                    ) *
-                    magnitude;
+                        1 - release
+                    ) * magnitude;
             }
 
 
-            const envelopeDb =
+            const levelDb =
                 this.linearToDb(
                     envelope
                 );
 
 
-            /*
-             * Acima do threshold não fazemos
-             * expansão ascendente.
-             */
-
             if (
-                envelopeDb >=
+                levelDb >=
                 this.options.upwardThresholdDb
             ) {
 
@@ -587,14 +502,13 @@ class VocalSoftener {
 
             const distanceDb =
                 this.options.upwardThresholdDb -
-                envelopeDb;
+                levelDb;
 
 
             let boostDb =
                 distanceDb *
                 (
-                    this.options.upwardRatio -
-                    1
+                    this.options.upwardRatio - 1
                 );
 
 
@@ -612,12 +526,6 @@ class VocalSoftener {
                 continue;
             }
 
-
-            /*
-             * A expansão é aplicada de forma
-             * progressiva conforme o sinal
-             * se aproxima do threshold.
-             */
 
             const gain =
                 this.dbToLinear(
@@ -688,34 +596,22 @@ class VocalSoftener {
             -alpha;
 
         const a0 =
-            1 +
-            alpha;
+            1 + alpha;
 
         const a1 =
-            -2 *
-            cosine;
+            -2 * cosine;
 
         const a2 =
-            1 -
-            alpha;
+            1 - alpha;
 
 
         return {
 
-            b0:
-                b0 / a0,
-
-            b1:
-                b1 / a0,
-
-            b2:
-                b2 / a0,
-
-            a1:
-                a1 / a0,
-
-            a2:
-                a2 / a0
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0
         };
     }
 
@@ -764,53 +660,41 @@ class VocalSoftener {
 
         const b0 =
             (
-                1 +
-                cosine
-            ) /
-            2;
+                1 + cosine
+            ) / 2;
+
 
         const b1 =
             -(
-                1 +
-                cosine
+                1 + cosine
             );
+
 
         const b2 =
             (
-                1 +
-                cosine
-            ) /
-            2;
+                1 + cosine
+            ) / 2;
+
 
         const a0 =
-            1 +
-            alpha;
+            1 + alpha;
+
 
         const a1 =
-            -2 *
-            cosine;
+            -2 * cosine;
+
 
         const a2 =
-            1 -
-            alpha;
+            1 - alpha;
 
 
         return {
 
-            b0:
-                b0 / a0,
-
-            b1:
-                b1 / a0,
-
-            b2:
-                b2 / a0,
-
-            a1:
-                a1 / a0,
-
-            a2:
-                a2 / a0
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0
         };
     }
 
@@ -828,23 +712,19 @@ class VocalSoftener {
             (
                 filter.b0 *
                 input
-            )
-            +
+            ) +
             (
                 filter.b1 *
                 x1
-            )
-            +
+            ) +
             (
                 filter.b2 *
                 x2
-            )
-            -
+            ) -
             (
                 filter.a1 *
                 y1
-            )
-            -
+            ) -
             (
                 filter.a2 *
                 y2
@@ -855,17 +735,10 @@ class VocalSoftener {
 
             output,
 
-            x1:
-                input,
-
-            x2:
-                x1,
-
-            y1:
-                output,
-
-            y2:
-                y1
+            x1: input,
+            x2: x1,
+            y1: output,
+            y2: y1
         };
     }
 
@@ -879,8 +752,7 @@ class VocalSoftener {
             Math.max(
                 0.1,
                 milliseconds
-            ) /
-            1000;
+            ) / 1000;
 
 
         return Math.exp(
