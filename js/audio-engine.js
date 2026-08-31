@@ -23,7 +23,11 @@ class AudioEngine {
 
 this.vocalSoftenerAnalyzer =
     new VocalSoftenerAnalyzer();
+    
+    this.airReverb =
+    new AirReverb();
     }
+    
     
     
     createContext() {
@@ -183,6 +187,9 @@ this.vocalSoftener.process(
     vocalSoftenerProfile
 );
 
+this.airReverb.process(
+    processed
+);
 
 this.processedBuffer =
     processed;
