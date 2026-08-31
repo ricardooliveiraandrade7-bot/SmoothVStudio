@@ -677,17 +677,11 @@ processFilter(
          */
 
         data[i] =
-            Number.isFinite(
-                output
-            )
-                ? Math.max(
-                    -1,
-                    Math.min(
-                        1,
-                        output
-                    )
-                )
-                : input;
+    Number.isFinite(
+        output
+    ) ?
+    output :
+    input;
     }
 }
 
