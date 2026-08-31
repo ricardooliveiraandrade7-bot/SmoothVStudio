@@ -321,203 +321,333 @@ class AirReverb {
         }
 
 
-        /*
-         * -----------------------------------------------------
-         * DIFFUSÃO
-         * -----------------------------------------------------
-         */
+/*
 
-        const diffusion =
-            this.clamp(
-                this.options.diffusion,
-                0,
-                1
-            );
+* ---
+* DIFUSÃO + DENSE LATE REVERB
+* ---
+
+*/
+
+const diffusion =
+this.clamp(
+this.options.diffusion,
+0,
+1
+);
+
+const density =
+this.clamp(
+this.options.density,
+0,
+1
+);
+
+/*
+
+* Quatro linhas com tempos diferentes.
+* 
+* Os tempos são deliberadamente não uniformes
+* para reduzir padrões periódicos e aumentar
+* a densidade perceptual da cauda.
+  */
+
+const tailDelays = [
+
+Math.max(
+    1,
+    Math.round(
+        0.0297 *
+        sampleRate
+    )
+),
+
+Math.max(
+    1,
+    Math.round(
+        0.0371 *
+        sampleRate
+    )
+),
+
+Math.max(
+    1,
+    Math.round(
+        0.0437 *
+        sampleRate
+    )
+),
+
+Math.max(
+    1,
+    Math.round(
+        0.0503 *
+        sampleRate
+    )
+)
+
+];
+
+const delayBuffers =
+tailDelays.map(
+delay =>
+new Float32Array(
+delay
+)
+);
+
+const delayPositions =
+new Array(
+delayBuffers.length
+).fill(0);
+
+const decayTime =
+this.clamp(
+this.options.decayTime,
+0.1,
+3.0
+);
+
+/*
+
+* Ganho aproximado para a região de RT60.
+  */
+
+const feedback =
+Math.pow(
+10,
+-3 *
+(
+tailDelays.reduce(
+(a, b) => a + b,
+0
+) /
+tailDelays.length
+) /
+sampleRate /
+decayTime
+);
+
+const safeFeedback =
+this.clamp(
+feedback,
+0.15,
+0.88
+);
+
+const tail =
+new Float32Array(
+length
+);
+
+/*
+
+* ---
+* CAUDA DENSA
+* ---
+
+*/
+
+for (
+let i = 0;
+i < length;
+i++
+) {
+
+/*
+ * A densidade agora controla a energia
+ * injetada na rede de reverberação.
+ *
+ * Não é mais apenas um "volume da cauda".
+ */
+
+const input =
+    preDelayBuffer[i] *
+    (
+        0.35 +
+        density * 0.65
+    );
 
 
-        const density =
-            this.clamp(
-                this.options.density,
-                0,
-                1
-            );
+/*
+ * -------------------------------------------------
+ * LEITURA DAS QUATRO LINHAS
+ * -------------------------------------------------
+ */
+
+const delayed = [
+
+    delayBuffers[0][
+        delayPositions[0]
+    ],
+
+    delayBuffers[1][
+        delayPositions[1]
+    ],
+
+    delayBuffers[2][
+        delayPositions[2]
+    ],
+
+    delayBuffers[3][
+        delayPositions[3]
+    ]
+];
 
 
-        /*
-         * Quatro linhas de atraso
-         * independentes formam a cauda.
-         */
+/*
+ * -------------------------------------------------
+ * MATRIZ DE MISTURA
+ * -------------------------------------------------
+ *
+ * Mistura cruzada entre as quatro linhas.
+ *
+ * Isso evita que cada delay fique
+ * preso ao próprio feedback.
+ *
+ * A estrutura é uma transformação
+ * do tipo Hadamard, útil para espalhar
+ * energia entre as linhas sem criar
+ * ganho artificial na rede.
+ */
 
-        const tailDelays = [
+const mixed = [
 
-            Math.max(
-                1,
-                Math.round(
-                    0.037 *
-                    sampleRate
-                )
-            ),
+    (
+        delayed[0] +
+        delayed[1] +
+        delayed[2] +
+        delayed[3]
+    ) * 0.5,
 
-            Math.max(
-                1,
-                Math.round(
-                    0.053 *
-                    sampleRate
-                )
-            ),
+    (
+        delayed[0] -
+        delayed[1] +
+        delayed[2] -
+        delayed[3]
+    ) * 0.5,
 
-            Math.max(
-                1,
-                Math.round(
-                    0.071 *
-                    sampleRate
-                )
-            ),
+    (
+        delayed[0] +
+        delayed[1] -
+        delayed[2] -
+        delayed[3]
+    ) * 0.5,
 
-            Math.max(
-                1,
-                Math.round(
-                    0.089 *
-                    sampleRate
-                )
+    (
+        delayed[0] -
+        delayed[1] -
+        delayed[2] +
+        delayed[3]
+    ) * 0.5
+];
+
+
+/*
+ * -------------------------------------------------
+ * FEEDBACK CROSS-COUPLED
+ * -------------------------------------------------
+ */
+
+for (
+    let d = 0;
+    d < delayBuffers.length;
+    d++
+) {
+
+    const position =
+        delayPositions[d];
+
+
+    /*
+     * Mistura entre o próprio delay e
+     * as outras linhas.
+     *
+     * diffusion = 0
+     * → comportamento mais individual.
+     *
+     * diffusion = 1
+     * → maior espalhamento entre linhas.
+     */
+
+    const feedbackSignal =
+        (
+            delayed[d] *
+            (
+                1 -
+                diffusion
             )
-        ];
+        ) +
+        (
+            mixed[d] *
+            diffusion
+        );
 
 
-        const delayBuffers =
-            tailDelays.map(
-                delay =>
-                    new Float32Array(
-                        delay
-                    )
-            );
+    delayBuffers[d][position] =
+        input +
+        feedbackSignal *
+        safeFeedback;
 
 
-        const delayPositions =
-            new Array(
-                delayBuffers.length
-            ).fill(0);
+    let nextPosition =
+        position + 1;
 
 
-        const decayTime =
-            this.clamp(
-                this.options.decayTime,
-                0.1,
-                3.0
-            );
+    if (
+        nextPosition >=
+        delayBuffers[d].length
+    ) {
+
+        nextPosition = 0;
+    }
 
 
-        /*
-         * Ganho de feedback aproximado
-         * para atingir a região de RT60 desejada.
-         */
-
-        const feedback =
-            Math.pow(
-                10,
-                -3 *
-                (
-                    tailDelays.reduce(
-                        (a, b) => a + b,
-                        0
-                    ) /
-                    tailDelays.length
-                ) /
-                sampleRate /
-                decayTime
-            );
+    delayPositions[d] =
+        nextPosition;
+}
 
 
-        const safeFeedback =
-            this.clamp(
-                feedback,
-                0.15,
-                0.88
-            );
+/*
+ * Saída inicial da rede.
+ */
 
+tail[i] =
+    (
+        delayed[0] +
+        delayed[1] +
+        delayed[2] +
+        delayed[3]
+    ) *
+    0.25;
 
-        const tail =
-            new Float32Array(
-                length
-            );
+}
 
+/*
 
-        /*
-         * -----------------------------------------------------
-         * CAUDA
-         * -----------------------------------------------------
-         */
+* ---
+* DIFUSÃO FINAL
+* ---
+* 
+* Dois all-pass curtos aumentam a densidade
+* temporal da cauda antes do damping.
+  */
 
-        for (
-            let i = 0;
-            i < length;
-            i++
-        ) {
+this.applyAllpassDiffusion(
+tail,
+sampleRate,
+0.0017,
+0.32 +
+diffusion * 0.22
+);
 
-            const input =
-                preDelayBuffer[i] *
-                density;
-
-
-            let wet = 0;
-
-
-            for (
-                let d = 0;
-                d < delayBuffers.length;
-                d++
-            ) {
-
-                const buffer =
-                    delayBuffers[d];
-
-
-                let position =
-                    delayPositions[d];
-
-
-                const delayed =
-                    buffer[position];
-
-
-                const feedbackInput =
-                    input +
-                    delayed *
-                    safeFeedback *
-                    diffusion;
-
-
-                buffer[position] =
-                    feedbackInput;
-
-
-                position++;
-
-
-                if (
-                    position >=
-                    buffer.length
-                ) {
-
-                    position = 0;
-                }
-
-
-                delayPositions[d] =
-                    position;
-
-
-                wet +=
-                    delayed;
-            }
-
-
-            tail[i] =
-                (
-                    wet /
-                    delayBuffers.length
-                );
-        }
+this.applyAllpassDiffusion(
+tail,
+sampleRate,
+0.0023,
+0.28 +
+diffusion * 0.20
+);
 
 
         /*
@@ -610,6 +740,110 @@ class AirReverb {
         }
     }
 
+/*
+
+* =========================================================
+* ALL-PASS DIFFUSION
+* =========================================================
+* 
+* Aumenta a densidade temporal da cauda
+* sem funcionar como um simples eco adicional.
+  */
+
+applyAllpassDiffusion(
+data,
+sampleRate,
+delaySeconds,
+gain
+) {
+
+const safeGain =
+    this.clamp(
+        gain,
+        0.05,
+        0.70
+    );
+
+
+const delaySamples =
+    Math.max(
+        1,
+        Math.round(
+            delaySeconds *
+            sampleRate
+        )
+    );
+
+
+const buffer =
+    new Float32Array(
+        delaySamples
+    );
+
+
+let position = 0;
+
+
+for (
+    let i = 0;
+    i < data.length;
+    i++
+) {
+
+    const input =
+        data[i];
+
+
+    const delayed =
+        buffer[position];
+
+
+    /*
+     * Schroeder-style all-pass:
+     *
+     * y[n] =
+     * -g*x[n]
+     * + delayed
+     * + g*y[n-M]
+     */
+
+    const output =
+        (
+            -safeGain *
+            input
+        ) +
+        delayed;
+
+
+    buffer[position] =
+        input +
+        (
+            safeGain *
+            output
+        );
+
+
+    position++;
+
+
+    if (
+        position >=
+        buffer.length
+    ) {
+
+        position = 0;
+    }
+
+
+    data[i] =
+        Number.isFinite(
+            output
+        )
+            ? output
+            : input;
+}
+
+}
 
     /*
      * =========================================================
