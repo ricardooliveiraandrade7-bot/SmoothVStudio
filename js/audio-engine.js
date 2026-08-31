@@ -20,6 +20,9 @@ class AudioEngine {
     
     this.vocalSoftener =
     new VocalSoftener();
+
+this.vocalSoftenerAnalyzer =
+    new VocalSoftenerAnalyzer();
     }
     
     
@@ -169,8 +172,15 @@ const processed =
     );
 
 
+const vocalSoftenerProfile =
+    this.vocalSoftenerAnalyzer.analyze(
+        this.originalBuffer
+    );
+
+
 this.vocalSoftener.process(
-    processed
+    processed,
+    vocalSoftenerProfile
 );
 
 
@@ -276,6 +286,8 @@ this.processedBuffer =
 
         this.processedBuffer =
             null;
+            
+
 
         this.sampleRate =
             44100;
