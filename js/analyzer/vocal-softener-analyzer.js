@@ -718,6 +718,107 @@ class VocalSoftenerAnalyzer {
 
     /*
      * =========================================================
+     * FILTRO GENÉRICO
+     * =========================================================
+     *
+     * Aplica um biquad ao buffer inteiro.
+     *
+     * Este método é utilizado pelo Analyzer tanto
+     * nas bandas passa-faixa quanto na referência
+     * fundamental de 100–800 Hz.
+     */
+
+    filterBuffer(
+        data,
+        filter
+    ) {
+
+        if (
+            !data ||
+            typeof data.length !== "number"
+        ) {
+
+            throw new Error(
+                "VocalSoftenerAnalyzer: dados de filtro inválidos."
+            );
+        }
+
+
+        if (
+            !filter ||
+            !Number.isFinite(filter.b0) ||
+            !Number.isFinite(filter.b1) ||
+            !Number.isFinite(filter.b2) ||
+            !Number.isFinite(filter.a1) ||
+            !Number.isFinite(filter.a2)
+        ) {
+
+            throw new Error(
+                "VocalSoftenerAnalyzer: coeficientes do filtro inválidos."
+            );
+        }
+
+
+        const output =
+            new Float32Array(
+                data.length
+            );
+
+
+        let x1 =
+            0;
+
+        let x2 =
+            0;
+
+        let y1 =
+            0;
+
+        let y2 =
+            0;
+
+
+        for (
+            let i = 0;
+            i < data.length;
+            i++
+        ) {
+
+            const filtered =
+                this.processBiquad(
+                    data[i],
+                    filter,
+                    x1,
+                    x2,
+                    y1,
+                    y2
+                );
+
+
+            output[i] =
+                filtered.output;
+
+
+            x1 =
+                filtered.x1;
+
+            x2 =
+                filtered.x2;
+
+            y1 =
+                filtered.y1;
+
+            y2 =
+                filtered.y2;
+        }
+
+
+        return output;
+    }
+
+
+    /*
+     * =========================================================
      * PASSA-ALTAS
      * =========================================================
      */
