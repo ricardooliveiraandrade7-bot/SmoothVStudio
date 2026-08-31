@@ -447,10 +447,33 @@ const startHz =
 
 const speedReferenceIps =
     15;
+    
+    /*
+ * =====================================================
+ * TAPE SPEED → HIGH-FREQUENCY RESPONSE
+ * =====================================================
+ *
+ * Velocidades menores reduzem a extensão de agudos.
+ * Velocidades maiores preservam mais extensão.
+ *
+ * 15 IPS = referência neutra.
+ */
+
+const speedHighFrequencyFactor =
+    Math.max(
+        0.75,
+        Math.min(
+            1.15,
+            Math.sqrt(
+                speedIps /
+                speedReferenceIps
+            )
+        )
+    );
 
 const speedRatio =
-    speedReferenceIps /
-    speedIps;
+    speedIps /
+    speedReferenceIps;
 
 const effectiveHeadBumpCenter =
     headBumpCenter *
@@ -462,8 +485,12 @@ const effectiveHeadBumpCenter =
             );
 
 
-        const highRolloffStart =
-            this.options.tapeHighRolloffStartHz;
+        const baseHighRolloffStart =
+    this.options.tapeHighRolloffStartHz;
+
+const effectiveHighRolloffStart =
+    baseHighRolloffStart *
+    speedHighFrequencyFactor;
 
 
         const highRolloffGain =
@@ -536,11 +563,11 @@ const effectiveHeadBumpCenter =
 
 
         const highRolloffFilter =
-            this.createLowShelfFilter(
-                highRolloffStart,
-                highRolloffGain,
-                sampleRate
-            );
+    this.createHighShelfFilter(
+        effectiveHighRolloffStart,
+        highRolloffGain,
+        sampleRate
+    );
 
 
         let hpX1 = 0;
@@ -1398,6 +1425,170 @@ const compressedHigh =
         };
     }
 
+/*
+ * =========================================================
+ * HIGH SHELF
+ * =========================================================
+ *
+ * Utilizado pelo Tape Saturator para representar
+ * a perda progressiva de altas frequências.
+ */
+
+createHighShelfFilter(
+    frequency,
+    gainLinear,
+    sampleRate
+) {
+
+    const safeFrequency =
+        Math.min(
+            sampleRate * 0.45,
+            Math.max(
+                20,
+                frequency
+            )
+        );
+
+    const omega =
+        2 *
+        Math.PI *
+        safeFrequency /
+        sampleRate;
+
+    const sine =
+        Math.sin(
+            omega
+        );
+
+    const cosine =
+        Math.cos(
+            omega
+        );
+
+    const gainDb =
+        20 *
+        Math.log10(
+            Math.max(
+                0.000001,
+                gainLinear
+            )
+        );
+
+    const A =
+        Math.pow(
+            10,
+            gainDb /
+            40
+        );
+
+    const alpha =
+        sine /
+        (
+            2 *
+            Math.SQRT2
+        );
+
+    const beta =
+        2 *
+        Math.sqrt(
+            A
+        ) *
+        alpha;
+
+    const b0 =
+        A *
+        (
+            (
+                A + 1
+            ) +
+            (
+                A - 1
+            ) *
+            cosine +
+            beta
+        );
+
+    const b1 =
+        -2 *
+        A *
+        (
+            (
+                A - 1
+            ) +
+            (
+                A + 1
+            ) *
+            cosine
+        );
+
+    const b2 =
+        A *
+        (
+            (
+                A + 1
+            ) +
+            (
+                A - 1
+            ) *
+            cosine -
+            beta
+        );
+
+    const a0 =
+        (
+            A + 1
+        ) -
+        (
+            A - 1
+        ) *
+        cosine +
+        beta;
+
+    const a1 =
+        2 *
+        (
+            (
+                A - 1
+            ) -
+            (
+                A + 1
+            ) *
+            cosine
+        );
+
+    const a2 =
+        (
+            A + 1
+        ) -
+        (
+            A - 1
+        ) *
+        cosine -
+        beta;
+
+    return {
+
+        b0:
+            b0 /
+            a0,
+
+        b1:
+            b1 /
+            a0,
+
+        b2:
+            b2 /
+            a0,
+
+        a1:
+            a1 /
+            a0,
+
+        a2:
+            a2 /
+            a0
+    };
+}
 
     /*
      * =========================================================
