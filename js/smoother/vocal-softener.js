@@ -14,11 +14,6 @@ class VocalSoftener {
              * =====================================================
              * EQ DINÂMICO MULTIBANDA
              * =====================================================
-             *
-             * As cinco primeiras regiões são estreitas.
-             * As três últimas são moderadas.
-             *
-             * A redução máxima de cada banda é 3 dB.
              */
 
             dynamicBands: [
@@ -65,21 +60,7 @@ class VocalSoftener {
             ],
 
 
-            /*
-             * Fallback utilizado somente quando
-             * não houver threshold válido vindo
-             * do Vocal Softener Analyzer.
-             *
-             * O Analyzer passa a ser a fonte
-             * principal do threshold.
-             */
-
             dynamicThresholdDb: -28,
-
-
-            /*
-             * Comportamento do EQ dinâmico.
-             */
 
             dynamicRatio: 2.5,
 
@@ -90,49 +71,35 @@ class VocalSoftener {
             dynamicMaxReductionDb: 3,
 
 
-/*
- * =====================================================
- * TAPE SATURATOR — 15 IPS / HIGH OUTPUT / OVERBIAS
- * =====================================================
- *
- * Modelo inspirado em fita moderna de alta saída.
- *
- * 15 IPS:
- * - head bump em 60–150 Hz
- * - suavização progressiva do extremo superior
- *
- * Overbias:
- * - reduz a tendência de dureza no alto
- * - aumenta suavemente a não-linearidade
- *
- * Flux:
- * - controla quanto o sinal entra na região
- *   magnética de saturação.
- */
+            /*
+             * =====================================================
+             * TAPE SATURATOR
+             * =====================================================
+             */
 
-tapeSpeedIps: 15,
-    
-    tapeStartHz: 1000,
-    
-    tapeHeadBumpCenterHz: 95,
-    
-    tapeHeadBumpGainDb: 1.25,
-    
-    tapeHighRolloffStartHz: 6500,
-    
-    tapeHighRolloffDb: -1.8,
-    
-    tapeBias: 1.18,
-    
-    tapeFlux: 1.25,
-    
-    tapeDrive: 1.55,
-    
-    tapeMix: 0.72,
-    
-    tapeOddHarmonicAmount: 0.78,
-    
-    tapeTransientCompressionDb: 1.5,
+            tapeSpeedIps: 15,
+
+            tapeStartHz: 1000,
+
+            tapeHeadBumpCenterHz: 95,
+
+            tapeHeadBumpGainDb: 1.25,
+
+            tapeHighRolloffStartHz: 6500,
+
+            tapeHighRolloffDb: -1.8,
+
+            tapeBias: 1.18,
+
+            tapeFlux: 1.25,
+
+            tapeDrive: 1.55,
+
+            tapeMix: 0.72,
+
+            tapeOddHarmonicAmount: 0.78,
+
+            tapeTransientCompressionDb: 1.5,
 
 
             /*
@@ -157,6 +124,12 @@ tapeSpeedIps: 15,
     }
 
 
+    /*
+     * =========================================================
+     * PROCESSAMENTO PRINCIPAL
+     * =========================================================
+     */
+
     process(
         audioBuffer,
         vocalProfile = null
@@ -175,19 +148,6 @@ tapeSpeedIps: 15,
         }
 
 
-        /*
-         * O perfil do Analyzer é opcional.
-         *
-         * Se existir e possuir thresholds válidos,
-         * eles serão usados individualmente por banda.
-         *
-         * Se não existir, o Softener continua funcionando
-         * usando o threshold de fallback.
-         *
-         * O Analyzer nunca pode bloquear o processamento.
-         */
-
-
         for (
             let channel = 0;
             channel < audioBuffer.numberOfChannels;
@@ -200,6 +160,10 @@ tapeSpeedIps: 15,
                 );
 
 
+            /*
+             * 1 — EQ DINÂMICO
+             */
+
             this.applyDynamicMultibandEQ(
                 data,
                 audioBuffer.sampleRate,
@@ -207,11 +171,19 @@ tapeSpeedIps: 15,
             );
 
 
+            /*
+             * 2 — TAPE SATURATOR
+             */
+
             this.applyTapeSaturation(
                 data,
                 audioBuffer.sampleRate
             );
 
+
+            /*
+             * 3 — UPWARD EXPANDER
+             */
 
             this.applyUpwardExpansion(
                 data,
@@ -238,7 +210,8 @@ tapeSpeedIps: 15,
 
         for (
             let bandIndex = 0;
-            bandIndex < this.options.dynamicBands.length;
+            bandIndex <
+            this.options.dynamicBands.length;
             bandIndex++
         ) {
 
@@ -255,18 +228,6 @@ tapeSpeedIps: 15,
                     sampleRate
                 );
 
-
-            /*
-             * =================================================
-             * THRESHOLD INDIVIDUAL DA BANDA
-             * =================================================
-             *
-             * O Analyzer fornece um threshold calculado
-             * especificamente para esta frequência.
-             *
-             * Se não houver um valor válido,
-             * usamos o fallback de -28 dB.
-             */
 
             const analyzedBand =
                 vocalProfile &&
@@ -289,11 +250,8 @@ tapeSpeedIps: 15,
 
 
             let x1 = 0;
-
             let x2 = 0;
-
             let y1 = 0;
-
             let y2 = 0;
 
             let envelope = 0;
@@ -357,10 +315,6 @@ tapeSpeedIps: 15,
                     );
 
 
-                /*
-                 * Detector de envelope.
-                 */
-
                 if (
                     magnitude >
                     envelope
@@ -394,11 +348,6 @@ tapeSpeedIps: 15,
                     );
 
 
-                /*
-                 * O threshold agora é específico
-                 * desta banda.
-                 */
-
                 if (
                     levelDb <=
                     thresholdDb
@@ -413,11 +362,6 @@ tapeSpeedIps: 15,
                     thresholdDb;
 
 
-                /*
-                 * A redução cresce conforme
-                 * o sinal ultrapassa o threshold.
-                 */
-
                 let reductionDb =
                     excessDb -
                     (
@@ -425,11 +369,6 @@ tapeSpeedIps: 15,
                         this.options.dynamicRatio
                     );
 
-
-                /*
-                 * Nunca ultrapassa o limite
-                 * máximo definido para a banda.
-                 */
 
                 reductionDb =
                     Math.min(
@@ -452,11 +391,6 @@ tapeSpeedIps: 15,
                     );
 
 
-                /*
-                 * Apenas a região detectada
-                 * é reduzida.
-                 */
-
                 data[i] =
                     input +
                     (
@@ -473,759 +407,401 @@ tapeSpeedIps: 15,
 
     /*
      * =========================================================
-     * TAPE SATURATION
+     * TAPE SATURATOR — 15 IPS
      * =========================================================
-     *
-     * Somente 1 kHz para cima.
      */
 
     applyTapeSaturation(
-    data,
-    sampleRate
-) {
-
-    /*
-     * =====================================================
-     * TAPE 15 IPS
-     * =====================================================
-     *
-     * O processamento é feito por bandas:
-     *
-     * 1. Head bump 60–150 Hz
-     * 2. Saturação magnética
-     * 3. Roll-off suave do extremo superior
-     *
-     * A região abaixo de 1 kHz permanece fora
-     * da saturação principal.
-     */
-
-
-    const startHz =
-        this.options.tapeStartHz;
-
-
-    const headBumpCenter =
-        this.options.tapeHeadBumpCenterHz;
-
-
-    const headBumpGain =
-        this.dbToLinear(
-            this.options.tapeHeadBumpGainDb
-        );
-
-
-    const highRolloffStart =
-        this.options.tapeHighRolloffStartHz;
-
-
-    const highRolloffGain =
-        this.dbToLinear(
-            this.options.tapeHighRolloffDb
-        );
-
-
-    const bias =
-        Math.max(
-            0.1,
-            this.options.tapeBias
-        );
-
-
-    const flux =
-        Math.max(
-            0.1,
-            this.options.tapeFlux
-        );
-
-
-    const drive =
-        Math.max(
-            1,
-            this.options.tapeDrive
-        );
-
-
-    const mix =
-        Math.max(
-            0,
-            Math.min(
-                1,
-                this.options.tapeMix
-            )
-        );
-
-
-    const oddAmount =
-        Math.max(
-            0,
-            Math.min(
-                1,
-                this.options.tapeOddHarmonicAmount
-            )
-        );
-
-
-createPeakFilter(
-    frequency,
-    q,
-    gainLinear,
-    sampleRate
-) 
-{
-
-    const safeFrequency =
-        Math.min(
-            sampleRate * 0.45,
-            Math.max(
-                20,
-                frequency
-            )
-        );
-
-
-    const omega =
-        2 *
-        Math.PI *
-        safeFrequency /
-        sampleRate;
-
-
-    const sine =
-        Math.sin(
-            omega
-        );
-
-
-    const cosine =
-        Math.cos(
-            omega
-        );
-
-
-    const safeQ =
-        Math.max(
-            0.1,
-            q
-        );
-
-
-    const alpha =
-        sine /
-        (
-            2 *
-            safeQ
-        );
-
-
-    const gainDb =
-        20 *
-        Math.log10(
-            gainLinear
-        );
-
-
-    const A =
-        Math.pow(
-            10,
-            gainDb /
-            40
-        );
-
-
-    const alphaGain =
-        alpha *
-        A;
-
-
-    const alphaDivide =
-        alpha /
-        A;
-
-
-    const b0 =
-        1 +
-        alphaGain;
-
-
-    const b1 =
-        -2 *
-        cosine;
-
-
-    const b2 =
-        1 -
-        alphaGain;
-
-
-    const a0 =
-        1 +
-        alphaDivide;
-
-
-    const a1 =
-        -2 *
-        cosine;
-
-
-    const a2 =
-        1 -
-        alphaDivide;
-
-
-    return {
-
-        b0:
-            b0 /
-            a0,
-
-        b1:
-            b1 /
-            a0,
-
-        b2:
-            b2 /
-            a0,
-
-        a1:
-            a1 /
-            a0,
-
-        a2:
-            a2 /
-            a0
-    };
-}
-
-
-createLowShelfFilter(
-    frequency,
-    gainLinear,
-    sampleRate
-) 
-{
-
-    const safeFrequency =
-        Math.min(
-            sampleRate * 0.45,
-            Math.max(
-                20,
-                frequency
-            )
-        );
-
-
-    const omega =
-        2 *
-        Math.PI *
-        safeFrequency /
-        sampleRate;
-
-
-    const sine =
-        Math.sin(
-            omega
-        );
-
-
-    const cosine =
-        Math.cos(
-            omega
-        );
-
-
-    const gainDb =
-        20 *
-        Math.log10(
-            gainLinear
-        );
-
-
-    const A =
-        Math.pow(
-            10,
-            gainDb /
-            40
-        );
-
-
-    const alpha =
-        sine /
-        2 *
-        Math.SQRT2;
-
-
-    const twoSqrtAAlpha =
-        2 *
-        Math.sqrt(
-            A
-        ) *
-        alpha;
-
-
-    const beta =
-        2 *
-        Math.sqrt(
-            A
-        ) *
-        alpha;
-
-
-    const b0 =
-        A *
-        (
-            (
-                A + 1
-            ) -
-            (
-                A - 1
-            ) *
-            cosine +
-            beta
-        );
-
-
-    const b1 =
-        2 *
-        A *
-        (
-            (
-                A - 1
-            ) -
-            (
-                A + 1
-            ) *
-            cosine
-        );
-
-
-    const b2 =
-        A *
-        (
-            (
-                A + 1
-            ) -
-            (
-                A - 1
-            ) *
-            cosine -
-            beta
-        );
-
-
-    const a0 =
-        (
-            A + 1
-        ) +
-        (
-            A - 1
-        ) *
-        cosine +
-        twoSqrtAAlpha;
-
-
-    const a1 =
-        -2 *
-        (
-            (
-                A - 1
-            ) +
-            (
-                A + 1
-            ) *
-            cosine
-        );
-
-
-    const a2 =
-        (
-            A + 1
-        ) +
-        (
-            A - 1
-        ) *
-        cosine -
-        twoSqrtAAlpha;
-
-
-    return {
-
-        b0:
-            b0 /
-            a0,
-
-        b1:
-            b1 /
-            a0,
-
-        b2:
-            b2 /
-            a0,
-
-        a1:
-            a1 /
-            a0,
-
-        a2:
-            a2 /
-            a0
-    };
-}
-
-    /*
-     * =====================================================
-     * FILTROS
-     * =====================================================
-     */
-
-    const saturationHighpass =
-        this.createHighpassFilter(
-            startHz,
-            sampleRate
-        );
-
-
-    const headBumpFilter =
-        this.createPeakFilter(
-            headBumpCenter,
-            0.85,
-            headBumpGain,
-            sampleRate
-        );
-
-
-    const highRolloffFilter =
-        this.createLowShelfFilter(
-            highRolloffStart,
-            highRolloffGain,
-            sampleRate
-        );
-
-
-    let hpX1 = 0;
-    let hpX2 = 0;
-    let hpY1 = 0;
-    let hpY2 = 0;
-
-
-    let bumpX1 = 0;
-    let bumpX2 = 0;
-    let bumpY1 = 0;
-    let bumpY2 = 0;
-
-
-    let rollX1 = 0;
-    let rollX2 = 0;
-    let rollY1 = 0;
-    let rollY2 = 0;
-
-
-    /*
-     * =====================================================
-     * PROCESSAMENTO
-     * =====================================================
-     */
-
-    for (
-        let i = 0;
-        i < data.length;
-        i++
+        data,
+        sampleRate
     ) {
 
-        const input =
-            data[i];
+        const startHz =
+            this.options.tapeStartHz;
 
 
-        /*
-         * ---------------------------------------------
-         * HEAD BUMP
-         * ---------------------------------------------
-         *
-         * Reforço muito suave na região de
-         * aproximadamente 60–150 Hz.
-         */
-
-        const bumpResult =
-            this.processBiquad(
-                input,
-                headBumpFilter,
-                bumpX1,
-                bumpX2,
-                bumpY1,
-                bumpY2
-            );
+        const headBumpCenter =
+            this.options.tapeHeadBumpCenterHz;
 
 
-        bumpX1 =
-            bumpResult.x1;
-
-        bumpX2 =
-            bumpResult.x2;
-
-        bumpY1 =
-            bumpResult.y1;
-
-        bumpY2 =
-            bumpResult.y2;
-
-
-        let signal =
-            input +
-            (
-                bumpResult.output -
-                input
-            ) *
-            0.55;
-
-
-        /*
-         * ---------------------------------------------
-         * REGIÃO DE SATURAÇÃO
-         * ---------------------------------------------
-         */
-
-        const highResult =
-            this.processBiquad(
-                signal,
-                saturationHighpass,
-                hpX1,
-                hpX2,
-                hpY1,
-                hpY2
-            );
-
-
-        hpX1 =
-            highResult.x1;
-
-        hpX2 =
-            highResult.x2;
-
-        hpY1 =
-            highResult.y1;
-
-        hpY2 =
-            highResult.y2;
-
-
-        const highPart =
-            highResult.output;
-
-
-        /*
-         * ---------------------------------------------
-         * FLUXO MAGNÉTICO
-         * ---------------------------------------------
-         *
-         * O fluxo aumenta a intensidade com que
-         * o sinal entra na curva magnética.
-         */
-
-        const driven =
-            highPart *
-            drive *
-            flux;
-
-
-        /*
-         * ---------------------------------------------
-         * CURVA MAGNÉTICA COM ÊNFASE EM ÍMPARES
-         * ---------------------------------------------
-         *
-         * A primeira parcela produz a compressão
-         * suave da fita.
-         *
-         * As parcelas seguintes reforçam principalmente
-         * componentes ímpares.
-         */
-
-        const saturated =
-            Math.tanh(
-                driven /
-                bias
-            );
-
-
-        const third =
-            Math.pow(
-                saturated,
-                3
-            );
-
-
-        const fifth =
-            Math.pow(
-                saturated,
-                5
-            );
-
-
-        const seventh =
-            Math.pow(
-                saturated,
-                7
-            );
-
-
-        const oddCurve =
-            saturated +
-            (
-                third *
-                0.24
-            ) +
-            (
-                fifth *
-                0.08
-            ) +
-            (
-                seventh *
-                0.035
-            );
-
-
-        /*
-         * Mantém a saturação controlada.
-         */
-
-        const normalized =
-            Math.tanh(
-                oddCurve
-            );
-
-
-        /*
-         * ---------------------------------------------
-         * COMPRESSÃO SUAVE DOS TRANSIENTES
-         * ---------------------------------------------
-         */
-
-        const driveLevel =
-            Math.abs(
-                driven
-            );
-
-
-        const transientLimit =
+        const headBumpGain =
             this.dbToLinear(
-                this.options.tapeTransientCompressionDb
+                this.options.tapeHeadBumpGainDb
             );
 
 
-        let transientGain =
-            1;
+        const highRolloffStart =
+            this.options.tapeHighRolloffStartHz;
 
 
-        if (
-            driveLevel >
-            transientLimit
-        ) {
-
-            transientGain =
-                transientLimit /
-                driveLevel;
-        }
-
-
-        const compressedHigh =
-            highPart *
-            (
-                1 +
-                (
-                    transientGain -
-                    1
-                ) *
-                0.65
+        const highRolloffGain =
+            this.dbToLinear(
+                this.options.tapeHighRolloffDb
             );
 
 
-        /*
-         * ---------------------------------------------
-         * MISTURA DA SATURAÇÃO
-         * ---------------------------------------------
-         */
-
-        const saturatedHigh =
-            compressedHigh *
-            (
-                1 -
-                oddAmount
-            )
-            +
-            (
-                compressedHigh *
-                normalized
-            ) *
-            oddAmount;
-
-
-        signal =
-            signal +
-            (
-                saturatedHigh -
-                highPart
-            ) *
-            mix;
-
-
-        /*
-         * ---------------------------------------------
-         * HIGH-END ROLL-OFF
-         * ---------------------------------------------
-         *
-         * Pequena suavização do extremo superior.
-         */
-
-        const rollResult =
-            this.processBiquad(
-                signal,
-                highRolloffFilter,
-                rollX1,
-                rollX2,
-                rollY1,
-                rollY2
-            );
-
-
-        rollX1 =
-            rollResult.x1;
-
-        rollX2 =
-            rollResult.x2;
-
-        rollY1 =
-            rollResult.y1;
-
-        rollY2 =
-            rollResult.y2;
-
-
-        /*
-         * Aplique apenas parte do roll-off,
-         * evitando transformar o efeito em EQ.
-         */
-
-        signal =
-            signal +
-            (
-                rollResult.output -
-                signal
-            ) *
-            0.48;
-
-
-        /*
-         * Segurança contra níveis excessivos.
-         */
-
-        data[i] =
+        const bias =
             Math.max(
-                -1,
+                0.1,
+                this.options.tapeBias
+            );
+
+
+        const flux =
+            Math.max(
+                0.1,
+                this.options.tapeFlux
+            );
+
+
+        const drive =
+            Math.max(
+                1,
+                this.options.tapeDrive
+            );
+
+
+        const mix =
+            Math.max(
+                0,
                 Math.min(
                     1,
-                    signal
+                    this.options.tapeMix
                 )
             );
+
+
+        const oddAmount =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    this.options.tapeOddHarmonicAmount
+                )
+            );
+
+
+        /*
+         * =====================================================
+         * FILTROS
+         * =====================================================
+         */
+
+        const saturationHighpass =
+            this.createHighpassFilter(
+                startHz,
+                sampleRate
+            );
+
+
+        const headBumpFilter =
+            this.createPeakFilter(
+                headBumpCenter,
+                0.85,
+                headBumpGain,
+                sampleRate
+            );
+
+
+        const highRolloffFilter =
+            this.createLowShelfFilter(
+                highRolloffStart,
+                highRolloffGain,
+                sampleRate
+            );
+
+
+        let hpX1 = 0;
+        let hpX2 = 0;
+        let hpY1 = 0;
+        let hpY2 = 0;
+
+
+        let bumpX1 = 0;
+        let bumpX2 = 0;
+        let bumpY1 = 0;
+        let bumpY2 = 0;
+
+
+        let rollX1 = 0;
+        let rollX2 = 0;
+        let rollY1 = 0;
+        let rollY2 = 0;
+
+
+        /*
+         * =====================================================
+         * PROCESSAMENTO
+         * =====================================================
+         */
+
+        for (
+            let i = 0;
+            i < data.length;
+            i++
+        ) {
+
+            const input =
+                data[i];
+
+
+            /*
+             * HEAD BUMP
+             */
+
+            const bumpResult =
+                this.processBiquad(
+                    input,
+                    headBumpFilter,
+                    bumpX1,
+                    bumpX2,
+                    bumpY1,
+                    bumpY2
+                );
+
+
+            bumpX1 =
+                bumpResult.x1;
+
+            bumpX2 =
+                bumpResult.x2;
+
+            bumpY1 =
+                bumpResult.y1;
+
+            bumpY2 =
+                bumpResult.y2;
+
+
+            let signal =
+                input +
+                (
+                    bumpResult.output -
+                    input
+                ) *
+                0.55;
+
+
+            /*
+             * REGIÃO DE SATURAÇÃO
+             */
+
+            const highResult =
+                this.processBiquad(
+                    signal,
+                    saturationHighpass,
+                    hpX1,
+                    hpX2,
+                    hpY1,
+                    hpY2
+                );
+
+
+            hpX1 =
+                highResult.x1;
+
+            hpX2 =
+                highResult.x2;
+
+            hpY1 =
+                highResult.y1;
+
+            hpY2 =
+                highResult.y2;
+
+
+            const highPart =
+                highResult.output;
+
+
+            /*
+             * FLUXO MAGNÉTICO
+             */
+
+            const driven =
+                highPart *
+                drive *
+                flux;
+
+
+            /*
+             * CURVA NÃO-LINEAR
+             */
+
+            const saturated =
+                Math.tanh(
+                    driven /
+                    bias
+                );
+
+
+            /*
+             * COMPONENTES ÍMPARES
+             */
+
+            const third =
+                Math.pow(
+                    saturated,
+                    3
+                );
+
+
+            const fifth =
+                Math.pow(
+                    saturated,
+                    5
+                );
+
+
+            const seventh =
+                Math.pow(
+                    saturated,
+                    7
+                );
+
+
+            const oddCurve =
+                saturated +
+                (
+                    third *
+                    0.24
+                ) +
+                (
+                    fifth *
+                    0.08
+                ) +
+                (
+                    seventh *
+                    0.035
+                );
+
+
+            const normalized =
+                Math.tanh(
+                    oddCurve
+                );
+
+
+            /*
+             * COMPRESSÃO SUAVE
+             */
+
+            const driveLevel =
+                Math.abs(
+                    driven
+                );
+
+
+            const transientLimit =
+                this.dbToLinear(
+                    this.options.tapeTransientCompressionDb
+                );
+
+
+            let transientGain =
+                1;
+
+
+            if (
+                driveLevel >
+                transientLimit
+            ) {
+
+                transientGain =
+                    transientLimit /
+                    driveLevel;
+            }
+
+
+            const compressedHigh =
+                highPart *
+                (
+                    1 +
+                    (
+                        transientGain -
+                        1
+                    ) *
+                    0.65
+                );
+
+
+            /*
+             * MISTURA
+             */
+
+            const saturatedHigh =
+                compressedHigh *
+                (
+                    1 -
+                    oddAmount
+                ) +
+                (
+                    compressedHigh *
+                    normalized
+                ) *
+                oddAmount;
+
+
+            signal =
+                signal +
+                (
+                    saturatedHigh -
+                    highPart
+                ) *
+                mix;
+
+
+            /*
+             * HIGH-END ROLL-OFF
+             */
+
+            const rollResult =
+                this.processBiquad(
+                    signal,
+                    highRolloffFilter,
+                    rollX1,
+                    rollX2,
+                    rollY1,
+                    rollY2
+                );
+
+
+            rollX1 =
+                rollResult.x1;
+
+            rollX2 =
+                rollResult.x2;
+
+            rollY1 =
+                rollResult.y1;
+
+            rollY2 =
+                rollResult.y2;
+
+
+            signal =
+                signal +
+                (
+                    rollResult.output -
+                    signal
+                ) *
+                0.48;
+
+
+            /*
+             * SEGURANÇA
+             */
+
+            data[i] =
+                Math.max(
+                    -1,
+                    Math.min(
+                        1,
+                        signal
+                    )
+                );
+        }
     }
-}
 
 
     /*
@@ -1407,26 +983,336 @@ createLowShelfFilter(
             );
 
 
-        const b0 =
-            alpha;
-
-        const b1 =
-            0;
-
-        const b2 =
-            -alpha;
-
         const a0 =
             1 +
             alpha;
+
+
+        return {
+
+            b0:
+                alpha /
+                a0,
+
+            b1:
+                0,
+
+            b2:
+                -alpha /
+                a0,
+
+            a1:
+                (
+                    -2 *
+                    cosine
+                ) /
+                a0,
+
+            a2:
+                (
+                    1 -
+                    alpha
+                ) /
+                a0
+        };
+    }
+
+
+    /*
+     * =========================================================
+     * PEAK FILTER
+     * =========================================================
+     */
+
+    createPeakFilter(
+        frequency,
+        q,
+        gainLinear,
+        sampleRate
+    ) {
+
+        const safeFrequency =
+            Math.min(
+                sampleRate * 0.45,
+                Math.max(
+                    20,
+                    frequency
+                )
+            );
+
+
+        const omega =
+            2 *
+            Math.PI *
+            safeFrequency /
+            sampleRate;
+
+
+        const sine =
+            Math.sin(
+                omega
+            );
+
+
+        const cosine =
+            Math.cos(
+                omega
+            );
+
+
+        const safeQ =
+            Math.max(
+                0.1,
+                q
+            );
+
+
+        const alpha =
+            sine /
+            (
+                2 *
+                safeQ
+            );
+
+
+        const gainDb =
+            20 *
+            Math.log10(
+                Math.max(
+                    0.000001,
+                    gainLinear
+                )
+            );
+
+
+        const A =
+            Math.pow(
+                10,
+                gainDb /
+                40
+            );
+
+
+        const alphaA =
+            alpha *
+            A;
+
+
+        const alphaOverA =
+            alpha /
+            A;
+
+
+        const b0 =
+            1 +
+            alphaA;
+
+
+        const b1 =
+            -2 *
+            cosine;
+
+
+        const b2 =
+            1 -
+            alphaA;
+
+
+        const a0 =
+            1 +
+            alphaOverA;
+
 
         const a1 =
             -2 *
             cosine;
 
+
         const a2 =
             1 -
+            alphaOverA;
+
+
+        return {
+
+            b0:
+                b0 /
+                a0,
+
+            b1:
+                b1 /
+                a0,
+
+            b2:
+                b2 /
+                a0,
+
+            a1:
+                a1 /
+                a0,
+
+            a2:
+                a2 /
+                a0
+        };
+    }
+
+
+    /*
+     * =========================================================
+     * LOW SHELF
+     * =========================================================
+     */
+
+    createLowShelfFilter(
+        frequency,
+        gainLinear,
+        sampleRate
+    ) {
+
+        const safeFrequency =
+            Math.min(
+                sampleRate * 0.45,
+                Math.max(
+                    20,
+                    frequency
+                )
+            );
+
+
+        const omega =
+            2 *
+            Math.PI *
+            safeFrequency /
+            sampleRate;
+
+
+        const sine =
+            Math.sin(
+                omega
+            );
+
+
+        const cosine =
+            Math.cos(
+                omega
+            );
+
+
+        const gainDb =
+            20 *
+            Math.log10(
+                Math.max(
+                    0.000001,
+                    gainLinear
+                )
+            );
+
+
+        const A =
+            Math.pow(
+                10,
+                gainDb /
+                40
+            );
+
+
+        /*
+         * Q fixo equivalente a aproximadamente
+         * 0.707 para o comportamento suave.
+         */
+
+        const alpha =
+            sine /
+            (
+                2 *
+                Math.SQRT2
+            );
+
+
+        const beta =
+            2 *
+            Math.sqrt(
+                A
+            ) *
             alpha;
+
+
+        const b0 =
+            A *
+            (
+                (
+                    A + 1
+                ) -
+                (
+                    A - 1
+                ) *
+                cosine +
+                beta
+            );
+
+
+        const b1 =
+            2 *
+            A *
+            (
+                (
+                    A - 1
+                ) -
+                (
+                    A + 1
+                ) *
+                cosine
+            );
+
+
+        const b2 =
+            A *
+            (
+                (
+                    A + 1
+                ) -
+                (
+                    A - 1
+                ) *
+                cosine -
+                beta
+            );
+
+
+        const a0 =
+            (
+                A + 1
+            ) +
+            (
+                A - 1
+            ) *
+            cosine +
+            beta;
+
+
+        const a1 =
+            -2 *
+            (
+                (
+                    A - 1
+                ) +
+                (
+                    A + 1
+                ) *
+                cosine
+            );
+
+
+        const a2 =
+            (
+                A + 1
+            ) +
+            (
+                A - 1
+            ) *
+            cosine -
+            beta;
 
 
         return {
@@ -1502,64 +1388,48 @@ createLowShelfFilter(
             );
 
 
-        const b0 =
-            (
-                1 +
-                cosine
-            ) /
-            2;
-
-
-        const b1 =
-            -(
-                1 +
-                cosine
-            );
-
-
-        const b2 =
-            (
-                1 +
-                cosine
-            ) /
-            2;
-
-
         const a0 =
             1 +
-            alpha;
-
-
-        const a1 =
-            -2 *
-            cosine;
-
-
-        const a2 =
-            1 -
             alpha;
 
 
         return {
 
             b0:
-                b0 /
+                (
+                    1 +
+                    cosine
+                ) /
+                2 /
                 a0,
 
             b1:
-                b1 /
+                -(
+                    1 +
+                    cosine
+                ) /
                 a0,
 
             b2:
-                b2 /
+                (
+                    1 +
+                    cosine
+                ) /
+                2 /
                 a0,
 
             a1:
-                a1 /
+                (
+                    -2 *
+                    cosine
+                ) /
                 a0,
 
             a2:
-                a2 /
+                (
+                    1 -
+                    alpha
+                ) /
                 a0
         };
     }
@@ -1653,7 +1523,7 @@ createLowShelfFilter(
 
     /*
      * =========================================================
-     * CONVERSÃO LINEAR → dB
+     * LINEAR → dB
      * =========================================================
      */
 
@@ -1677,7 +1547,7 @@ createLowShelfFilter(
 
     /*
      * =========================================================
-     * CONVERSÃO dB → LINEAR
+     * dB → LINEAR
      * =========================================================
      */
 
