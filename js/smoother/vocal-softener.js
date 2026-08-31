@@ -9,8 +9,11 @@ class VocalSoftener {
 
             enabled: true,
 
+
             /*
+             * =====================================================
              * EQ DINÂMICO MULTIBANDA
+             * =====================================================
              *
              * As cinco primeiras regiões são estreitas.
              * As três últimas são moderadas.
@@ -61,11 +64,22 @@ class VocalSoftener {
                 }
             ],
 
+
             /*
-             * Primeira versão deliberadamente audível.
+             * Fallback utilizado somente quando
+             * não houver threshold válido vindo
+             * do Vocal Softener Analyzer.
+             *
+             * O Analyzer passa a ser a fonte
+             * principal do threshold.
              */
 
             dynamicThresholdDb: -28,
+
+
+            /*
+             * Comportamento do EQ dinâmico.
+             */
 
             dynamicRatio: 2.5,
 
@@ -77,7 +91,9 @@ class VocalSoftener {
 
 
             /*
+             * =====================================================
              * TAPE SATURATOR
+             * =====================================================
              *
              * Atua somente a partir de 1 kHz.
              */
@@ -90,7 +106,9 @@ class VocalSoftener {
 
 
             /*
+             * =====================================================
              * UPWARD EXPANDER
+             * =====================================================
              */
 
             upwardThresholdDb: -32,
@@ -102,6 +120,7 @@ class VocalSoftener {
             upwardAttackMs: 12,
 
             upwardReleaseMs: 110,
+
 
             ...options
         };
@@ -127,14 +146,16 @@ class VocalSoftener {
 
 
         /*
-         * O Analyzer não pode bloquear
-         * a atuação do Softener.
+         * O perfil do Analyzer é opcional.
          *
-         * O perfil é recebido e preservado
-         * para futuras evoluções.
+         * Se existir e possuir thresholds válidos,
+         * eles serão usados individualmente por banda.
+         *
+         * Se não existir, o Softener continua funcionando
+         * usando o threshold de fallback.
+         *
+         * O Analyzer nunca pode bloquear o processamento.
          */
-
-        void vocalProfile;
 
 
         for (
@@ -151,7 +172,8 @@ class VocalSoftener {
 
             this.applyDynamicMultibandEQ(
                 data,
-                audioBuffer.sampleRate
+                audioBuffer.sampleRate,
+                vocalProfile
             );
 
 
@@ -172,14 +194,29 @@ class VocalSoftener {
     }
 
 
+    /*
+     * =========================================================
+     * EQ DINÂMICO MULTIBANDA
+     * =========================================================
+     */
+
     applyDynamicMultibandEQ(
         data,
-        sampleRate
+        sampleRate,
+        vocalProfile = null
     ) {
 
         for (
-            const band of this.options.dynamicBands
+            let bandIndex = 0;
+            bandIndex < this.options.dynamicBands.length;
+            bandIndex++
         ) {
+
+            const band =
+                this.options.dynamicBands[
+                    bandIndex
+                ];
+
 
             const filter =
                 this.createBandpassFilter(
@@ -189,9 +226,44 @@ class VocalSoftener {
                 );
 
 
+            /*
+             * =================================================
+             * THRESHOLD INDIVIDUAL DA BANDA
+             * =================================================
+             *
+             * O Analyzer fornece um threshold calculado
+             * especificamente para esta frequência.
+             *
+             * Se não houver um valor válido,
+             * usamos o fallback de -28 dB.
+             */
+
+            const analyzedBand =
+                vocalProfile &&
+                Array.isArray(
+                    vocalProfile.bands
+                )
+                    ? vocalProfile.bands[
+                        bandIndex
+                    ]
+                    : null;
+
+
+            const thresholdDb =
+                analyzedBand &&
+                Number.isFinite(
+                    analyzedBand.thresholdDb
+                )
+                    ? analyzedBand.thresholdDb
+                    : this.options.dynamicThresholdDb;
+
+
             let x1 = 0;
+
             let x2 = 0;
+
             let y1 = 0;
+
             let y2 = 0;
 
             let envelope = 0;
@@ -232,10 +304,17 @@ class VocalSoftener {
                     );
 
 
-                x1 = filtered.x1;
-                x2 = filtered.x2;
-                y1 = filtered.y1;
-                y2 = filtered.y2;
+                x1 =
+                    filtered.x1;
+
+                x2 =
+                    filtered.x2;
+
+                y1 =
+                    filtered.y1;
+
+                y2 =
+                    filtered.y2;
 
 
                 const bandSignal =
@@ -248,23 +327,34 @@ class VocalSoftener {
                     );
 
 
+                /*
+                 * Detector de envelope.
+                 */
+
                 if (
-                    magnitude > envelope
+                    magnitude >
+                    envelope
                 ) {
 
                     envelope =
-                        attack * envelope +
+                        attack *
+                        envelope +
                         (
-                            1 - attack
-                        ) * magnitude;
+                            1 -
+                            attack
+                        ) *
+                        magnitude;
 
                 } else {
 
                     envelope =
-                        release * envelope +
+                        release *
+                        envelope +
                         (
-                            1 - release
-                        ) * magnitude;
+                            1 -
+                            release
+                        ) *
+                        magnitude;
                 }
 
 
@@ -274,9 +364,14 @@ class VocalSoftener {
                     );
 
 
+                /*
+                 * O threshold agora é específico
+                 * desta banda.
+                 */
+
                 if (
                     levelDb <=
-                    this.options.dynamicThresholdDb
+                    thresholdDb
                 ) {
 
                     continue;
@@ -285,8 +380,13 @@ class VocalSoftener {
 
                 const excessDb =
                     levelDb -
-                    this.options.dynamicThresholdDb;
+                    thresholdDb;
 
+
+                /*
+                 * A redução cresce conforme
+                 * o sinal ultrapassa o threshold.
+                 */
 
                 let reductionDb =
                     excessDb -
@@ -295,6 +395,11 @@ class VocalSoftener {
                         this.options.dynamicRatio
                     );
 
+
+                /*
+                 * Nunca ultrapassa o limite
+                 * máximo definido para a banda.
+                 */
 
                 reductionDb =
                     Math.min(
@@ -327,13 +432,22 @@ class VocalSoftener {
                     (
                         bandSignal *
                         (
-                            gain - 1
+                            gain -
+                            1
                         )
                     );
             }
         }
     }
 
+
+    /*
+     * =========================================================
+     * TAPE SATURATION
+     * =========================================================
+     *
+     * Somente 1 kHz para cima.
+     */
 
     applyTapeSaturation(
         data,
@@ -348,8 +462,11 @@ class VocalSoftener {
 
 
         let x1 = 0;
+
         let x2 = 0;
+
         let y1 = 0;
+
         let y2 = 0;
 
 
@@ -391,10 +508,17 @@ class VocalSoftener {
                 );
 
 
-            x1 = filtered.x1;
-            x2 = filtered.x2;
-            y1 = filtered.y1;
-            y2 = filtered.y2;
+            x1 =
+                filtered.x1;
+
+            x2 =
+                filtered.x2;
+
+            y1 =
+                filtered.y1;
+
+            y2 =
+                filtered.y2;
 
 
             const highFrequency =
@@ -426,6 +550,12 @@ class VocalSoftener {
         }
     }
 
+
+    /*
+     * =========================================================
+     * UPWARD EXPANDER
+     * =========================================================
+     */
 
     applyUpwardExpansion(
         data,
@@ -466,22 +596,29 @@ class VocalSoftener {
 
 
             if (
-                magnitude > envelope
+                magnitude >
+                envelope
             ) {
 
                 envelope =
-                    attack * envelope +
+                    attack *
+                    envelope +
                     (
-                        1 - attack
-                    ) * magnitude;
+                        1 -
+                        attack
+                    ) *
+                    magnitude;
 
             } else {
 
                 envelope =
-                    release * envelope +
+                    release *
+                    envelope +
                     (
-                        1 - release
-                    ) * magnitude;
+                        1 -
+                        release
+                    ) *
+                    magnitude;
             }
 
 
@@ -508,7 +645,8 @@ class VocalSoftener {
             let boostDb =
                 distanceDb *
                 (
-                    this.options.upwardRatio - 1
+                    this.options.upwardRatio -
+                    1
                 );
 
 
@@ -539,6 +677,12 @@ class VocalSoftener {
         }
     }
 
+
+    /*
+     * =========================================================
+     * BANDPASS
+     * =========================================================
+     */
 
     createBandpassFilter(
         frequency,
@@ -596,25 +740,48 @@ class VocalSoftener {
             -alpha;
 
         const a0 =
-            1 + alpha;
+            1 +
+            alpha;
 
         const a1 =
-            -2 * cosine;
+            -2 *
+            cosine;
 
         const a2 =
-            1 - alpha;
+            1 -
+            alpha;
 
 
         return {
 
-            b0: b0 / a0,
-            b1: b1 / a0,
-            b2: b2 / a0,
-            a1: a1 / a0,
-            a2: a2 / a0
+            b0:
+                b0 /
+                a0,
+
+            b1:
+                b1 /
+                a0,
+
+            b2:
+                b2 /
+                a0,
+
+            a1:
+                a1 /
+                a0,
+
+            a2:
+                a2 /
+                a0
         };
     }
 
+
+    /*
+     * =========================================================
+     * HIGH-PASS
+     * =========================================================
+     */
 
     createHighpassFilter(
         frequency,
@@ -660,44 +827,72 @@ class VocalSoftener {
 
         const b0 =
             (
-                1 + cosine
-            ) / 2;
+                1 +
+                cosine
+            ) /
+            2;
 
 
         const b1 =
             -(
-                1 + cosine
+                1 +
+                cosine
             );
 
 
         const b2 =
             (
-                1 + cosine
-            ) / 2;
+                1 +
+                cosine
+            ) /
+            2;
 
 
         const a0 =
-            1 + alpha;
+            1 +
+            alpha;
 
 
         const a1 =
-            -2 * cosine;
+            -2 *
+            cosine;
 
 
         const a2 =
-            1 - alpha;
+            1 -
+            alpha;
 
 
         return {
 
-            b0: b0 / a0,
-            b1: b1 / a0,
-            b2: b2 / a0,
-            a1: a1 / a0,
-            a2: a2 / a0
+            b0:
+                b0 /
+                a0,
+
+            b1:
+                b1 /
+                a0,
+
+            b2:
+                b2 /
+                a0,
+
+            a1:
+                a1 /
+                a0,
+
+            a2:
+                a2 /
+                a0
         };
     }
 
+
+    /*
+     * =========================================================
+     * BIQUAD
+     * =========================================================
+     */
 
     processBiquad(
         input,
@@ -735,13 +930,26 @@ class VocalSoftener {
 
             output,
 
-            x1: input,
-            x2: x1,
-            y1: output,
-            y2: y1
+            x1:
+                input,
+
+            x2:
+                x1,
+
+            y1:
+                output,
+
+            y2:
+                y1
         };
     }
 
+
+    /*
+     * =========================================================
+     * TEMPO
+     * =========================================================
+     */
 
     timeCoefficient(
         milliseconds,
@@ -752,7 +960,8 @@ class VocalSoftener {
             Math.max(
                 0.1,
                 milliseconds
-            ) / 1000;
+            ) /
+            1000;
 
 
         return Math.exp(
@@ -764,6 +973,12 @@ class VocalSoftener {
         );
     }
 
+
+    /*
+     * =========================================================
+     * CONVERSÃO LINEAR → dB
+     * =========================================================
+     */
 
     linearToDb(
         value
@@ -783,16 +998,29 @@ class VocalSoftener {
     }
 
 
+    /*
+     * =========================================================
+     * CONVERSÃO dB → LINEAR
+     * =========================================================
+     */
+
     dbToLinear(
         db
     ) {
 
         return Math.pow(
             10,
-            db / 20
+            db /
+            20
         );
     }
 
+
+    /*
+     * =========================================================
+     * VALIDAÇÃO
+     * =========================================================
+     */
 
     validateAudioBuffer(
         audioBuffer
