@@ -79,7 +79,7 @@ class VocalSoftener {
 
             tapeSpeedIps: 15,
 
-            tapeStartHz: 1000,
+            tapeStartHz: 1250,
 
             tapeHeadBumpCenterHz: 95,
 
@@ -87,7 +87,7 @@ class VocalSoftener {
 
             tapeHighRolloffStartHz: 6500,
 
-            tapeHighRolloffDb: -1.8,
+            tapeHighRolloffDb: -0.7,
 
             tapeBias: 1.18,
 
@@ -95,7 +95,7 @@ class VocalSoftener {
 
             tapeDrive: 1.55,
 
-            tapeMix: 0.72,
+            tapeMix: 0.50,
 
             tapeOddHarmonicAmount: 0.78,
 
