@@ -112,7 +112,7 @@ class VocalSoftener {
 
             upwardRatio: 1.45,
 
-            upwardMaxBoostDb: 2,
+            upwardMaxBoostDb: 5,
 
             upwardAttackMs: 12,
 
@@ -694,52 +694,51 @@ const effectiveHighRolloffStart =
                 );
 
 
-/*
- * =====================================================
- * COMPONENTES HARMÔNICAS ÍMPARES
- * =====================================================
- *
- * Geração controlada de componentes ímpares
- * derivadas da curva saturada.
- *
- * oddAmount controla somente a quantidade
- * dessas componentes adicionada ao sinal.
- */
+            /*
+             * COMPONENTES ÍMPARES
+             */
 
-const third =
-    Math.pow(
-        saturated,
-        3
-    );
+            const third =
+                Math.pow(
+                    saturated,
+                    3
+                );
 
 
-const fifth =
-    Math.pow(
-        saturated,
-        5
-    );
+            const fifth =
+                Math.pow(
+                    saturated,
+                    5
+                );
 
 
-const seventh =
-    Math.pow(
-        saturated,
-        7
-    );
+            const seventh =
+                Math.pow(
+                    saturated,
+                    7
+                );
 
 
-const oddHarmonicComponent =
-    (
-        third *
-        0.24
-    ) +
-    (
-        fifth *
-        0.08
-    ) +
-    (
-        seventh *
-        0.035
-    );
+            const oddCurve =
+                saturated +
+                (
+                    third *
+                    0.24
+                ) +
+                (
+                    fifth *
+                    0.08
+                ) +
+                (
+                    seventh *
+                    0.035
+                );
+
+
+            const normalized =
+                Math.tanh(
+                    oddCurve
+                );
 
 
 /*
@@ -812,33 +811,21 @@ const compressedHigh =
     );
 
 
-/*
- * =====================================================
- * MISTURA DOS HARMÔNICOS
- * =====================================================
- *
- * O sinal principal continua sendo o resultado
- * da saturação/compressão.
- *
- * oddAmount determina apenas quanto da componente
- * harmônica adicional é incorporada.
- */
+            /*
+             * MISTURA
+             */
 
-const harmonicSignal =
-    compressedHigh +
-    (
-        compressedHigh *
-        oddHarmonicComponent
-    );
-
-
-const saturatedHigh =
-    compressedHigh +
-    (
-        harmonicSignal -
-        compressedHigh
-    ) *
-    oddAmount;
+            const saturatedHigh =
+                compressedHigh *
+                (
+                    1 -
+                    oddAmount
+                ) +
+                (
+                    compressedHigh *
+                    normalized
+                ) *
+                oddAmount;
 
 
             signal =
@@ -903,197 +890,131 @@ const saturatedHigh =
     }
 
 
-/*
- * =========================================================
- * UPWARD EXPANDER
- * =========================================================
- *
- * Recupera detalhes de baixo nível do vocal sem
- * transformar o módulo em um compressor convencional.
- *
- * O sinal abaixo do threshold recebe boost progressivo.
- * O ganho é suavizado pelo envelope e limitado pelo
- * upwardMaxBoostDb.
- */
+    /*
+     * =========================================================
+     * UPWARD EXPANDER
+     * =========================================================
+     */
 
-applyUpwardExpansion(
-    data,
-    sampleRate
-) {
-
-    let envelope = 0;
-
-
-    const attack =
-        this.timeCoefficient(
-            this.options.upwardAttackMs,
-            sampleRate
-        );
-
-
-    const release =
-        this.timeCoefficient(
-            this.options.upwardReleaseMs,
-            sampleRate
-        );
-
-
-    const thresholdDb =
-        this.options.upwardThresholdDb;
-
-
-    const ratio =
-        Math.max(
-            1,
-            this.options.upwardRatio
-        );
-
-
-    const maxBoostDb =
-        Math.max(
-            0,
-            this.options.upwardMaxBoostDb
-        );
-
-
-    for (
-        let i = 0;
-        i < data.length;
-        i++
+    applyUpwardExpansion(
+        data,
+        sampleRate
     ) {
 
-        const input =
-            data[i];
+        let envelope = 0;
 
 
-        const magnitude =
-            Math.abs(
-                input
+        const attack =
+            this.timeCoefficient(
+                this.options.upwardAttackMs,
+                sampleRate
             );
 
 
-        /*
-         * ENVELOPE
-         */
+        const release =
+            this.timeCoefficient(
+                this.options.upwardReleaseMs,
+                sampleRate
+            );
 
-        if (
-            magnitude >
-            envelope
+
+        for (
+            let i = 0;
+            i < data.length;
+            i++
         ) {
 
-            envelope =
-                attack *
-                envelope +
-                (
-                    1 -
-                    attack
-                ) *
-                magnitude;
-
-        } else {
-
-            envelope =
-                release *
-                envelope +
-                (
-                    1 -
-                    release
-                ) *
-                magnitude;
-        }
+            const input =
+                data[i];
 
 
-        /*
-         * PROTEÇÃO CONTRA VALORES INVÁLIDOS
-         */
-
-        if (
-            envelope <=
-            0.000001
-        ) {
-
-            continue;
-        }
+            const magnitude =
+                Math.abs(
+                    input
+                );
 
 
-        const levelDb =
-            this.linearToDb(
+            if (
+                magnitude >
                 envelope
-            );
+            ) {
+
+                envelope =
+                    attack *
+                    envelope +
+                    (
+                        1 -
+                        attack
+                    ) *
+                    magnitude;
+
+            } else {
+
+                envelope =
+                    release *
+                    envelope +
+                    (
+                        1 -
+                        release
+                    ) *
+                    magnitude;
+            }
 
 
-        /*
-         * SOMENTE SINAIS ABAIXO
-         * DO THRESHOLD RECEBEM BOOST
-         */
-
-        if (
-            levelDb >=
-            thresholdDb
-        ) {
-
-            continue;
-        }
+            const levelDb =
+                this.linearToDb(
+                    envelope
+                );
 
 
-        const distanceDb =
-            thresholdDb -
-            levelDb;
+            if (
+                levelDb >=
+                this.options.upwardThresholdDb
+            ) {
+
+                continue;
+            }
 
 
-        /*
-         * EXPANSÃO PROGRESSIVA
-         *
-         * Quanto mais distante do threshold,
-         * maior o boost, limitado pelo máximo.
-         */
-
-        let boostDb =
-            distanceDb *
-            (
-                ratio -
-                1
-            );
+            const distanceDb =
+                this.options.upwardThresholdDb -
+                levelDb;
 
 
-        boostDb =
-            Math.max(
-                0,
+            let boostDb =
+                distanceDb *
+                (
+                    this.options.upwardRatio -
+                    1
+                );
+
+
+            boostDb =
                 Math.min(
-                    maxBoostDb,
+                    boostDb,
+                    this.options.upwardMaxBoostDb
+                );
+
+
+            if (
+                boostDb <= 0
+            ) {
+
+                continue;
+            }
+
+
+            const gain =
+                this.dbToLinear(
                     boostDb
-                )
-            );
+                );
 
 
-        if (
-            boostDb <=
-            0
-        ) {
-
-            continue;
+            data[i] =
+                input *
+                gain;
         }
-
-
-        /*
-         * GANHO LINEAR
-         */
-
-        const gain =
-            this.dbToLinear(
-                boostDb
-            );
-
-
-        /*
-         * APLICAÇÃO
-         */
-
-        data[i] =
-            input *
-            gain;
     }
-}
 
 
     /*
