@@ -416,13 +416,45 @@ class VocalSoftener {
         sampleRate
     ) {
 
-        const startHz =
-            this.options.tapeStartHz;
+const speedIps =
+    Math.max(
+        7.5,
+        Math.min(
+            30,
+            this.options.tapeSpeedIps
+        )
+    );
+
+const startHz =
+    this.options.tapeStartHz;
 
 
         const headBumpCenter =
             this.options.tapeHeadBumpCenterHz;
 
+/*
+ * =====================================================
+ * TAPE SPEED DEPENDENCY
+ * =====================================================
+ *
+ * A velocidade da fita influencia principalmente
+ * a posição do head bump.
+ *
+ * 15 IPS = referência atual.
+ * Velocidades menores deslocam o bump para baixo.
+ * Velocidades maiores deslocam o bump para cima.
+ */
+
+const speedReferenceIps =
+    15;
+
+const speedRatio =
+    speedReferenceIps /
+    speedIps;
+
+const effectiveHeadBumpCenter =
+    headBumpCenter *
+    speedRatio;
 
         const headBumpGain =
             this.dbToLinear(
@@ -495,12 +527,12 @@ class VocalSoftener {
 
 
         const headBumpFilter =
-            this.createPeakFilter(
-                headBumpCenter,
-                0.85,
-                headBumpGain,
-                sampleRate
-            );
+    this.createPeakFilter(
+        effectiveHeadBumpCenter,
+        0.85,
+        headBumpGain,
+        sampleRate
+    );
 
 
         const highRolloffFilter =
@@ -682,47 +714,74 @@ class VocalSoftener {
                 );
 
 
-            /*
-             * COMPRESSÃO SUAVE
-             */
+/*
+ * =====================================================
+ * TAPE TRANSIENT COMPRESSION
+ * =====================================================
+ *
+ * Suavização proporcional dos picos gerados
+ * pela saturação da fita.
+ *
+ * Não funciona como compressor convencional:
+ * atua apenas sobre a região que realmente
+ * está sendo empurrada para a saturação.
+ */
 
-            const driveLevel =
-                Math.abs(
-                    driven
-                );
+const transientCompressionDb =
+    Math.max(
+        0,
+        this.options.tapeTransientCompressionDb
+    );
 
+const driveLevel =
+    Math.abs(
+        driven
+    );
 
-            const transientLimit =
-                this.dbToLinear(
-                    this.options.tapeTransientCompressionDb
-                );
+const saturationReference =
+    0.25;
 
+let compressionAmount =
+    0;
 
-            let transientGain =
-                1;
+if (
+    driveLevel >
+    saturationReference
+) {
+    
+    const excess =
+        Math.min(
+            1,
+            (
+                driveLevel -
+                saturationReference
+            ) /
+            (
+                1 -
+                saturationReference
+            )
+        );
+    
+    compressionAmount =
+        excess *
+        transientCompressionDb;
+}
 
+const transientGain =
+    this.dbToLinear(
+        -compressionAmount
+    );
 
-            if (
-                driveLevel >
-                transientLimit
-            ) {
-
-                transientGain =
-                    transientLimit /
-                    driveLevel;
-            }
-
-
-            const compressedHigh =
-                highPart *
-                (
-                    1 +
-                    (
-                        transientGain -
-                        1
-                    ) *
-                    0.65
-                );
+const compressedHigh =
+    highPart *
+    (
+        1 +
+        (
+            transientGain -
+            1
+        ) *
+        0.65
+    );
 
 
             /*
