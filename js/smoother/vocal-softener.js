@@ -90,19 +90,49 @@ class VocalSoftener {
             dynamicMaxReductionDb: 3,
 
 
-            /*
-             * =====================================================
-             * TAPE SATURATOR
-             * =====================================================
-             *
-             * Atua somente a partir de 1 kHz.
-             */
+/*
+ * =====================================================
+ * TAPE SATURATOR — 15 IPS / HIGH OUTPUT / OVERBIAS
+ * =====================================================
+ *
+ * Modelo inspirado em fita moderna de alta saída.
+ *
+ * 15 IPS:
+ * - head bump em 60–150 Hz
+ * - suavização progressiva do extremo superior
+ *
+ * Overbias:
+ * - reduz a tendência de dureza no alto
+ * - aumenta suavemente a não-linearidade
+ *
+ * Flux:
+ * - controla quanto o sinal entra na região
+ *   magnética de saturação.
+ */
 
-            tapeStartHz: 1000,
-
-            tapeDrive: 2.2,
-
-            tapeMix: 0.70,
+tapeSpeedIps: 15,
+    
+    tapeStartHz: 1000,
+    
+    tapeHeadBumpCenterHz: 95,
+    
+    tapeHeadBumpGainDb: 1.25,
+    
+    tapeHighRolloffStartHz: 6500,
+    
+    tapeHighRolloffDb: -1.8,
+    
+    tapeBias: 1.18,
+    
+    tapeFlux: 1.25,
+    
+    tapeDrive: 1.55,
+    
+    tapeMix: 0.72,
+    
+    tapeOddHarmonicAmount: 0.78,
+    
+    tapeTransientCompressionDb: 1.5,
 
 
             /*
@@ -450,105 +480,752 @@ class VocalSoftener {
      */
 
     applyTapeSaturation(
-        data,
-        sampleRate
+    data,
+    sampleRate
+) {
+
+    /*
+     * =====================================================
+     * TAPE 15 IPS
+     * =====================================================
+     *
+     * O processamento é feito por bandas:
+     *
+     * 1. Head bump 60–150 Hz
+     * 2. Saturação magnética
+     * 3. Roll-off suave do extremo superior
+     *
+     * A região abaixo de 1 kHz permanece fora
+     * da saturação principal.
+     */
+
+
+    const startHz =
+        this.options.tapeStartHz;
+
+
+    const headBumpCenter =
+        this.options.tapeHeadBumpCenterHz;
+
+
+    const headBumpGain =
+        this.dbToLinear(
+            this.options.tapeHeadBumpGainDb
+        );
+
+
+    const highRolloffStart =
+        this.options.tapeHighRolloffStartHz;
+
+
+    const highRolloffGain =
+        this.dbToLinear(
+            this.options.tapeHighRolloffDb
+        );
+
+
+    const bias =
+        Math.max(
+            0.1,
+            this.options.tapeBias
+        );
+
+
+    const flux =
+        Math.max(
+            0.1,
+            this.options.tapeFlux
+        );
+
+
+    const drive =
+        Math.max(
+            1,
+            this.options.tapeDrive
+        );
+
+
+    const mix =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                this.options.tapeMix
+            )
+        );
+
+
+    const oddAmount =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                this.options.tapeOddHarmonicAmount
+            )
+        );
+
+
+createPeakFilter(
+    frequency,
+    q,
+    gainLinear,
+    sampleRate
+) 
+{
+
+    const safeFrequency =
+        Math.min(
+            sampleRate * 0.45,
+            Math.max(
+                20,
+                frequency
+            )
+        );
+
+
+    const omega =
+        2 *
+        Math.PI *
+        safeFrequency /
+        sampleRate;
+
+
+    const sine =
+        Math.sin(
+            omega
+        );
+
+
+    const cosine =
+        Math.cos(
+            omega
+        );
+
+
+    const safeQ =
+        Math.max(
+            0.1,
+            q
+        );
+
+
+    const alpha =
+        sine /
+        (
+            2 *
+            safeQ
+        );
+
+
+    const gainDb =
+        20 *
+        Math.log10(
+            gainLinear
+        );
+
+
+    const A =
+        Math.pow(
+            10,
+            gainDb /
+            40
+        );
+
+
+    const alphaGain =
+        alpha *
+        A;
+
+
+    const alphaDivide =
+        alpha /
+        A;
+
+
+    const b0 =
+        1 +
+        alphaGain;
+
+
+    const b1 =
+        -2 *
+        cosine;
+
+
+    const b2 =
+        1 -
+        alphaGain;
+
+
+    const a0 =
+        1 +
+        alphaDivide;
+
+
+    const a1 =
+        -2 *
+        cosine;
+
+
+    const a2 =
+        1 -
+        alphaDivide;
+
+
+    return {
+
+        b0:
+            b0 /
+            a0,
+
+        b1:
+            b1 /
+            a0,
+
+        b2:
+            b2 /
+            a0,
+
+        a1:
+            a1 /
+            a0,
+
+        a2:
+            a2 /
+            a0
+    };
+}
+
+
+createLowShelfFilter(
+    frequency,
+    gainLinear,
+    sampleRate
+) 
+{
+
+    const safeFrequency =
+        Math.min(
+            sampleRate * 0.45,
+            Math.max(
+                20,
+                frequency
+            )
+        );
+
+
+    const omega =
+        2 *
+        Math.PI *
+        safeFrequency /
+        sampleRate;
+
+
+    const sine =
+        Math.sin(
+            omega
+        );
+
+
+    const cosine =
+        Math.cos(
+            omega
+        );
+
+
+    const gainDb =
+        20 *
+        Math.log10(
+            gainLinear
+        );
+
+
+    const A =
+        Math.pow(
+            10,
+            gainDb /
+            40
+        );
+
+
+    const alpha =
+        sine /
+        2 *
+        Math.SQRT2;
+
+
+    const twoSqrtAAlpha =
+        2 *
+        Math.sqrt(
+            A
+        ) *
+        alpha;
+
+
+    const beta =
+        2 *
+        Math.sqrt(
+            A
+        ) *
+        alpha;
+
+
+    const b0 =
+        A *
+        (
+            (
+                A + 1
+            ) -
+            (
+                A - 1
+            ) *
+            cosine +
+            beta
+        );
+
+
+    const b1 =
+        2 *
+        A *
+        (
+            (
+                A - 1
+            ) -
+            (
+                A + 1
+            ) *
+            cosine
+        );
+
+
+    const b2 =
+        A *
+        (
+            (
+                A + 1
+            ) -
+            (
+                A - 1
+            ) *
+            cosine -
+            beta
+        );
+
+
+    const a0 =
+        (
+            A + 1
+        ) +
+        (
+            A - 1
+        ) *
+        cosine +
+        twoSqrtAAlpha;
+
+
+    const a1 =
+        -2 *
+        (
+            (
+                A - 1
+            ) +
+            (
+                A + 1
+            ) *
+            cosine
+        );
+
+
+    const a2 =
+        (
+            A + 1
+        ) +
+        (
+            A - 1
+        ) *
+        cosine -
+        twoSqrtAAlpha;
+
+
+    return {
+
+        b0:
+            b0 /
+            a0,
+
+        b1:
+            b1 /
+            a0,
+
+        b2:
+            b2 /
+            a0,
+
+        a1:
+            a1 /
+            a0,
+
+        a2:
+            a2 /
+            a0
+    };
+}
+
+    /*
+     * =====================================================
+     * FILTROS
+     * =====================================================
+     */
+
+    const saturationHighpass =
+        this.createHighpassFilter(
+            startHz,
+            sampleRate
+        );
+
+
+    const headBumpFilter =
+        this.createPeakFilter(
+            headBumpCenter,
+            0.85,
+            headBumpGain,
+            sampleRate
+        );
+
+
+    const highRolloffFilter =
+        this.createLowShelfFilter(
+            highRolloffStart,
+            highRolloffGain,
+            sampleRate
+        );
+
+
+    let hpX1 = 0;
+    let hpX2 = 0;
+    let hpY1 = 0;
+    let hpY2 = 0;
+
+
+    let bumpX1 = 0;
+    let bumpX2 = 0;
+    let bumpY1 = 0;
+    let bumpY2 = 0;
+
+
+    let rollX1 = 0;
+    let rollX2 = 0;
+    let rollY1 = 0;
+    let rollY2 = 0;
+
+
+    /*
+     * =====================================================
+     * PROCESSAMENTO
+     * =====================================================
+     */
+
+    for (
+        let i = 0;
+        i < data.length;
+        i++
     ) {
 
-        const filter =
-            this.createHighpassFilter(
-                this.options.tapeStartHz,
-                sampleRate
+        const input =
+            data[i];
+
+
+        /*
+         * ---------------------------------------------
+         * HEAD BUMP
+         * ---------------------------------------------
+         *
+         * Reforço muito suave na região de
+         * aproximadamente 60–150 Hz.
+         */
+
+        const bumpResult =
+            this.processBiquad(
+                input,
+                headBumpFilter,
+                bumpX1,
+                bumpX2,
+                bumpY1,
+                bumpY2
             );
 
 
-        let x1 = 0;
+        bumpX1 =
+            bumpResult.x1;
 
-        let x2 = 0;
+        bumpX2 =
+            bumpResult.x2;
 
-        let y1 = 0;
+        bumpY1 =
+            bumpResult.y1;
 
-        let y2 = 0;
+        bumpY2 =
+            bumpResult.y2;
 
 
-        const drive =
-            Math.max(
-                1,
-                this.options.tapeDrive
+        let signal =
+            input +
+            (
+                bumpResult.output -
+                input
+            ) *
+            0.55;
+
+
+        /*
+         * ---------------------------------------------
+         * REGIÃO DE SATURAÇÃO
+         * ---------------------------------------------
+         */
+
+        const highResult =
+            this.processBiquad(
+                signal,
+                saturationHighpass,
+                hpX1,
+                hpX2,
+                hpY1,
+                hpY2
             );
 
 
-        const mix =
-            Math.max(
-                0,
-                Math.min(
-                    1,
-                    this.options.tapeMix
-                )
+        hpX1 =
+            highResult.x1;
+
+        hpX2 =
+            highResult.x2;
+
+        hpY1 =
+            highResult.y1;
+
+        hpY2 =
+            highResult.y2;
+
+
+        const highPart =
+            highResult.output;
+
+
+        /*
+         * ---------------------------------------------
+         * FLUXO MAGNÉTICO
+         * ---------------------------------------------
+         *
+         * O fluxo aumenta a intensidade com que
+         * o sinal entra na curva magnética.
+         */
+
+        const driven =
+            highPart *
+            drive *
+            flux;
+
+
+        /*
+         * ---------------------------------------------
+         * CURVA MAGNÉTICA COM ÊNFASE EM ÍMPARES
+         * ---------------------------------------------
+         *
+         * A primeira parcela produz a compressão
+         * suave da fita.
+         *
+         * As parcelas seguintes reforçam principalmente
+         * componentes ímpares.
+         */
+
+        const saturated =
+            Math.tanh(
+                driven /
+                bias
             );
 
 
-        for (
-            let i = 0;
-            i < data.length;
-            i++
+        const third =
+            Math.pow(
+                saturated,
+                3
+            );
+
+
+        const fifth =
+            Math.pow(
+                saturated,
+                5
+            );
+
+
+        const seventh =
+            Math.pow(
+                saturated,
+                7
+            );
+
+
+        const oddCurve =
+            saturated +
+            (
+                third *
+                0.24
+            ) +
+            (
+                fifth *
+                0.08
+            ) +
+            (
+                seventh *
+                0.035
+            );
+
+
+        /*
+         * Mantém a saturação controlada.
+         */
+
+        const normalized =
+            Math.tanh(
+                oddCurve
+            );
+
+
+        /*
+         * ---------------------------------------------
+         * COMPRESSÃO SUAVE DOS TRANSIENTES
+         * ---------------------------------------------
+         */
+
+        const driveLevel =
+            Math.abs(
+                driven
+            );
+
+
+        const transientLimit =
+            this.dbToLinear(
+                this.options.tapeTransientCompressionDb
+            );
+
+
+        let transientGain =
+            1;
+
+
+        if (
+            driveLevel >
+            transientLimit
         ) {
 
-            const input =
-                data[i];
-
-
-            const filtered =
-                this.processBiquad(
-                    input,
-                    filter,
-                    x1,
-                    x2,
-                    y1,
-                    y2
-                );
-
-
-            x1 =
-                filtered.x1;
-
-            x2 =
-                filtered.x2;
-
-            y1 =
-                filtered.y1;
-
-            y2 =
-                filtered.y2;
-
-
-            const highFrequency =
-                filtered.output;
-
-
-            const saturated =
-                Math.tanh(
-                    highFrequency *
-                    drive
-                );
-
-
-            const processed =
-                highFrequency +
-                (
-                    saturated -
-                    highFrequency
-                ) *
-                mix;
-
-
-            data[i] =
-                input +
-                (
-                    processed -
-                    highFrequency
-                );
+            transientGain =
+                transientLimit /
+                driveLevel;
         }
+
+
+        const compressedHigh =
+            highPart *
+            (
+                1 +
+                (
+                    transientGain -
+                    1
+                ) *
+                0.65
+            );
+
+
+        /*
+         * ---------------------------------------------
+         * MISTURA DA SATURAÇÃO
+         * ---------------------------------------------
+         */
+
+        const saturatedHigh =
+            compressedHigh *
+            (
+                1 -
+                oddAmount
+            )
+            +
+            (
+                compressedHigh *
+                normalized
+            ) *
+            oddAmount;
+
+
+        signal =
+            signal +
+            (
+                saturatedHigh -
+                highPart
+            ) *
+            mix;
+
+
+        /*
+         * ---------------------------------------------
+         * HIGH-END ROLL-OFF
+         * ---------------------------------------------
+         *
+         * Pequena suavização do extremo superior.
+         */
+
+        const rollResult =
+            this.processBiquad(
+                signal,
+                highRolloffFilter,
+                rollX1,
+                rollX2,
+                rollY1,
+                rollY2
+            );
+
+
+        rollX1 =
+            rollResult.x1;
+
+        rollX2 =
+            rollResult.x2;
+
+        rollY1 =
+            rollResult.y1;
+
+        rollY2 =
+            rollResult.y2;
+
+
+        /*
+         * Aplique apenas parte do roll-off,
+         * evitando transformar o efeito em EQ.
+         */
+
+        signal =
+            signal +
+            (
+                rollResult.output -
+                signal
+            ) *
+            0.48;
+
+
+        /*
+         * Segurança contra níveis excessivos.
+         */
+
+        data[i] =
+            Math.max(
+                -1,
+                Math.min(
+                    1,
+                    signal
+                )
+            );
     }
+}
 
 
     /*
