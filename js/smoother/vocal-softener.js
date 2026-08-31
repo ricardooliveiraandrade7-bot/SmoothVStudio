@@ -83,23 +83,23 @@ class VocalSoftener {
 
             tapeHeadBumpCenterHz: 210,
 
-            tapeHeadBumpGainDb: 1.25,
+            tapeHeadBumpGainDb: 0.5,
 
             tapeHighRolloffStartHz: 8000,
 
-            tapeHighRolloffDb: -1.5,
+            tapeHighRolloffDb: -0.5,
 
-            tapeBias: 1.18,
+            tapeBias: 2.55,
 
-            tapeFlux: 1.25,
+            tapeFlux: 4.25,
 
-            tapeDrive: 3.55,
+            tapeDrive: 5.55,
 
-            tapeMix: 0.75,
+            tapeMix: 0.40,
 
             tapeOddHarmonicAmount: 0.78,
 
-            tapeTransientCompressionDb: 1.5,
+            tapeTransientCompressionDb: 2.0,
 
 
             /*
@@ -112,7 +112,7 @@ class VocalSoftener {
 
             upwardRatio: 1.45,
 
-            upwardMaxBoostDb: 5,
+            upwardMaxBoostDb: 2,
 
             upwardAttackMs: 12,
 
@@ -890,131 +890,197 @@ const compressedHigh =
     }
 
 
-    /*
-     * =========================================================
-     * UPWARD EXPANDER
-     * =========================================================
-     */
+/*
+ * =========================================================
+ * UPWARD EXPANDER
+ * =========================================================
+ *
+ * Recupera detalhes de baixo nível do vocal sem
+ * transformar o módulo em um compressor convencional.
+ *
+ * O sinal abaixo do threshold recebe boost progressivo.
+ * O ganho é suavizado pelo envelope e limitado pelo
+ * upwardMaxBoostDb.
+ */
 
-    applyUpwardExpansion(
-        data,
-        sampleRate
+applyUpwardExpansion(
+    data,
+    sampleRate
+) {
+
+    let envelope = 0;
+
+
+    const attack =
+        this.timeCoefficient(
+            this.options.upwardAttackMs,
+            sampleRate
+        );
+
+
+    const release =
+        this.timeCoefficient(
+            this.options.upwardReleaseMs,
+            sampleRate
+        );
+
+
+    const thresholdDb =
+        this.options.upwardThresholdDb;
+
+
+    const ratio =
+        Math.max(
+            1,
+            this.options.upwardRatio
+        );
+
+
+    const maxBoostDb =
+        Math.max(
+            0,
+            this.options.upwardMaxBoostDb
+        );
+
+
+    for (
+        let i = 0;
+        i < data.length;
+        i++
     ) {
 
-        let envelope = 0;
+        const input =
+            data[i];
 
 
-        const attack =
-            this.timeCoefficient(
-                this.options.upwardAttackMs,
-                sampleRate
+        const magnitude =
+            Math.abs(
+                input
             );
 
 
-        const release =
-            this.timeCoefficient(
-                this.options.upwardReleaseMs,
-                sampleRate
-            );
+        /*
+         * ENVELOPE
+         */
 
-
-        for (
-            let i = 0;
-            i < data.length;
-            i++
+        if (
+            magnitude >
+            envelope
         ) {
 
-            const input =
-                data[i];
-
-
-            const magnitude =
-                Math.abs(
-                    input
-                );
-
-
-            if (
-                magnitude >
-                envelope
-            ) {
-
-                envelope =
-                    attack *
-                    envelope +
-                    (
-                        1 -
-                        attack
-                    ) *
-                    magnitude;
-
-            } else {
-
-                envelope =
-                    release *
-                    envelope +
-                    (
-                        1 -
-                        release
-                    ) *
-                    magnitude;
-            }
-
-
-            const levelDb =
-                this.linearToDb(
-                    envelope
-                );
-
-
-            if (
-                levelDb >=
-                this.options.upwardThresholdDb
-            ) {
-
-                continue;
-            }
-
-
-            const distanceDb =
-                this.options.upwardThresholdDb -
-                levelDb;
-
-
-            let boostDb =
-                distanceDb *
+            envelope =
+                attack *
+                envelope +
                 (
-                    this.options.upwardRatio -
-                    1
-                );
+                    1 -
+                    attack
+                ) *
+                magnitude;
 
+        } else {
 
-            boostDb =
-                Math.min(
-                    boostDb,
-                    this.options.upwardMaxBoostDb
-                );
-
-
-            if (
-                boostDb <= 0
-            ) {
-
-                continue;
-            }
-
-
-            const gain =
-                this.dbToLinear(
-                    boostDb
-                );
-
-
-            data[i] =
-                input *
-                gain;
+            envelope =
+                release *
+                envelope +
+                (
+                    1 -
+                    release
+                ) *
+                magnitude;
         }
+
+
+        /*
+         * PROTEÇÃO CONTRA VALORES INVÁLIDOS
+         */
+
+        if (
+            envelope <=
+            0.000001
+        ) {
+
+            continue;
+        }
+
+
+        const levelDb =
+            this.linearToDb(
+                envelope
+            );
+
+
+        /*
+         * SOMENTE SINAIS ABAIXO
+         * DO THRESHOLD RECEBEM BOOST
+         */
+
+        if (
+            levelDb >=
+            thresholdDb
+        ) {
+
+            continue;
+        }
+
+
+        const distanceDb =
+            thresholdDb -
+            levelDb;
+
+
+        /*
+         * EXPANSÃO PROGRESSIVA
+         *
+         * Quanto mais distante do threshold,
+         * maior o boost, limitado pelo máximo.
+         */
+
+        let boostDb =
+            distanceDb *
+            (
+                ratio -
+                1
+            );
+
+
+        boostDb =
+            Math.max(
+                0,
+                Math.min(
+                    maxBoostDb,
+                    boostDb
+                )
+            );
+
+
+        if (
+            boostDb <=
+            0
+        ) {
+
+            continue;
+        }
+
+
+        /*
+         * GANHO LINEAR
+         */
+
+        const gain =
+            this.dbToLinear(
+                boostDb
+            );
+
+
+        /*
+         * APLICAÇÃO
+         */
+
+        data[i] =
+            input *
+            gain;
     }
+}
 
 
     /*
