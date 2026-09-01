@@ -353,39 +353,39 @@ this.options.density,
   */
 
 const tailDelays = [
-
-Math.max(
-    1,
-    Math.round(
-        0.0297 *
-        sampleRate
+    
+    Math.max(
+        1,
+        Math.round(
+            0.0317 *
+            sampleRate
+        )
+    ),
+    
+    Math.max(
+        1,
+        Math.round(
+            0.0473 *
+            sampleRate
+        )
+    ),
+    
+    Math.max(
+        1,
+        Math.round(
+            0.0611 *
+            sampleRate
+        )
+    ),
+    
+    Math.max(
+        1,
+        Math.round(
+            0.0797 *
+            sampleRate
+        )
     )
-),
-
-Math.max(
-    1,
-    Math.round(
-        0.0371 *
-        sampleRate
-    )
-),
-
-Math.max(
-    1,
-    Math.round(
-        0.0437 *
-        sampleRate
-    )
-),
-
-Math.max(
-    1,
-    Math.round(
-        0.0503 *
-        sampleRate
-    )
-)
-
+    
 ];
 
 const delayBuffers =
@@ -413,20 +413,24 @@ this.options.decayTime,
 * Ganho aproximado para a região de RT60.
   */
 
+const averageDelaySamples =
+    tailDelays.reduce(
+        (a, b) => a + b,
+        0
+    ) /
+    tailDelays.length;
+
+
 const feedback =
-Math.pow(
-10,
--3 *
-(
-tailDelays.reduce(
-(a, b) => a + b,
-0
-) /
-tailDelays.length
-) /
-sampleRate /
-decayTime
-);
+    Math.pow(
+        10,
+        -3 *
+        averageDelaySamples /
+        (
+            sampleRate *
+            decayTime
+        )
+    );
 
 const safeFeedback =
 this.clamp(
@@ -463,10 +467,7 @@ i++
 
 const input =
     preDelayBuffer[i] *
-    (
-        0.35 +
-        density * 0.65
-    );
+    0.70;
 
 
 /*
@@ -570,18 +571,27 @@ for (
      * → maior espalhamento entre linhas.
      */
 
-    const feedbackSignal =
+    const effectiveDiffusion =
+    this.clamp(
+        diffusion +
+        density * 0.25,
+        0,
+        1
+    );
+
+
+const feedbackSignal =
+    (
+        delayed[d] *
         (
-            delayed[d] *
-            (
-                1 -
-                diffusion
-            )
-        ) +
-        (
-            mixed[d] *
-            diffusion
-        );
+            1 -
+            effectiveDiffusion
+        )
+    ) +
+    (
+        mixed[d] *
+        effectiveDiffusion
+    );
 
 
     delayBuffers[d][position] =
