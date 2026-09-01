@@ -91,9 +91,9 @@ class VocalSoftener {
 
             tapeBias: 2.55,
 
-            tapeFlux: 4.25,
+            tapeFlux: 1.25,
 
-            tapeDrive: 5.55,
+            tapeDrive: 9.55,
 
             tapeMix: 0.40,
 

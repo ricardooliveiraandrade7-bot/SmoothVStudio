@@ -20,7 +20,7 @@ constructor(options = {}) {
             {
                 frequency: 280,
                 gainDb: -1.5,
-                q: 0.90
+                q: 1.90
             },
 
             {
@@ -42,13 +42,13 @@ constructor(options = {}) {
             {
                 frequency: 480,
                 gainDb: -1.0,
-                q: 2.50
+                q: 2.00
             },
 
             {
                 frequency: 700,
                 gainDb: -1.0,
-                q: 2.50
+                q: 2.00
             }
         ],
 
@@ -62,7 +62,7 @@ constructor(options = {}) {
         presenceBand: {
 
             frequency: 1200,
-            gainDb: 1.5,
+            gainDb: 1.8,
             q: 0.90
         },
 
@@ -76,7 +76,7 @@ constructor(options = {}) {
         hardnessBand: {
 
             frequency: 3150,
-            gainDb: -1.2,
+            gainDb: -2.0,
             q: 0.65
         },
 
@@ -95,7 +95,7 @@ constructor(options = {}) {
         brillianceShelf: {
 
             frequency: 5000,
-            gainDb: 1.8,
+            gainDb: 2.5,
             shelfSlope: 0.707
         },
 
