@@ -18,14 +18,14 @@ constructor(options = {}) {
         muddyBands: [
 
             {
-                frequency: 280,
+                frequency: 210,
                 gainDb: -1.5,
                 q: 1.90
             },
 
             {
-                frequency: 380,
-                gainDb: -1.5,
+                frequency: 340,
+                gainDb: -1.9,
                 q: 0.90
             }
         ],
@@ -41,13 +41,13 @@ constructor(options = {}) {
 
             {
                 frequency: 480,
-                gainDb: -1.0,
-                q: 2.00
+                gainDb: -2.0,
+                q: 1.00
             },
 
             {
                 frequency: 700,
-                gainDb: -1.0,
+                gainDb: -1.5,
                 q: 2.00
             }
         ],
@@ -61,7 +61,7 @@ constructor(options = {}) {
 
         presenceBand: {
 
-            frequency: 1200,
+            frequency: 1950,
             gainDb: 1.8,
             q: 0.90
         },
@@ -76,7 +76,7 @@ constructor(options = {}) {
         hardnessBand: {
 
             frequency: 3150,
-            gainDb: -2.0,
+            gainDb: -0.5,
             q: 0.65
         },
 
@@ -94,8 +94,8 @@ constructor(options = {}) {
 
         brillianceShelf: {
 
-            frequency: 5000,
-            gainDb: 2.5,
+            frequency: 4500,
+            gainDb: 2.0,
             shelfSlope: 0.707
         },
 

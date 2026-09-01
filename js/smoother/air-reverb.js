@@ -30,7 +30,7 @@ class AirReverb {
              * =====================================================
              */
 
-            decayTime: 0.95,
+            decayTime: 0.25,
 
             preDelayMs: 30,
 
@@ -41,13 +41,13 @@ class AirReverb {
              * =====================================================
              */
 
-            earlyReflectionsDb: -3.5,
+            earlyReflectionsDb: -1.5,
 
             tailLevelDb: -6,
 
-            diffusion: 0.65,
+            diffusion: 0.35,
 
-            density: 0.50,
+            density: 0.15,
 
 
             /*
@@ -56,13 +56,13 @@ class AirReverb {
              * =====================================================
              */
 
-            highFrequencyDamping: 0.75,
+            highFrequencyDamping: 0.50,
 
-            highRolloffHz: 6000,
+            highRolloffHz: 8000,
 
-            highPassHz: 250,
+            highPassHz: 650,
 
-            highShelfHz: 8000,
+            highShelfHz: 9000,
 
             highShelfGainDb: -2,
 
