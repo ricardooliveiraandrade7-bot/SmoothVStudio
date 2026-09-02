@@ -68,7 +68,7 @@ class VocalSoftener {
 
             dynamicReleaseMs: 120,
 
-            dynamicMaxReductionDb: 2,
+            dynamicMaxReductionDb: 1,
 
 
             /*
@@ -77,29 +77,29 @@ class VocalSoftener {
              * =====================================================
              */
 
-            tapeSpeedIps: 7.5,
+            tapeSpeedIps: 15,
 
             tapeStartHz: 90,
 
             tapeHeadBumpCenterHz: 250,
 
-            tapeHeadBumpGainDb: 0.3,
+            tapeHeadBumpGainDb: 0.2,
 
-            tapeHighRolloffStartHz: 7800,
+            tapeHighRolloffStartHz: 8500,
 
-            tapeHighRolloffDb: -0.9,
+            tapeHighRolloffDb: -0.5,
 
-            tapeBias: 5.75,
+            tapeBias: 6.5,
 
-            tapeFlux: 2.00,
+            tapeFlux: 1.50,
 
-            tapeDrive: 1.55,
+            tapeDrive: 1.30,
 
-            tapeMix: 0.45,
+            tapeMix: 0.30,
 
-            tapeOddHarmonicAmount: 0.50,
+            tapeOddHarmonicAmount: 0.25,
 
-            tapeTransientCompressionDb: 2.0,
+            tapeTransientCompressionDb: 0.50,
 
 
             /*
